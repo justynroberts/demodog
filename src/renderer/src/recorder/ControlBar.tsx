@@ -21,6 +21,8 @@ export default function ControlBar(): ReactNode {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const startRef = useRef(0)
   const [hasCamera, setHasCamera] = useState(false)
+  // Distinguishes 'no camera chosen' from 'camera chosen but unavailable'.
+  const [cameraWanted, setCameraWanted] = useState(false)
 
   // ---- device setup ------------------------------------------------------
 
@@ -31,6 +33,7 @@ export default function ControlBar(): ReactNode {
         micDeviceId: string | null
       }
       if (!cameraDeviceId && !micDeviceId) return
+      setCameraWanted(Boolean(cameraDeviceId))
 
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -53,12 +56,18 @@ export default function ControlBar(): ReactNode {
         })
         streamRef.current = stream
         setHasCamera(Boolean(cameraDeviceId))
+        console.log(
+          `[bar] capture ready — camera=${stream.getVideoTracks().length > 0}, ` +
+            `mic=${stream.getAudioTracks().length > 0}`
+        )
         if (videoRef.current && cameraDeviceId) {
           videoRef.current.srcObject = stream
           await videoRef.current.play().catch(() => undefined)
         }
       } catch (error) {
-        console.error('camera/mic unavailable', error)
+        // Most often the device is still held by the setup screen's preview.
+        console.error('[bar] camera/mic unavailable', error)
+        setHasCamera(false)
       }
     })
   }, [])
@@ -71,7 +80,10 @@ export default function ControlBar(): ReactNode {
       setRunning(true)
 
       const stream = streamRef.current
-      if (!stream) return
+      if (!stream) {
+        console.warn('[bar] recording started with no camera or microphone stream')
+        return
+      }
 
       const mimeType = [
         'video/webm;codecs=vp9,opus',
@@ -97,6 +109,12 @@ export default function ControlBar(): ReactNode {
       recorder.start(1000)
       recorderRef.current = recorder
     })
+  }, [])
+
+  // Effects run in order, so by the time this one fires the prepare/started
+  // listeners above are registered and it is safe to be sent messages.
+  useEffect(() => {
+    api.announceBarReady()
   }, [])
 
   // ---- timer -------------------------------------------------------------
@@ -157,8 +175,10 @@ export default function ControlBar(): ReactNode {
           className="bar-cam"
           muted
           playsInline
+          title="Your camera as it is being recorded"
           style={{ display: hasCamera ? 'block' : 'none' }}
         />
+        {cameraWanted && !hasCamera && <span className="bar-nocam">camera failed</span>}
 
         <button className="btn primary" onClick={() => void stop()} disabled={stopping}>
           {stopping ? 'Finishing…' : 'Stop'}

@@ -46,6 +46,18 @@ export interface RecordOptions {
   systemAudio: boolean
   trackKeystrokes: boolean
   maxWidth?: number
+  /** Seconds of on-screen countdown before capture begins; 0 disables it. */
+  countdown: number
+}
+
+/** A saved set of look-and-feel settings, reusable across recordings. */
+export interface Profile {
+  id: string
+  name: string
+  /** Applied automatically to new recordings when true. */
+  isDefault?: boolean
+  /** A Project minus anything tied to one specific take. */
+  settings: Record<string, unknown>
 }
 
 /**

@@ -2,6 +2,7 @@
 import {
   app,
   BrowserWindow,
+  desktopCapturer,
   ipcMain,
   protocol,
   net,
@@ -21,7 +22,13 @@ import {
   openPrivacySettings,
   reapStrayHelpers
 } from './recorder'
-import type { RecordOptions, RecordingResult, CaptureMeta, RawEvent } from '../shared/types'
+import type {
+  RecordOptions,
+  RecordingResult,
+  CaptureMeta,
+  RawEvent,
+  Profile
+} from '../shared/types'
 
 // `rec:` streams recording artefacts into the renderer. A privileged scheme is
 // required so <video> can issue range requests against it for seeking.
@@ -43,6 +50,17 @@ let barWindow: BrowserWindow | null = null
 let recorder: RecorderProcess | null = null
 let cameraStream: WriteStream | null = null
 let cameraMeta: { path: string; startWallClock: number; mimeType: string } | null = null
+
+/**
+ * Resolves once the control bar's renderer has loaded and registered its IPC
+ * listeners.
+ *
+ * Without this, `webContents.send` fires into a window that has not finished
+ * loading and the message is simply dropped — which silently cost the camera
+ * track on the first recording of every app launch.
+ */
+let barReady: Promise<void> = Promise.resolve()
+let markBarReady: () => void = () => {}
 
 const isDev = !app.isPackaged
 
@@ -107,6 +125,10 @@ function createBarWindow(): BrowserWindow {
   const display = screen.getPrimaryDisplay()
   const width = 520
   const height = 132
+  barReady = new Promise<void>((resolve) => {
+    markBarReady = resolve
+  })
+
   const bar = new BrowserWindow({
     width,
     height,
@@ -130,8 +152,54 @@ function createBarWindow(): BrowserWindow {
   bar.setAlwaysOnTop(true, 'screen-saver')
   bar.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   bar.loadURL(rendererURL('/bar'))
-  bar.on('closed', () => (barWindow = null))
+  bar.on('closed', () => {
+    barWindow = null
+    barReady = Promise.resolve()
+  })
   return bar
+}
+
+/**
+ * Full-screen 3-2-1 countdown shown on the display about to be recorded.
+ *
+ * It lives in its own transparent, click-through window so it floats over
+ * whatever the user is about to demonstrate. Capture only starts once this has
+ * finished, so it can never appear in the recording.
+ */
+async function runCountdown(seconds: number, displayId?: number): Promise<void> {
+  if (seconds <= 0) return
+
+  const target =
+    (displayId !== undefined ? screen.getAllDisplays().find((d) => d.id === displayId) : null) ??
+    screen.getPrimaryDisplay()
+  const bounds = target.bounds
+
+  const win = new BrowserWindow({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    skipTaskbar: true,
+    focusable: false,
+    show: false,
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
+  })
+
+  // Never intercept clicks — the user may want to arrange things while it runs.
+  win.setIgnoreMouseEvents(true)
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  win.loadURL(rendererURL(`/countdown?n=${seconds}`))
+  win.once('ready-to-show', () => win.showInactive())
+
+  // A little tail so the final "1" is not cut off mid-animation.
+  await new Promise((resolve) => setTimeout(resolve, seconds * 1000 + 250))
+  if (!win.isDestroyed()) win.destroy()
 }
 
 function recordingDir(): string {
@@ -189,6 +257,39 @@ app.on('will-quit', () => {
 // ---------------------------------------------------------------------------
 
 ipcMain.handle('sources:list', () => listSources())
+/**
+ * Preview images for the source picker.
+ *
+ * These come from Electron's desktopCapturer rather than our Swift helper,
+ * which has no one-shot screenshot mode. The ids differ between the two, so
+ * they are matched back: screen sources carry `display_id`, and a macOS window
+ * source id is `window:<CGWindowID>:0`.
+ */
+ipcMain.handle('sources:thumbnails', async () => {
+  const displays: Record<string, string> = {}
+  const windows: Record<string, string> = {}
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 480, height: 300 },
+      fetchWindowIcons: false
+    })
+    for (const source of sources) {
+      if (source.thumbnail.isEmpty()) continue
+      const dataURL = source.thumbnail.toDataURL()
+      if (source.id.startsWith('screen:')) {
+        if (source.display_id) displays[source.display_id] = dataURL
+      } else {
+        const id = source.id.split(':')[1]
+        if (id) windows[id] = dataURL
+      }
+    }
+  } catch (error) {
+    console.error('[thumbnails]', error)
+  }
+  return { displays, windows }
+})
+
 ipcMain.handle('permissions:check', () => checkPermissions(false))
 ipcMain.handle('permissions:request', () => checkPermissions(true))
 ipcMain.handle('permissions:open', (_e, kind) => openPrivacySettings(kind))
@@ -208,6 +309,11 @@ ipcMain.handle(
 
     barWindow ??= createBarWindow()
     barWindow.showInactive()
+
+    // Wait for the bar to be listening before talking to it. The timeout is a
+    // backstop: a recording without a camera preview beats no recording.
+    await Promise.race([barReady, new Promise((r) => setTimeout(r, 5000))])
+
     // The bar window owns camera and microphone capture, so it needs to know
     // which devices the user picked before the screen stream starts.
     barWindow.webContents.send('bar:prepare', {
@@ -216,6 +322,10 @@ ipcMain.handle(
     })
 
     studioWindow?.hide()
+
+    // Count down *after* the camera has been acquired, so the device is warm
+    // and the take starts the instant the counter hits zero.
+    await runCountdown(options.countdown ?? 0, options.displayId)
 
     try {
       const info = await recorder.start(options)
@@ -390,6 +500,51 @@ ipcMain.handle('recording:autoload', async (): Promise<RecordingResult | null> =
     console.error('[autoload]', error)
     return null
   })
+})
+
+ipcMain.on('bar:ready', () => markBarReady())
+
+/** Lets the user pick a still image to use as a video background. */
+ipcMain.handle('dialog:image', async (): Promise<string | null> => {
+  const result = await dialog.showOpenDialog(studioWindow!, {
+    properties: ['openFile'],
+    title: 'Choose a background image',
+    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'heic', 'gif'] }]
+  })
+  return result.canceled ? null : (result.filePaths[0] ?? null)
+})
+
+// --- Profiles: named look-and-feel presets, stored beside the app's data ----
+
+function profilesPath(): string {
+  return join(app.getPath('userData'), 'profiles.json')
+}
+
+async function readProfiles(): Promise<Profile[]> {
+  try {
+    return JSON.parse(await readFile(profilesPath(), 'utf8')) as Profile[]
+  } catch {
+    return []
+  }
+}
+
+ipcMain.handle('profiles:list', () => readProfiles())
+
+ipcMain.handle('profiles:save', async (_e, profile: Profile): Promise<Profile[]> => {
+  const profiles = await readProfiles()
+  const index = profiles.findIndex((p) => p.id === profile.id)
+  // Only one default at a time, or applying them becomes ambiguous.
+  const next = profile.isDefault ? profiles.map((p) => ({ ...p, isDefault: false })) : [...profiles]
+  if (index >= 0) next[index] = profile
+  else next.push(profile)
+  await writeFile(profilesPath(), JSON.stringify(next, null, 2))
+  return next
+})
+
+ipcMain.handle('profiles:delete', async (_e, id: string): Promise<Profile[]> => {
+  const next = (await readProfiles()).filter((p) => p.id !== id)
+  await writeFile(profilesPath(), JSON.stringify(next, null, 2))
+  return next
 })
 
 ipcMain.handle('bar:set-size', (event, height: number) => {

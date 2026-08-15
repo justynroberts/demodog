@@ -61,7 +61,6 @@ export async function exportMP4(options: ExportOptions): Promise<ExportResult> {
     ? await openFrameSource(options.cameraURL, 'seek').catch(() => null)
     : null
 
-
   const canvas = new OffscreenCanvas(output.width, output.height)
   const ctx = canvas.getContext('2d', { alpha: false })
   if (!ctx) throw new Error('could not create a 2D context for export')

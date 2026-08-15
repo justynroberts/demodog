@@ -1,6 +1,6 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Permissions, RecordOptions, RecordingResult, Sources } from '../shared/types'
+import type { Permissions, Profile, RecordOptions, RecordingResult, Sources } from '../shared/types'
 
 export interface CameraInfo {
   path: string
@@ -12,6 +12,11 @@ export type CompleteRecording = RecordingResult & { camera: CameraInfo | null }
 
 const api = {
   listSources: (): Promise<Sources> => ipcRenderer.invoke('sources:list'),
+  /** Live preview images for the source picker, keyed to the ids above. */
+  sourceThumbnails: (): Promise<{
+    displays: Record<string, string>
+    windows: Record<string, string>
+  }> => ipcRenderer.invoke('sources:thumbnails'),
   checkPermissions: (): Promise<Permissions> => ipcRenderer.invoke('permissions:check'),
   requestPermissions: (): Promise<Permissions> => ipcRenderer.invoke('permissions:request'),
   openPrivacySettings: (
@@ -47,6 +52,16 @@ const api = {
     ipcRenderer.invoke('file:write', path, data),
   reveal: (path: string): Promise<void> => ipcRenderer.invoke('shell:reveal', path),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:open-external', url),
+
+  pickImage: (): Promise<string | null> => ipcRenderer.invoke('dialog:image'),
+
+  listProfiles: (): Promise<Profile[]> => ipcRenderer.invoke('profiles:list'),
+  saveProfile: (profile: Profile): Promise<Profile[]> =>
+    ipcRenderer.invoke('profiles:save', profile),
+  deleteProfile: (id: string): Promise<Profile[]> => ipcRenderer.invoke('profiles:delete', id),
+
+  /** Told to the main process once the bar's listeners are registered. */
+  announceBarReady: (): void => ipcRenderer.send('bar:ready'),
 
   setBarHeight: (height: number): Promise<void> => ipcRenderer.invoke('bar:set-size', height),
 

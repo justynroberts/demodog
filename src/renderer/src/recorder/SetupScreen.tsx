@@ -16,6 +16,8 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
   const [selected, setSelected] = useState<{ kind: 'display' | 'window'; id: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
+  // Bumped to re-acquire the preview after it has been handed to the recorder.
+  const [previewNonce, setPreviewNonce] = useState(0)
 
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
   const [mics, setMics] = useState<MediaDeviceInfo[]>([])
@@ -23,6 +25,11 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
   const [micId, setMicId] = useState<string>('')
 
   const [fps, setFps] = useState(60)
+  const [countdown, setCountdown] = useState(3)
+  const [thumbs, setThumbs] = useState<{
+    displays: Record<string, string>
+    windows: Record<string, string>
+  }>({ displays: {}, windows: {} })
   const [systemAudio, setSystemAudio] = useState(true)
   const [keystrokes, setKeystrokes] = useState(false)
 
@@ -41,6 +48,11 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
       }
       const list = await api.listSources()
       setSources(list)
+      // Thumbnails are best-effort; the picker still works without them.
+      void api
+        .sourceThumbnails()
+        .then(setThumbs)
+        .catch(() => undefined)
       setError(null)
       setSelected((current) => {
         if (current) return current
@@ -106,7 +118,7 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
       cancelled = true
       stop()
     }
-  }, [cameraId])
+  }, [cameraId, previewNonce])
 
   // ---- start -------------------------------------------------------------
 
@@ -114,6 +126,15 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
     if (!selected) return
     setStarting(true)
     setError(null)
+
+    // Hand the camera over before the control bar asks for it. Two consumers on
+    // the same physical device is a common getUserMedia failure, and it fails
+    // silently — you get a recording with no camera track and no warning.
+    previewStream.current?.getTracks().forEach((track) => track.stop())
+    previewStream.current = null
+    if (previewRef.current) previewRef.current.srcObject = null
+    if (cameraId) await new Promise((resolve) => setTimeout(resolve, 200))
+
     try {
       await api.startRecording({
         displayId: selected.kind === 'display' ? selected.id : undefined,
@@ -121,12 +142,15 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
         fps,
         systemAudio,
         trackKeystrokes: keystrokes,
+        countdown,
         cameraDeviceId: cameraId || null,
         micDeviceId: micId || null
       })
       onRecording()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+      // Recording never began, so take the camera back for the preview.
+      setPreviewNonce((n) => n + 1)
     } finally {
       setStarting(false)
     }
@@ -163,12 +187,14 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
       ? (sources?.displays ?? []).map((d) => ({
           id: d.id,
           title: d.name,
-          subtitle: `${d.pixelWidth}×${d.pixelHeight} · ${d.scale}x`
+          subtitle: `${d.pixelWidth}×${d.pixelHeight} · ${d.scale}x`,
+          thumb: thumbs.displays[String(d.id)]
         }))
       : (sources?.windows ?? []).map((w) => ({
           id: w.id,
           title: w.title || w.app,
-          subtitle: `${w.app} · ${Math.round(w.width)}×${Math.round(w.height)}`
+          subtitle: `${w.app} · ${Math.round(w.width)}×${Math.round(w.height)}`,
+          thumb: thumbs.windows[String(w.id)]
         }))
 
   return (
@@ -201,7 +227,13 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
               aria-pressed={selected?.kind === tab && selected.id === item.id}
               onClick={() => setSelected({ kind: tab, id: item.id })}
             >
-              <div className="thumb">{tab === 'display' ? 'DISPLAY' : 'WINDOW'}</div>
+              <div className="thumb">
+                {item.thumb ? (
+                  <img src={item.thumb} alt="" />
+                ) : (
+                  <span>{tab === 'display' ? 'DISPLAY' : 'WINDOW'}</span>
+                )}
+              </div>
               <div className="meta">
                 <strong>{item.title}</strong>
                 <span>{item.subtitle}</span>
@@ -263,6 +295,20 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
               onChange={(v) => setFps(Number(v))}
             />
           </div>
+          <div className="field">
+            <span className="label">Countdown</span>
+            <Segmented
+              value={String(countdown)}
+              options={[
+                { value: '0', label: 'Off' },
+                { value: '3', label: '3s' },
+                { value: '5', label: '5s' },
+                { value: '10', label: '10s' }
+              ]}
+              onChange={(v) => setCountdown(Number(v))}
+            />
+          </div>
+
           <Toggle label="Show keyboard shortcuts" checked={keystrokes} onChange={setKeystrokes} />
           {keystrokes && permissions && !permissions.accessibility && (
             <p style={{ fontSize: 12, color: 'var(--muted)', margin: '8px 0 0', lineHeight: 1.5 }}>

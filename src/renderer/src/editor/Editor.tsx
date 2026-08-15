@@ -18,7 +18,9 @@ export default function Editor({
   /** Headless benchmark: export straight to this path, then quit. */
   bench?: { out: string; seconds: number } | null
 }): ReactNode {
-  const [project, setProject] = useState<Project>(() => defaultProject(recording.source))
+  const [project, setProject] = useState<Project>(() =>
+    defaultProject(recording.source, Boolean(recording.cameraURL))
+  )
   const [segments, setSegments] = useState<ZoomSegment[]>([])
   const [time, setTime] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -41,6 +43,15 @@ export default function Editor({
     () => new Composition(recording, { ...project, segments }),
     [recording, project, segments]
   )
+
+  // A profile marked as default is the user's house style; apply it before they
+  // touch anything, so every take opens looking the way they want.
+  useEffect(() => {
+    void api.listProfiles().then((profiles) => {
+      const preferred = profiles.find((p) => p.isDefault)
+      if (preferred) setProject((current) => ({ ...current, ...(preferred.settings as object) }))
+    })
+  }, [recording])
 
   // Regenerate the automatic zooms whenever their settings change, keeping any
   // segment the user added or edited by hand.

@@ -74,7 +74,11 @@ export const BACKGROUND_PRESETS: { id: string; name: string; background: Backgro
  * Defaults are tuned to look right straight out of the recorder — the point of
  * the app is that you stop recording and it already looks edited.
  */
-export function defaultProject(source: { width: number; height: number }): Project {
+export function defaultProject(
+  source: { width: number; height: number },
+  /** Turns the picture-in-picture on when the take has a camera track. */
+  hasCamera = false
+): Project {
   const aspect = source.width / source.height
   const height = 1080
   const width = Math.round((height * aspect) / 2) * 2
@@ -122,7 +126,8 @@ export function defaultProject(source: { width: number; height: number }): Proje
       spotlight: { enabled: false, radius: 0.3, dim: 0.45 }
     },
     pip: {
-      enabled: false,
+      // If you went to the trouble of recording a camera, you want to see it.
+      enabled: hasCamera,
       shape: 'circle',
       size: 0.26,
       position: 'bottom-left',

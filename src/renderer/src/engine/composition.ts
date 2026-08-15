@@ -194,10 +194,16 @@ export class Composition {
     const { background, frame, output } = this.project
     if (background.useWallpaperBlur) return null
 
+    const image =
+      background.kind === 'image' && background.imageSrc
+        ? getBackgroundImage(background.imageSrc)
+        : null
     const signature = JSON.stringify([
       output.width,
       output.height,
       background,
+      // Rebuild once the image arrives, or the fallback colour would stick.
+      image?.complete && image.naturalWidth > 0,
       frame.padding,
       frame.radius,
       frame.shadow,
@@ -266,6 +272,19 @@ export class Composition {
         h * scale
       )
       ctx.restore()
+    } else if (background.kind === 'image' && background.imageSrc) {
+      const image = getBackgroundImage(background.imageSrc)
+      if (image?.complete && image.naturalWidth > 0) {
+        // Cover-fit: fill the frame, crop the overflow, never distort.
+        const scale = Math.max(w / image.naturalWidth, h / image.naturalHeight)
+        const iw = image.naturalWidth * scale
+        const ih = image.naturalHeight * scale
+        ctx.drawImage(image, (w - iw) / 2, (h - ih) / 2, iw, ih)
+      } else {
+        // Still loading — paint the fallback colour rather than flashing white.
+        ctx.fillStyle = background.colors[0] ?? '#111'
+        ctx.fillRect(0, 0, w, h)
+      }
     } else if (background.kind === 'solid') {
       ctx.fillStyle = background.colors[0] ?? '#111'
       ctx.fillRect(0, 0, w, h)
@@ -582,6 +601,23 @@ function formatShortcut(key: { chars: string; mods: string[] }): string {
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
   return t * t * (3 - 2 * t)
+}
+
+/**
+ * Background images are decoded once and reused. `render` is synchronous, so it
+ * draws whatever is ready and the frame is rebuilt when loading completes.
+ */
+const backgroundImages = new Map<string, HTMLImageElement>()
+
+function getBackgroundImage(src: string): HTMLImageElement | null {
+  if (typeof Image === 'undefined') return null
+  let image = backgroundImages.get(src)
+  if (!image) {
+    image = new Image()
+    image.src = src
+    backgroundImages.set(src, image)
+  }
+  return image
 }
 
 let noiseCanvas: HTMLCanvasElement | OffscreenCanvas | null = null

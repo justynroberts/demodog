@@ -1,8 +1,28 @@
 // MIT License - Copyright (c) fintonlabs.com
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { api } from '../api'
 import { BACKGROUND_PRESETS, OUTPUT_PRESETS } from '../engine/defaults'
 import { Group, Segmented, Slider, Toggle } from '../ui/controls'
 import type { Project, Recording, ZoomSegment } from '../engine/types'
+import type { Profile } from '../../../shared/types'
+
+/** The parts of a Project that belong to a look, not to one recording. */
+const PROFILE_KEYS = [
+  'background',
+  'frame',
+  'zoom',
+  'cursor',
+  'pip',
+  'keystrokes',
+  'audio',
+  'output'
+] as const
+
+function extractProfileSettings(project: Project): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const key of PROFILE_KEYS) out[key] = project[key]
+  return out
+}
 
 interface Props {
   project: Project
@@ -41,7 +61,16 @@ export default function Inspector(props: Props): ReactNode {
       </div>
 
       <div className="insp-body">
-        {tab === 'style' && <StyleTab project={project} set={set} patch={patch} />}
+        {tab === 'style' && (
+          <StyleTab
+            project={project}
+            set={set}
+            patch={patch}
+            // Applied in one update; setting each key in turn would read stale
+            // state and only the last change would survive.
+            applyProfile={(settings) => onChange({ ...project, ...settings })}
+          />
+        )}
         {tab === 'zoom' && <ZoomTab {...props} patch={patch} />}
         {tab === 'cursor' && <CursorTab project={project} patch={patch} />}
         {tab === 'camera' && <CameraTab {...props} patch={patch} />}
@@ -55,19 +84,114 @@ export default function Inspector(props: Props): ReactNode {
 type Setter = <K extends keyof Project>(key: K, value: Project[K]) => void
 type Patcher = <K extends keyof Project>(key: K, value: Partial<Project[K]>) => void
 
+/**
+ * Named look presets. Everything except the recording-specific bits (zoom
+ * segments, trim) is saved, so a profile can be applied to any take.
+ */
+function Profiles({
+  project,
+  onApply
+}: {
+  project: Project
+  onApply: (settings: Partial<Project>) => void
+}): ReactNode {
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  const [selected, setSelected] = useState('')
+
+  useEffect(() => {
+    void api.listProfiles().then(setProfiles)
+  }, [])
+
+  const save = async (): Promise<void> => {
+    const existing = profiles.find((p) => p.id === selected)
+    const name = window.prompt('Name this profile', existing?.name ?? 'My look')
+    if (!name) return
+    const profile: Profile = {
+      id: existing && existing.name === name ? existing.id : `p-${Date.now()}`,
+      name,
+      isDefault: existing?.isDefault ?? false,
+      settings: extractProfileSettings(project)
+    }
+    setProfiles(await api.saveProfile(profile))
+    setSelected(profile.id)
+  }
+
+  const apply = (id: string): void => {
+    setSelected(id)
+    const profile = profiles.find((p) => p.id === id)
+    if (profile) onApply(profile.settings as Partial<Project>)
+  }
+
+  const makeDefault = async (): Promise<void> => {
+    const profile = profiles.find((p) => p.id === selected)
+    if (!profile) return
+    setProfiles(await api.saveProfile({ ...profile, isDefault: true }))
+  }
+
+  const remove = async (): Promise<void> => {
+    if (!selected) return
+    setProfiles(await api.deleteProfile(selected))
+    setSelected('')
+  }
+
+  const current = profiles.find((p) => p.id === selected)
+
+  return (
+    <Group title="Profile">
+      <select value={selected} onChange={(e) => apply(e.target.value)}>
+        <option value="">Custom (unsaved)</option>
+        {profiles.map((profile) => (
+          <option key={profile.id} value={profile.id}>
+            {profile.name}
+            {profile.isDefault ? ' · default' : ''}
+          </option>
+        ))}
+      </select>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button
+          className="btn"
+          style={{ flex: 1, justifyContent: 'center' }}
+          onClick={() => void save()}
+        >
+          Save…
+        </button>
+        <button
+          className="btn"
+          onClick={() => void makeDefault()}
+          disabled={!current || current.isDefault}
+          title="Apply this profile to new recordings"
+        >
+          ★
+        </button>
+        <button className="btn" onClick={() => void remove()} disabled={!selected} title="Delete">
+          ✕
+        </button>
+      </div>
+      <p style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.5, margin: '10px 0 0' }}>
+        Saves background, frame, zoom, cursor, camera and output settings. The default profile is
+        applied to every new recording.
+      </p>
+    </Group>
+  )
+}
+
 function StyleTab({
   project,
   set,
-  patch
+  patch,
+  applyProfile
 }: {
   project: Project
   set: Setter
   patch: Patcher
+  applyProfile: (settings: Partial<Project>) => void
 }): ReactNode {
   const { frame, background, output } = project
 
   return (
     <>
+      <Profiles project={project} onApply={applyProfile} />
+
       <Group title="Background">
         <div className="swatches">
           {BACKGROUND_PRESETS.map((preset) => (
@@ -81,6 +205,35 @@ function StyleTab({
             />
           ))}
         </div>
+        <div style={{ height: 10 }} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn"
+            style={{ flex: 1, justifyContent: 'center' }}
+            onClick={async () => {
+              const path = await api.pickImage()
+              if (!path) return
+              set('background', {
+                ...background,
+                kind: 'image',
+                imageSrc: api.mediaURL(path),
+                useWallpaperBlur: false
+              })
+            }}
+          >
+            Custom image…
+          </button>
+          {background.kind === 'image' && (
+            <button
+              className="btn"
+              title="Remove the custom image"
+              onClick={() => set('background', { ...BACKGROUND_PRESETS[0].background })}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
         <div style={{ height: 12 }} />
         <Slider
           label="Grain"
