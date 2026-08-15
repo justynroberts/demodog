@@ -98,13 +98,16 @@ export function defaultProject(
       enabled: true,
       maxScale: 2.1,
       minScale: 1.25,
-      lead: 0.42,
-      hold: 1.5,
-      mergeGap: 1.1,
-      easeIn: 0.75,
-      easeOut: 0.85,
+      lead: 0.45,
+      hold: 1.9,
+      mergeGap: 1.8,
+      bridgeGap: 2.2,
+      easeIn: 0.85,
+      easeOut: 0.95,
       follow: 0.42,
-      triggers: { clicks: true, scrolls: true, keys: false, appSwitches: true, dwell: true },
+      // Dwell is off by default: it is the trigger that most often produces
+      // zooms the user did not ask for.
+      triggers: { clicks: true, scrolls: true, keys: false, appSwitches: true, dwell: false },
       smoothing: 0.16
     },
     segments: [],

@@ -41,8 +41,14 @@ console.log(
 )
 
 // ---------------------------------------------------------------------------
+// Framing is checked with a deliberately *precise* configuration: the fixture
+// visits targets across the whole screen every ~1.5s, which the shipped
+// defaults quite reasonably treat as one shot covering both. Isolating the
+// targets is what makes "did it frame the right thing" answerable at all.
+const precise = { ...project.zoom, mergeGap: 0.6, bridgeGap: 0 }
+
 console.log('Auto-zoom segments')
-const segments = generateSegments(input, project.zoom, source, meta.duration)
+const segments = generateSegments(input, precise, source, meta.duration)
 for (const s of segments) {
   console.log(
     `  ${s.start.toFixed(2)}s → ${s.end.toFixed(2)}s  scale ${s.scale.toFixed(2)}x  ` +
@@ -60,14 +66,17 @@ check(
 console.log('\nCamera framing at each known target')
 const cursor = new CursorTrack(input, meta.duration, project.cursor)
 const aspect = 16 / 9
-const solver = new CameraSolver(segments, project.zoom, cursor, source, aspect)
+const solver = new CameraSolver(segments, precise, cursor, source, aspect)
 
+// Sampled ~0.5s after each action, which is once the ease-in has finished and
+// the shot has settled. Sampling mid-ramp measures the transition, not the
+// framing.
 const expectations = [
-  { t: 1.85, name: 'target 1', x: 500, y: 400 },
-  { t: 3.35, name: 'target 2', x: 2300, y: 500 },
-  { t: 5.4, name: 'target 3', x: 1440, y: 900 },
-  { t: 7.5, name: 'target 4', x: 600, y: 1450 },
-  { t: 9.1, name: 'target 5', x: 2200, y: 1400 }
+  { t: 2.25, name: 'target 1', x: 500, y: 400 },
+  { t: 4.05, name: 'target 2', x: 2300, y: 500 },
+  { t: 5.7, name: 'target 3', x: 1440, y: 900 },
+  { t: 7.9, name: 'target 4', x: 600, y: 1450 },
+  { t: 9.5, name: 'target 5', x: 2200, y: 1400 }
 ]
 
 for (const e of expectations) {
@@ -103,6 +112,34 @@ for (let t = 1 / 60; t < meta.duration; t += 1 / 60) {
 }
 // A hard cut between framings would show up as a large per-frame delta.
 check('no camera jump cuts', maxJump < 90, `largest per-frame move ${maxJump.toFixed(1)}px`)
+
+// ---------------------------------------------------------------------------
+// The shipped defaults are judged on calmness instead: how often the camera
+// releases all the way back to 1x, and whether any shot is too short to settle.
+console.log('\nCalmness of the shipped defaults')
+const calm = generateSegments(input, project.zoom, source, meta.duration)
+const calmSolver = new CameraSolver(calm, project.zoom, cursor, source, aspect)
+
+let releases = 0
+let wasWide = true
+for (let t = 0; t < meta.duration; t += 1 / 30) {
+  const wide = calmSolver.at(t).scale < 1.06
+  if (wide && !wasWide) releases++
+  wasWide = wide
+}
+const shortest = calm.length ? Math.min(...calm.map((s) => s.end - s.start)) : Infinity
+
+check(
+  'produces zooms with the defaults',
+  calm.length > 0,
+  `${calm.length} segments over ${meta.duration.toFixed(1)}s`
+)
+check(
+  'does not pump in and out',
+  releases <= Math.ceil(meta.duration / 6),
+  `returns to 1x ${releases} time(s)`
+)
+check('no twitch-length shots', shortest >= 1.2, `shortest ${shortest.toFixed(2)}s`)
 
 // ---------------------------------------------------------------------------
 console.log('\nCursor smoothing')

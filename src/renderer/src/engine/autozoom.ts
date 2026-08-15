@@ -31,7 +31,7 @@ export function generateSegments(
   const moments = collectMoments(input, settings, source, duration)
   if (moments.length === 0) return []
 
-  const clusters = cluster(moments, settings.mergeGap)
+  const clusters = cluster(moments, settings.mergeGap, source, settings.minScale)
   const segments: ZoomSegment[] = []
 
   for (const group of clusters) {
@@ -87,7 +87,7 @@ export function generateSegments(
     })
   }
 
-  return resolveOverlaps(segments)
+  return stitchSegments(segments, settings.bridgeGap)
 }
 
 function collectMoments(
@@ -111,7 +111,7 @@ function collectMoments(
     // an interesting moment.
     let lastT = -Infinity
     for (const scroll of input.scrolls) {
-      if (scroll.t - lastT > 0.5) {
+      if (scroll.t - lastT > 0.9) {
         moments.push({ t: scroll.t, x: scroll.x, y: scroll.y, weight: 0.55, kind: 'scroll' })
       }
       lastT = scroll.t
@@ -167,18 +167,21 @@ function detectDwell(input: ParsedInput): Moment[] {
   if (moves.length < 8) return out
 
   const travelWindow = 0.5
-  const stillWindow = 0.35
+  const stillWindow = 0.45
+  // A generous cooldown matters more than the thresholds: without it a slow
+  // sweep across the screen emits a moment every stride.
+  const cooldown = 2.2
   let lastEmit = -Infinity
 
   for (let i = 0; i < moves.length; i++) {
     const m = moves[i]
-    if (m.t - lastEmit < 1.2) continue
+    if (m.t - lastEmit < cooldown) continue
 
     let travelled = 0
     for (let j = i - 1; j >= 0 && m.t - moves[j].t < travelWindow; j--) {
       travelled += Math.hypot(moves[j + 1].x - moves[j].x, moves[j + 1].y - moves[j].y)
     }
-    if (travelled < 260) continue
+    if (travelled < 420) continue
 
     let moved = 0
     let k = i + 1
@@ -187,7 +190,7 @@ function detectDwell(input: ParsedInput): Moment[] {
     }
     // Needs a real pause afterwards, not just the end of the samples.
     if (k >= moves.length) continue
-    if (moved > 14) continue
+    if (moved > 10) continue
 
     out.push({ t: m.t, x: m.x, y: m.y, weight: 0.45, kind: 'dwell' })
     lastEmit = m.t
@@ -195,19 +198,69 @@ function detectDwell(input: ParsedInput): Moment[] {
   return out
 }
 
-function cluster(moments: Moment[], gap: number): Moment[][] {
+interface Bounds {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
+function extend(bounds: Bounds | null, moment: Moment): Bounds {
+  const rect = moment.rect ?? { x: moment.x, y: moment.y, w: 0, h: 0 }
+  return {
+    minX: Math.min(bounds?.minX ?? Infinity, rect.x),
+    minY: Math.min(bounds?.minY ?? Infinity, rect.y),
+    maxX: Math.max(bounds?.maxX ?? -Infinity, rect.x + rect.w),
+    maxY: Math.max(bounds?.maxY ?? -Infinity, rect.y + rect.h)
+  }
+}
+
+/** The magnification that would frame these bounds with breathing room. */
+function fitScale(bounds: Bounds, source: { width: number; height: number }): number {
+  const margin = source.width * 0.15
+  const spanW = bounds.maxX - bounds.minX + margin * 2
+  const spanH = bounds.maxY - bounds.minY + margin * 2
+  return Math.min(source.width / spanW, source.height / spanH)
+}
+
+/**
+ * Groups moments that belong to the same shot, in **time and space**.
+ *
+ * Time alone is not enough. Two clicks a second apart on opposite corners of
+ * the screen are two shots, not one; merging them produces a box so wide that
+ * the fitted magnification falls below the minimum and the segment is thrown
+ * away — so a bigger merge gap could silently remove every zoom in a take.
+ * Splitting when the framing would no longer be a zoom keeps tight clusters
+ * (a form, a menu, repeated clicks) together while distant ones stay separate.
+ */
+function cluster(
+  moments: Moment[],
+  gap: number,
+  source: { width: number; height: number },
+  minScale: number
+): Moment[][] {
   const groups: Moment[][] = []
   let current: Moment[] = []
+  let bounds: Bounds | null = null
 
   for (const moment of moments) {
     if (current.length === 0) {
-      current.push(moment)
+      current = [moment]
+      bounds = extend(null, moment)
       continue
     }
-    if (moment.t - current[current.length - 1].t <= gap) current.push(moment)
-    else {
+
+    const apart = moment.t - current[current.length - 1].t > gap
+    const widened = extend(bounds, moment)
+    const wouldStopBeingAZoom = fitScale(widened, source) < minScale
+
+    if (apart || wouldStopBeingAZoom) {
       groups.push(current)
       current = [moment]
+      bounds = extend(null, moment)
+    } else {
+      current.push(moment)
+      bounds = widened
     }
   }
   if (current.length) groups.push(current)
@@ -215,26 +268,37 @@ function cluster(moments: Moment[], gap: number): Moment[][] {
 }
 
 /**
- * Clustering works on moment times, so the hold on one segment can run past the
- * lead-in of the next.
+ * Joins neighbouring segments so the camera stops bouncing.
  *
- * The obvious fix — fusing them into one segment — is wrong. Averaging two
- * anchors that are half a screen apart produces a single wide shot centred on
- * nothing, and because each fusion extends the segment it cascades: a whole
- * recording collapses into one static zoom. So instead the earlier segment is
- * *trimmed* to hand over, keeping both anchors intact. A deliberate sliver of
- * overlap is left in place, which the camera's envelope blending turns into a
- * move from one framing to the next rather than a cut.
+ * Two things happen here, and both exist to stop the shot pumping in and out:
+ *
+ *  * **Overlaps are trimmed, never fused.** Averaging two anchors half a screen
+ *    apart produces one wide shot centred on nothing, and because each fusion
+ *    extends the segment it cascades until the whole recording is a single
+ *    static zoom. Trimming keeps both anchors and lets the camera's envelope
+ *    blending move between them.
+ *  * **Short gaps are bridged.** If the camera would pull out to 1x for only a
+ *    moment before punching straight back in, that reads as a twitch. Extending
+ *    the earlier segment to meet the next keeps the zoom held and turns the
+ *    transition into a pan, which is what makes the result feel deliberate.
  */
-function resolveOverlaps(segments: ZoomSegment[]): ZoomSegment[] {
+function stitchSegments(segments: ZoomSegment[], bridgeGap: number): ZoomSegment[] {
   const CROSSFADE = 0.3
-  const MIN_LENGTH = 0.55
+  // A shot shorter than its own ramps never settles — it reads as a twitch
+  // rather than a move, so it is better not to make it at all.
+  const MIN_LENGTH = 1.2
 
   const out: ZoomSegment[] = []
   for (const segment of segments) {
     const prev = out[out.length - 1]
-    if (prev && segment.start < prev.end) {
-      prev.end = Math.max(prev.start + MIN_LENGTH, segment.start + CROSSFADE)
+    if (prev) {
+      const gap = segment.start - prev.end
+      if (gap < 0) {
+        prev.end = Math.max(prev.start + MIN_LENGTH, segment.start + CROSSFADE)
+      } else if (gap < bridgeGap) {
+        // Hold the zoom across the gap rather than releasing and re-acquiring.
+        prev.end = segment.start + CROSSFADE
+      }
       // Ramps cannot outlast the segment they belong to.
       const span = prev.end - prev.start
       prev.easeOut = Math.min(prev.easeOut, span / 2)

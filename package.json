@@ -16,7 +16,8 @@
     "fixture": "node scripts/make-fixture.mjs",
     "verify": "mkdir -p node_modules/.cache && esbuild scripts/verify-engine.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/verify.mjs --log-level=warning && node node_modules/.cache/verify.mjs",
     "dist": "npm run build && electron-builder --mac",
-    "icon": "./scripts/make-icon.sh"
+    "icon": "./scripts/make-icon.sh",
+    "zoom-report": "mkdir -p node_modules/.cache && esbuild scripts/zoom-report.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/zoom-report.mjs --log-level=warning && node node_modules/.cache/zoom-report.mjs"
   },
   "dependencies": {
     "mp4-muxer": "^5.2.2",

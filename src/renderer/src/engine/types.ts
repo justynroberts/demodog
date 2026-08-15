@@ -98,6 +98,11 @@ export interface ZoomSettings {
   hold: number
   /** Clusters closer than this merge into one segment. */
   mergeGap: number
+  /**
+   * Gaps shorter than this keep the zoom held rather than releasing to 1x and
+   * punching back in. The single biggest control over how busy the result feels.
+   */
+  bridgeGap: number
   easeIn: number
   easeOut: number
   /** Camera tracking of the cursor while zoomed, 0..1. */

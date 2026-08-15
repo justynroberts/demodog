@@ -107,7 +107,19 @@ Two non-obvious pieces of the design, both learned by getting them wrong:
 - **Overlapping zoom segments are trimmed, never merged.** Averaging two anchors
   half a screen apart yields a wide shot centred on nothing, and because each
   fusion extends the segment it cascades until the whole recording is one static
-  zoom. See `resolveOverlaps`.
+  zoom. See `stitchSegments`.
+- **Moments cluster in space as well as time.** Clustering on time alone lets two
+  clicks a second apart on opposite corners share a shot, whose bounding box is
+  then too wide to zoom into — so the segment falls below `minScale` and is
+  discarded. A larger merge gap could therefore silently remove *every* zoom.
+- **Short gaps between shots are bridged, not released.** Pulling out to 1x for a
+  moment and punching straight back in is what "zooming in and out too much"
+  actually is; holding the zoom and panning reads as deliberate. `bridgeGap`
+  is the main control over how busy a result feels.
+
+Tune with real material, not by feel: `npm run zoom-report -- <take dir>`
+reports segment count, how often the camera returns to 1x, and the fraction of
+the take spent zoomed.
 - **The cursor filter runs in both directions.** A causal filter always lags, and
   a pointer that trails behind its own clicks looks broken. The reverse pass
   cancels the phase shift exactly — only possible because this is

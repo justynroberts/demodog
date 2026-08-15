@@ -95,14 +95,8 @@ export default function Editor({
     } else {
       if (timeRef.current >= trim.end - 0.02) seek(trim.start)
       void screen.play()
-      const camera = cameraRef.current
-      if (camera) {
-        const ct = timeRef.current - recording.cameraOffset - cameraSync
-        if (ct >= 0) {
-          camera.currentTime = ct
-          void camera.play()
-        }
-      }
+      // The camera is started by the draw loop rather than here: its track
+      // begins slightly after the screen's, so at t=0 it is not due yet.
       setPlaying(true)
     }
   }, [playing, seek, trim, recording, cameraSync])
@@ -132,12 +126,22 @@ export default function Editor({
           cameraRef.current?.pause()
           setPlaying(false)
         }
-        // Nudge the camera back into sync if it has drifted audibly.
+        // The camera track starts after the screen track, so it has to be
+        // started when its own timeline begins — not when playback does.
+        // Waiting for `ct >= 0` at press time meant it never started at all.
         const camera = cameraRef.current
-        if (camera && !camera.paused) {
+        if (camera) {
           const want = screen.currentTime - recording.cameraOffset - cameraSync
-          if (want >= 0 && Math.abs(camera.currentTime - want) > 0.12) {
-            camera.currentTime = want
+          if (want < 0) {
+            // Not due yet; hold it at its first frame.
+            if (!camera.paused) camera.pause()
+          } else {
+            if (camera.paused) {
+              camera.currentTime = want
+              void camera.play().catch(() => undefined)
+            } else if (Math.abs(camera.currentTime - want) > 0.12) {
+              camera.currentTime = want
+            }
           }
         }
       }
@@ -155,6 +159,15 @@ export default function Editor({
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
   }, [composition, playing, trim.end, recording, cameraSync, exporting])
+
+  // Preview volume follows the mixer. Element volume is 0..1 while the gains
+  // go to 2, so boosts above unity only apply to the export, which mixes
+  // through Web Audio.
+  useEffect(() => {
+    const clamp = (v: number): number => Math.min(1, Math.max(0, v))
+    if (screenRef.current) screenRef.current.volume = clamp(project.audio.systemGain)
+    if (cameraRef.current) cameraRef.current.volume = clamp(project.audio.micGain)
+  }, [project.audio.systemGain, project.audio.micGain, recording])
 
   // ---- keyboard ----------------------------------------------------------
   // Declared after runExport below; hoisted via the ref so the handler always
@@ -278,7 +291,6 @@ export default function Editor({
           src={recording.screenURL}
           style={{ display: 'none' }}
           preload="auto"
-          muted
         />
         {recording.cameraURL && (
           <video
@@ -286,7 +298,6 @@ export default function Editor({
             src={recording.cameraURL}
             style={{ display: 'none' }}
             preload="auto"
-            muted
           />
         )}
 

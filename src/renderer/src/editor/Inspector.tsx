@@ -425,6 +425,14 @@ function ZoomTab({
           format={(v) => `${v.toFixed(2)}s`}
         />
         <Slider
+          label="Stay zoomed between"
+          value={zoom.bridgeGap}
+          min={0}
+          max={6}
+          onChange={(v) => patch('zoom', { bridgeGap: v })}
+          format={(v) => (v === 0 ? 'off' : `${v.toFixed(1)}s`)}
+        />
+        <Slider
           label="Ease in"
           value={zoom.easeIn}
           min={0.1}
