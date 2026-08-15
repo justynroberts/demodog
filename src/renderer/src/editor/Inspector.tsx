@@ -154,7 +154,7 @@ function Profiles({
         {profiles.map((profile) => (
           <option key={profile.id} value={profile.id}>
             {profile.name}
-            {profile.isDefault ? ' \u00b7 default' : ''}
+            {profile.isDefault ? ' · default' : ''}
           </option>
         ))}
       </select>
@@ -188,10 +188,10 @@ function Profiles({
             current?.isDefault ? { background: 'var(--lime)', color: 'var(--lime-ink)' } : undefined
           }
         >
-          \u2605
+          ★
         </button>
         <button className="btn" onClick={() => void remove()} disabled={!current} title="Delete">
-          \u2715
+          ✕
         </button>
       </div>
 
