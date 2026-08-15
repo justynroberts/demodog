@@ -14,7 +14,7 @@ func hostSeconds() -> Double {
 /// write so a crashed recording still yields usable input data.
 final class JSONLWriter {
     private let handle: FileHandle
-    private let queue = DispatchQueue(label: "finscreen.jsonl")
+    private let queue = DispatchQueue(label: "demodog.jsonl")
 
     init?(path: String) {
         FileManager.default.createFile(atPath: path, contents: nil)

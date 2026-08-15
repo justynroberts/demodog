@@ -1,5 +1,5 @@
 {
-  "name": "finscreen",
+  "name": "demodog",
   "version": "0.1.0",
   "description": "Screen recorder with automatic zoom, smoothed cursor and camera picture-in-picture",
   "author": "Justyn Roberts",
@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "fixture": "node scripts/make-fixture.mjs",
     "verify": "mkdir -p node_modules/.cache && esbuild scripts/verify-engine.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/verify.mjs --log-level=warning && node node_modules/.cache/verify.mjs",
-    "dist": "npm run build && electron-builder --mac"
+    "dist": "npm run build && electron-builder --mac",
+    "icon": "./scripts/make-icon.sh"
   },
   "dependencies": {
     "mp4-muxer": "^5.2.2",
@@ -34,16 +35,16 @@
     "vite": "^5.4.11"
   },
   "build": {
-    "appId": "com.fintonlabs.finscreen",
-    "productName": "FinScreen",
+    "appId": "com.fintonlabs.demodog",
+    "productName": "DemoDog",
     "files": [
       "out/**/*",
-      "resources/**/*"
+      "resources/icon.icns"
     ],
     "extraResources": [
       {
-        "from": "bin/finscreen-recorder",
-        "to": "bin/finscreen-recorder"
+        "from": "bin/demodog-recorder",
+        "to": "bin/demodog-recorder"
       }
     ],
     "mac": {
@@ -52,10 +53,11 @@
         "dmg"
       ],
       "extendInfo": {
-        "NSCameraUsageDescription": "FinScreen records your camera for picture-in-picture overlays.",
-        "NSMicrophoneUsageDescription": "FinScreen records your microphone narration.",
-        "NSScreenCaptureUsageDescription": "FinScreen records your screen."
-      }
+        "NSCameraUsageDescription": "DemoDog records your camera for picture-in-picture overlays.",
+        "NSMicrophoneUsageDescription": "DemoDog records your microphone narration.",
+        "NSScreenCaptureUsageDescription": "DemoDog records your screen."
+      },
+      "icon": "resources/icon.icns"
     }
   }
 }

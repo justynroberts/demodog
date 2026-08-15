@@ -1,4 +1,4 @@
-# DESIGN.md — FinScreen
+# DESIGN.md — DemoDog
 
 House-style record for this project, so a later session can vary away from it
 rather than repeating it.

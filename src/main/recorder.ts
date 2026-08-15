@@ -14,7 +14,7 @@ import type {
 } from '../shared/types'
 
 /**
- * Thin wrapper around the `finscreen-recorder` Swift helper.
+ * Thin wrapper around the `demodog-recorder` Swift helper.
  *
  * The helper speaks one JSON object per line on stdout and accepts `stop` on
  * stdin. Everything screen-capture related lives on that side of the boundary;
@@ -23,9 +23,9 @@ import type {
 
 function helperPath(): string {
   // Packaged builds ship the binary in Resources; dev runs it from the repo.
-  const packaged = join(process.resourcesPath ?? '', 'bin', 'finscreen-recorder')
+  const packaged = join(process.resourcesPath ?? '', 'bin', 'demodog-recorder')
   if (app.isPackaged && existsSync(packaged)) return packaged
-  return join(app.getAppPath(), 'bin', 'finscreen-recorder')
+  return join(app.getAppPath(), 'bin', 'demodog-recorder')
 }
 
 /**
@@ -56,7 +56,7 @@ function describeError(message: string, code?: unknown, errorCode?: unknown): st
     )
   }
   if (code === 'no-permission') {
-    return 'Screen Recording permission has not been granted to FinScreen.'
+    return 'Screen Recording permission has not been granted to DemoDog.'
   }
   if (code === 'timeout') {
     return 'macOS did not respond to the capture request in time. Try again.'

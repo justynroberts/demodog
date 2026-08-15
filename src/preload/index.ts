@@ -28,6 +28,13 @@ const api = {
   autoloadRecording: (): Promise<RecordingResult | null> =>
     ipcRenderer.invoke('recording:autoload'),
 
+  /** Headless export benchmark; null unless DEMODOG_BENCH is set. */
+  benchConfig: (): Promise<{ dir: string; out: string; seconds: number } | null> =>
+    ipcRenderer.invoke('bench:config'),
+  benchFinish: (path: string, data: ArrayBuffer): Promise<void> =>
+    ipcRenderer.invoke('bench:finish', path, data),
+  benchFail: (message: string): Promise<void> => ipcRenderer.invoke('bench:fail', message),
+
   openCameraFile: (info: { startWallClock: number; mimeType: string }): Promise<string> =>
     ipcRenderer.invoke('camera:open', info),
   writeCameraChunk: (chunk: ArrayBuffer): void => ipcRenderer.send('camera:chunk', chunk),
@@ -53,6 +60,6 @@ const api = {
   }
 }
 
-contextBridge.exposeInMainWorld('finscreen', api)
+contextBridge.exposeInMainWorld('demodog', api)
 
-export type FinScreenAPI = typeof api
+export type DemoDogAPI = typeof api

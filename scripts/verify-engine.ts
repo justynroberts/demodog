@@ -16,7 +16,7 @@ import { CursorTrack } from '../src/renderer/src/engine/cursorTrack'
 import { defaultProject } from '../src/renderer/src/engine/defaults'
 import type { CaptureMeta, RawEvent } from '../src/shared/types'
 
-const dir = process.argv[2] ?? join(homedir(), 'Movies', 'FinScreen', 'fixture')
+const dir = process.argv[2] ?? join(homedir(), 'Movies', 'DemoDog', 'fixture')
 
 const meta = JSON.parse(readFileSync(join(dir, 'meta.json'), 'utf8')) as CaptureMeta
 const raw: RawEvent[] = readFileSync(join(dir, 'events.jsonl'), 'utf8')

@@ -33,7 +33,7 @@ const TARGETS = [
   { n: 5, x: 2200, y: 1400 }
 ]
 
-const out = process.argv[2] ?? join(homedir(), 'Movies', 'FinScreen', 'fixture')
+const out = process.argv[2] ?? join(homedir(), 'Movies', 'DemoDog', 'fixture')
 
 // ---------------------------------------------------------------------------
 // Video

@@ -4,9 +4,14 @@ dist/
 release/
 
 # Compiled Swift helper — rebuilt by `npm run native` / postinstall
-bin/finscreen-recorder
+bin/demodog-recorder
 *.dSYM/
 
 .DS_Store
 *.log
 .vite/
+
+# Generated from resources/icon-source.png by `npm run icon`
+resources/icon.icns
+resources/*.iconset/
+src/renderer/public/logo.png

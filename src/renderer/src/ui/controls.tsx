@@ -90,17 +90,17 @@ export function Group({ title, children }: { title: string; children: ReactNode 
 /** Light / dark / system, persisted, applied to <html data-theme>. */
 export function ThemeToggle(): ReactNode {
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() => {
-    const stored = localStorage.getItem('finscreen-theme')
+    const stored = localStorage.getItem('demodog-theme')
     return stored === 'light' || stored === 'dark' ? stored : 'system'
   })
 
   useEffect(() => {
     if (theme === 'system') {
       document.documentElement.removeAttribute('data-theme')
-      localStorage.removeItem('finscreen-theme')
+      localStorage.removeItem('demodog-theme')
     } else {
       document.documentElement.setAttribute('data-theme', theme)
-      localStorage.setItem('finscreen-theme', theme)
+      localStorage.setItem('demodog-theme', theme)
     }
   }, [theme])
 
@@ -142,7 +142,7 @@ export function InfoButton(): ReactNode {
         }}
       >
         <div className="body">
-          <h2>FinScreen</h2>
+          <h2>DemoDog</h2>
           <p>
             Screen recording with automatic zoom, a reconstructed cursor and camera
             picture-in-picture. Version 0.1.0.
@@ -166,6 +166,25 @@ export function InfoButton(): ReactNode {
         </div>
       </dialog>
     </>
+  )
+}
+
+/**
+ * The brand mark. Falls back to a plain accent square until the artwork has
+ * been generated with `npm run icon`, so a fresh checkout never shows a broken
+ * image.
+ */
+export function Brand(): ReactNode {
+  const [hasLogo, setHasLogo] = useState(true)
+  return (
+    <div className="brand">
+      {hasLogo ? (
+        <img className="mark" src="/logo.png" alt="" onError={() => setHasLogo(false)} />
+      ) : (
+        <span className="dot" />
+      )}
+      DemoDog
+    </div>
   )
 }
 

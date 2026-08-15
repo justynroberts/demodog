@@ -53,13 +53,14 @@ export async function exportMP4(options: ExportOptions): Promise<ExportResult> {
 
   // Seeking is the default because it is the path whose output has been
   // verified frame-for-frame against the preview. `SEQUENTIAL_DECODE` switches
-  // the screen track to a WebCodecs decoder, which should be considerably
-  // faster but is not yet proven end to end — see the export notes in
-  // CLAUDE.md. The camera is WebM, which the MP4 demuxer cannot read at all.
+  // the screen track to a WebCodecs decoder, which is not yet working — see the
+  // export notes in CLAUDE.md. The camera is WebM, which the MP4 demuxer cannot
+  // read at all.
   const screen = await openFrameSource(options.screenURL, SEQUENTIAL_DECODE ? 'decode' : 'seek')
   const camera = options.cameraURL
     ? await openFrameSource(options.cameraURL, 'seek').catch(() => null)
     : null
+
 
   const canvas = new OffscreenCanvas(output.width, output.height)
   const ctx = canvas.getContext('2d', { alpha: false })

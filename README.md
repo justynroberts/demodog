@@ -1,4 +1,4 @@
-# FinScreen
+# DemoDog
 
 A macOS screen recorder that edits itself. Record, and it comes back with the
 zooms already placed, the cursor smoothed, and your camera in the corner.
@@ -50,7 +50,7 @@ microphone are asked for only if you select them. **Accessibility** is optional
 and only used for the keyboard-shortcut overlay — and only modifier
 combinations are ever logged, never plain typing.
 
-Recordings are written to `~/Movies/FinScreen/take_<timestamp>/`.
+Recordings are written to `~/Movies/DemoDog/take_<timestamp>/`.
 
 Press <kbd>⌘⇧2</kbd> to stop a recording from anywhere.
 
@@ -59,7 +59,7 @@ Press <kbd>⌘⇧2</kbd> to stop a recording from anywhere.
 ```bash
 npm run fixture   # synthetic take with targets at known coordinates
 npm run verify    # asserts the engine framed every one of them
-FINSCREEN_OPEN=~/Movies/FinScreen/fixture npm run dev
+DEMODOG_OPEN=~/Movies/DemoDog/fixture npm run dev
 ```
 
 ## How it fits together
@@ -82,8 +82,8 @@ system.
 
 - **Export is slow** — correct, but roughly 2.5–3 output frames per second,
   because it seeks the source video once per frame. A faster sequential-decode
-  path is written and sits behind a flag; it needs verifying before it can be
-  turned on. See the export notes in `CLAUDE.md`.
+  path is written and sits behind a flag, but it is not working yet: the decoder
+  emits one frame and stalls. See the export notes in `CLAUDE.md`.
 - Cursor *shape* detection (arrow vs I-beam vs hand) is best-effort; Apple has
   deprecated the only API that reports it, and unknown shapes fall back to the
   arrow.

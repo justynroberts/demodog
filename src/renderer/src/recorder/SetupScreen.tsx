@@ -141,7 +141,7 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
           <div className="notice snap">
             <strong>Screen Recording permission is required.</strong>
             <p style={{ margin: '8px 0 12px' }}>
-              macOS must grant FinScreen access before it can capture anything. Enable it, then come
+              macOS must grant DemoDog access before it can capture anything. Enable it, then come
               back and press Re-check.
             </p>
             <div style={{ display: 'flex', gap: 10 }}>

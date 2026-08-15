@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { api, type CompleteRecording } from './api'
 import SetupScreen from './recorder/SetupScreen'
 import Editor from './editor/Editor'
-import { InfoButton, ThemeToggle } from './ui/controls'
+import { Brand, InfoButton, ThemeToggle } from './ui/controls'
 import { parseInput } from './engine/input'
 import type { Recording } from './engine/types'
 import type { RecordingResult } from '../../shared/types'
@@ -42,6 +42,7 @@ function toRecording(
 export default function StudioApp(): ReactNode {
   const [mode, setMode] = useState<Mode>('setup')
   const [recording, setRecording] = useState<Recording | null>(null)
+  const [bench, setBench] = useState<{ out: string; seconds: number } | null>(null)
 
   useEffect(() => {
     return api.on('recording:complete', (payload) => {
@@ -51,13 +52,17 @@ export default function StudioApp(): ReactNode {
     })
   }, [])
 
-  // Dev shortcut: FINSCREEN_OPEN=<take dir> boots straight into the editor.
+  // Dev shortcut: DEMODOG_OPEN=<take dir> boots straight into the editor.
+  // DEMODOG_BENCH does the same but exports immediately and quits.
   useEffect(() => {
-    void api.autoloadRecording().then((result) => {
+    void (async () => {
+      const bench = await api.benchConfig()
+      const result = await api.autoloadRecording()
       if (!result) return
       setRecording(toRecording(result, result.camera))
+      if (bench) setBench({ out: bench.out, seconds: bench.seconds })
       setMode('editor')
-    })
+    })()
   }, [])
 
   const open = async (): Promise<void> => {
@@ -70,10 +75,7 @@ export default function StudioApp(): ReactNode {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">
-          <span className="dot" />
-          FinScreen
-        </div>
+        <Brand />
         <span className="chip">{mode === 'editor' ? 'EDITOR' : 'RECORDER'}</span>
 
         <div className="spacer" />
@@ -99,7 +101,7 @@ export default function StudioApp(): ReactNode {
       </header>
 
       {mode === 'editor' && recording ? (
-        <Editor recording={recording} />
+        <Editor recording={recording} bench={bench} />
       ) : (
         <SetupScreen onRecording={() => setMode('recording')} />
       )}

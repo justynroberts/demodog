@@ -23,6 +23,8 @@ import {
  *    used for the WebM camera track.
  */
 export interface FrameSource {
+  /** Which implementation this is, for diagnostics. */
+  readonly kind: 'decode' | 'seek'
   readonly width: number
   readonly height: number
   /** A drawable showing the video at `t` seconds, or null past the end. */
@@ -32,6 +34,12 @@ export interface FrameSource {
 
 /** Above this the file is not worth holding in memory; fall back to seeking. */
 const MAX_IN_MEMORY_BYTES = 800 * 1024 * 1024
+
+/** Chunks allowed in flight; must exceed the codec's reorder depth. */
+const IN_FLIGHT_CHUNKS = 96
+
+/** Decoded frames held before feeding pauses. */
+const MAX_QUEUED_FRAMES = 48
 
 // ---------------------------------------------------------------------------
 // Sequential decode
@@ -50,6 +58,7 @@ interface QueuedFrame {
 }
 
 class DecodingFrameSource implements FrameSource {
+  readonly kind = 'decode' as const
   readonly width: number
   readonly height: number
 
@@ -59,6 +68,8 @@ class DecodingFrameSource implements FrameSource {
   private queue: QueuedFrame[] = []
   private current: QueuedFrame | null = null
   private flushed = false
+  private decoded = 0
+  private baseTime = 0
   private failure: unknown = null
   private wake: (() => void) | null = null
 
@@ -74,7 +85,8 @@ class DecodingFrameSource implements FrameSource {
 
     this.decoder = new VideoDecoder({
       output: (frame) => {
-        this.queue.push({ frame, start: frame.timestamp / 1e6 })
+        this.decoded++
+        this.queue.push({ frame, start: frame.timestamp / 1e6 - this.baseTime })
         this.wake?.()
       },
       error: (error) => {
@@ -163,12 +175,24 @@ class DecodingFrameSource implements FrameSource {
     return new DecodingFrameSource(samples, config, track.video.width, track.video.height)
   }
 
-  /** Keeps the decoder fed without letting decoded frames pile up in memory. */
+  /**
+   * Keeps the decoder fed without letting decoded frames pile up.
+   *
+   * Backpressure is measured as chunks fed minus frames received, *not* as
+   * `decodeQueueSize`: that counter is still zero while this synchronous loop
+   * runs, so gating on it feeds the entire file in one burst, and WebCodecs
+   * stalls once hundreds of VideoFrames are outstanding and unclosed.
+   *
+   * The window must also stay comfortably larger than the codec's reorder
+   * buffer. H.264 High profile can hold 16 frames in its DPB and emits nothing
+   * until it has enough input to resolve presentation order, so a window that
+   * small deadlocks: the decoder waits for chunks, and we wait for frames.
+   */
   private pump(): void {
     while (
       this.next < this.samples.length &&
-      this.decoder.decodeQueueSize < 8 &&
-      this.queue.length < 12
+      this.next - this.decoded < IN_FLIGHT_CHUNKS &&
+      this.queue.length < MAX_QUEUED_FRAMES
     ) {
       const sample = this.samples[this.next++]
       if (!sample.data) continue
@@ -206,7 +230,7 @@ class DecodingFrameSource implements FrameSource {
         return this.current?.frame ?? this.adopt()
       }
 
-      const drained = this.next >= this.samples.length && this.decoder.decodeQueueSize === 0
+      const drained = this.next >= this.samples.length && this.next - this.decoded <= 0
       if (drained) {
         if (!this.flushed) {
           this.flushed = true
@@ -261,6 +285,8 @@ function codecDescription(file: ISOFile, trackId: number): Uint8Array | undefine
 // ---------------------------------------------------------------------------
 
 class SeekingFrameSource implements FrameSource {
+  readonly kind = 'seek' as const
+
   private constructor(private video: HTMLVideoElement) {}
 
   get width(): number {

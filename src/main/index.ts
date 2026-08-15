@@ -68,10 +68,18 @@ function createStudioWindow(): void {
     }
   })
 
-  studioWindow.on('ready-to-show', () => studioWindow?.show())
+  // Benchmark runs are headless on purpose: they must not steal focus from
+  // whatever else is on screen, including a real editing session.
+  const headless = Boolean(process.env['DEMODOG_BENCH'])
+
+  studioWindow.on('ready-to-show', () => {
+    if (!headless) studioWindow?.show()
+  })
   // If the renderer fails before first paint, `ready-to-show` never fires and
   // the app looks like it silently did nothing. Show it anyway.
-  studioWindow.webContents.on('did-finish-load', () => studioWindow?.show())
+  studioWindow.webContents.on('did-finish-load', () => {
+    if (!headless) studioWindow?.show()
+  })
   studioWindow.webContents.on('did-fail-load', (_e, code, description, url) => {
     console.error(`[renderer] failed to load ${url}: ${description} (${code})`)
     studioWindow?.show()
@@ -134,7 +142,7 @@ function recordingDir(): string {
   const stamp =
     `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
     `_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
-  return join(app.getPath('videos'), 'FinScreen', `take_${stamp}`)
+  return join(app.getPath('videos'), 'DemoDog', `take_${stamp}`)
 }
 
 app.whenReady().then(() => {
@@ -153,7 +161,7 @@ app.whenReady().then(() => {
   // capture, so clear them out before the first recording can be started.
   reapStrayHelpers()
 
-  console.log(`[finscreen] ready. FINSCREEN_OPEN=${process.env['FINSCREEN_OPEN'] ?? '(unset)'}`)
+  console.log(`[demodog] ready. DEMODOG_OPEN=${process.env['DEMODOG_OPEN'] ?? '(unset)'}`)
 
   createStudioWindow()
 
@@ -333,20 +341,50 @@ async function loadTake(dir: string): Promise<RecordingResult> {
 ipcMain.handle('recording:open', async (): Promise<RecordingResult | null> => {
   const result = await dialog.showOpenDialog(studioWindow!, {
     properties: ['openDirectory'],
-    defaultPath: join(app.getPath('videos'), 'FinScreen'),
-    title: 'Open a FinScreen take'
+    defaultPath: join(app.getPath('videos'), 'DemoDog'),
+    title: 'Open a DemoDog take'
   })
   if (result.canceled || !result.filePaths[0]) return null
   return loadTake(result.filePaths[0])
 })
 
 /**
- * Jumps straight into the editor with a given take. Set FINSCREEN_OPEN to a
+ * Jumps straight into the editor with a given take. Set DEMODOG_OPEN to a
  * take directory to skip the recorder while working on the editor — the
  * fixture in scripts/make-fixture.mjs is what this is for.
  */
+/**
+ * Headless export benchmark. Set DEMODOG_BENCH to a take directory and
+ * DEMODOG_BENCH_OUT to a file path; the app exports it without showing a
+ * window or a save dialog, prints the timing breakdown, and quits.
+ *
+ * This exists because timing an export by driving the real UI is unreliable —
+ * it competes for focus with whatever the user is actually doing.
+ */
+ipcMain.handle('bench:config', () => {
+  const dir = process.env['DEMODOG_BENCH']
+  if (!dir) return null
+  return {
+    dir,
+    out: process.env['DEMODOG_BENCH_OUT'] ?? join(dir, 'bench.mp4'),
+    // Cap the exported duration so a benchmark can report a rate quickly.
+    seconds: Number(process.env['DEMODOG_BENCH_SECONDS'] ?? '0') || 0
+  }
+})
+
+ipcMain.handle('bench:finish', async (_e, path: string, data: ArrayBuffer) => {
+  await writeFile(path, Buffer.from(data))
+  console.log(`[bench] wrote ${path} (${data.byteLength} bytes)`)
+  app.quit()
+})
+
+ipcMain.handle('bench:fail', (_e, message: string) => {
+  console.error(`[bench] failed: ${message}`)
+  app.exit(1)
+})
+
 ipcMain.handle('recording:autoload', async (): Promise<RecordingResult | null> => {
-  const dir = process.env['FINSCREEN_OPEN']
+  const dir = process.env['DEMODOG_BENCH'] ?? process.env['DEMODOG_OPEN']
   if (!dir) return null
   return loadTake(dir).catch((error) => {
     console.error('[autoload]', error)

@@ -1,10 +1,10 @@
 // MIT License - Copyright (c) fintonlabs.com
 //
-// finscreen-recorder — the native capture layer for FinScreen.
+// demodog-recorder — the native capture layer for DemoDog.
 //
-//   finscreen-recorder list
-//   finscreen-recorder permissions [--request]
-//   finscreen-recorder record --out <dir> [--display <id> | --window <id>]
+//   demodog-recorder list
+//   demodog-recorder permissions [--request]
+//   demodog-recorder record --out <dir> [--display <id> | --window <id>]
 //                             [--fps 60] [--cursor 0] [--audio 1] [--keys 0]
 //                             [--max-width 3840]
 //
@@ -102,7 +102,7 @@ default:
     emit([
         "event": "help",
         "commands": ["list", "permissions", "record"],
-        "usage": "finscreen-recorder record --out <dir> [--display <id>|--window <id>] [--fps 60] [--cursor 0] [--audio 1] [--keys 0]",
+        "usage": "demodog-recorder record --out <dir> [--display <id>|--window <id>] [--fps 60] [--cursor 0] [--audio 1] [--keys 0]",
     ])
     exit(command == "help" ? 0 : 1)
 }

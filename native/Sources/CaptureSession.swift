@@ -44,7 +44,7 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
     private var finishing = false
     private var meta: [String: Any] = [:]
 
-    private let writeQueue = DispatchQueue(label: "finscreen.writer")
+    private let writeQueue = DispatchQueue(label: "demodog.writer")
 
     init(options: Options) {
         self.options = options

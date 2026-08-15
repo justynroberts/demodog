@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-FinScreen is a macOS screen recorder in the Screen Studio mould: it records the
+DemoDog is a macOS screen recorder in the Screen Studio mould: it records the
 screen, then *reconstructs* the presentation afterwards — automatic zoom that
 follows what you did, a smoothed cursor drawn from scratch, and a camera
 picture-in-picture.
@@ -36,14 +36,14 @@ npm run verify       # numerical check of the zoom/cursor engines against it
 
 ### Testing without a webcam or a real recording
 
-`npm run fixture` writes a synthetic take to `~/Movies/FinScreen/fixture`: a
+`npm run fixture` writes a synthetic take to `~/Movies/DemoDog/fixture`: a
 video with numbered targets at *known* coordinates, an event stream that visits
 and clicks each one, and a stand-in camera track.
 
 ```bash
 npm run fixture
 npm run verify                                   # asserts the engine framed each target
-FINSCREEN_OPEN=~/Movies/FinScreen/fixture npm run dev   # boots straight into the editor
+DEMODOG_OPEN=~/Movies/DemoDog/fixture npm run dev   # boots straight into the editor
 ```
 
 `npm run verify` is the fastest way to know whether an engine change broke
@@ -57,7 +57,7 @@ the pointer still lands on its click targets. Screenshots can only show that
 Three processes, and the boundaries matter:
 
 ```
-Swift helper (bin/finscreen-recorder)   ← all ScreenCaptureKit + global input
+Swift helper (bin/demodog-recorder)   ← all ScreenCaptureKit + global input
         │ JSON lines on stdout, "stop" on stdin
 Electron main (src/main)                ← process lifecycle, IPC, file I/O
         │ contextBridge (src/preload)
@@ -125,11 +125,11 @@ implemented as a source-rect crop in `drawImage`, not a canvas transform.
 ## Things that will bite you
 
 **Stray helper processes wedge ScreenCaptureKit.** One stranded
-`finscreen-recorder` keeps its capture connection open, and every later
+`demodog-recorder` keeps its capture connection open, and every later
 `SCStream` then dies instantly with `failedApplicationConnectionInterrupted`
 (-3805) — which looks like a broken app but is a zombie. `reapStrayHelpers()`
 clears them at startup and quit, and the one-shot commands carry watchdogs.
-If capture starts failing during development, check `pgrep -f finscreen-recorder`
+If capture starts failing during development, check `pgrep -f demodog-recorder`
 first.
 
 **Concurrent ScreenCaptureKit queries interfere.** Two helpers asking for
@@ -150,21 +150,38 @@ process, so its own pid is not the one that matters — Electron passes
 the source video once per output frame, which forces the decoder back to a
 keyframe every time.
 
-A sequential WebCodecs decode path already exists in `frameSource.ts` and is
-wired up behind `SEQUENTIAL_DECODE` in `export.ts`, currently `false`. It is not
-the default because it has **not been confirmed to produce a correct file end to
-end** — only the seeking path has. Two real bugs were already found and fixed in
-it, and both are the kind worth knowing about:
+A sequential WebCodecs decode path exists in `frameSource.ts` behind
+`SEQUENTIAL_DECODE` in `export.ts`, currently `false`. **It does not work yet.**
+Three bugs in it have been found and fixed, and the remaining one is not solved:
 
-- `setExtractionOptions` must be called *after* `onReady` and *before* `flush()`,
-  and the file must be created with `keepMdatData`. Otherwise mp4box parses
-  happily and hands back zero samples.
-- `VideoFrame.duration` is frequently null, so a frame's coverage has to be
-  derived from the *next* frame's timestamp. Relying on the duration made the
+- *Fixed:* `setExtractionOptions` must be called *after* `onReady` and *before*
+  `flush()`, and the file must be created with `keepMdatData`. Otherwise mp4box
+  parses happily and hands back zero samples.
+- *Fixed:* `VideoFrame.duration` is frequently null, so a frame's coverage has to
+  be derived from the *next* frame's timestamp. Relying on the duration made the
   exporter grind through every sample in the file to produce frame 1.
+- *Fixed:* the first sample's PTS is not zero (`cts0=512` at timescale 15360 on
+  the fixture, i.e. 33ms). `video.currentTime` is normalised against the track
+  start but raw decoder timestamps are not, so the decode path needs the base
+  subtracted or it sits a frame off.
+- **Open:** the decoder emits exactly *one* frame and then stalls, whatever the
+  in-flight window is (tried 16 and 96 chunks, frame queues of 12 and 48). The
+  config reports supported, `is_sync` is true on the first sample, the avcC
+  description is 48 bytes, and no decoder error fires. Next things to try:
+  compare the description bytes against a known-good avcC, feed chunks with no
+  backpressure cap at all to see whether output resumes, and test against an
+  MP4 written by our own recorder rather than by ffmpeg.
 
-To finish it: flip the flag, export the fixture, and diff exported frames against
-the preview at the known target times before making it the default.
+Use `DEMODOG_BENCH` for this — it exports headlessly, without stealing focus:
+
+```bash
+DEMODOG_BENCH=~/Movies/DemoDog/fixture \
+DEMODOG_BENCH_OUT=/tmp/bench.mp4 \
+DEMODOG_BENCH_SECONDS=2 npx electron .
+```
+
+Driving the real UI to time an export is unreliable — synthetic clicks and
+keystrokes land in whatever app happens to be frontmost.
 
 ## Style
 

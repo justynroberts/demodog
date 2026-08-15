@@ -4,7 +4,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$HERE")"
-OUT="$ROOT/bin/finscreen-recorder"
+OUT="$ROOT/bin/demodog-recorder"
 
 if ! command -v swiftc >/dev/null 2>&1; then
   echo "error: swiftc not found. Install Xcode command line tools: xcode-select --install" >&2

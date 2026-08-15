@@ -10,7 +10,14 @@ import { formatTime } from '../ui/controls'
 import Timeline from './Timeline'
 import Inspector from './Inspector'
 
-export default function Editor({ recording }: { recording: Recording }): ReactNode {
+export default function Editor({
+  recording,
+  bench = null
+}: {
+  recording: Recording
+  /** Headless benchmark: export straight to this path, then quit. */
+  bench?: { out: string; seconds: number } | null
+}): ReactNode {
   const [project, setProject] = useState<Project>(() => defaultProject(recording.source))
   const [segments, setSegments] = useState<ZoomSegment[]>([])
   const [time, setTime] = useState(0)
@@ -28,6 +35,7 @@ export default function Editor({ recording }: { recording: Recording }): ReactNo
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const timeRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
+  const lastBenchLog = useRef(0)
 
   const composition = useMemo(
     () => new Composition(recording, { ...project, segments }),
@@ -185,11 +193,26 @@ export default function Editor({ recording }: { recording: Recording }): ReactNo
         end: trim.end,
         quality: 'high',
         signal: controller.signal,
-        onProgress: (fraction, stage) => setExporting({ fraction, stage })
+        onProgress: (fraction, stage) => {
+          setExporting({ fraction, stage })
+          // A headless run has no UI, so the rate has to reach the log.
+          if (bench && stage.startsWith('Encoding frame')) {
+            const now = performance.now()
+            if (now - lastBenchLog.current > 5000) {
+              lastBenchLog.current = now
+              console.log(`[bench] ${stage} (${(fraction * 100).toFixed(1)}%)`)
+            }
+          }
+        }
       })
 
+      if (bench) {
+        await api.benchFinish(bench.out, result.buffer)
+        return
+      }
+
       const path = await api.saveDialog({
-        defaultPath: `finscreen-${Date.now()}.mp4`,
+        defaultPath: `demodog-${Date.now()}.mp4`,
         filters: [{ name: 'MP4 video', extensions: ['mp4'] }]
       })
       if (path) {
@@ -197,6 +220,10 @@ export default function Editor({ recording }: { recording: Recording }): ReactNo
         await api.reveal(path)
       }
     } catch (error) {
+      if (bench) {
+        await api.benchFail(error instanceof Error ? error.message : String(error))
+        return
+      }
       if (!controller.signal.aborted) {
         console.error(error)
         window.alert(`Export failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -208,6 +235,14 @@ export default function Editor({ recording }: { recording: Recording }): ReactNo
   }
 
   exportRef.current = runExport
+
+  // Headless benchmark: start as soon as the media is ready.
+  useEffect(() => {
+    if (!bench) return
+    if (bench.seconds > 0) setTrim({ start: 0, end: Math.min(bench.seconds, recording.duration) })
+    const id = setTimeout(() => void exportRef.current(), 1800)
+    return () => clearTimeout(id)
+  }, [bench, recording.duration])
 
   // ---- render ------------------------------------------------------------
 
