@@ -1168,48 +1168,100 @@ dialog.info a {
 }
 
 /* --------------------------------------------------------------------------
-   Countdown overlay (its own transparent, click-through window)
+   Countdown overlay — its own transparent, click-through, full-display window
    -------------------------------------------------------------------------- */
 
 .cd-root {
   height: 100%;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  pointer-events: none;
-}
-
-.cd-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 46px 62px;
-  background: var(--surface);
-  border: 4px solid var(--line);
-  box-shadow: 10px 10px 0 var(--line);
-  animation: snap-in 0.28s var(--snap) both;
+  justify-content: center;
+  gap: 3vh;
+  pointer-events: none;
+
+  /* The scrim is the point: it dims the actual screen rather than floating a
+     dialog above it. Darker at the edges keeps the centre readable. */
+  background:
+    radial-gradient(circle at 50% 45%, rgba(8, 8, 10, 0.36) 0%, rgba(8, 8, 10, 0.66) 72%);
+  animation: cd-fade 0.35s ease both;
+}
+
+@keyframes cd-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.cd-stage {
+  position: relative;
+  width: 26vh;
+  height: 26vh;
+  display: grid;
+  place-items: center;
+}
+
+.cd-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.cd-ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 3;
+}
+
+.cd-ring-sweep {
+  fill: none;
+  stroke: var(--lime);
+  stroke-width: 3;
+  stroke-linecap: round;
+  /* 2πr for r=46. Re-keyed each second, so this sweeps once per tick. */
+  stroke-dasharray: 289;
+  animation: cd-sweep 1s linear both;
+}
+
+@keyframes cd-sweep {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 289;
+  }
 }
 
 .cd-number {
-  font-size: 148px;
-  line-height: 0.9;
+  font-family: var(--font-display);
+  font-size: 15vh;
+  line-height: 1;
   font-weight: 800;
   font-variation-settings: 'wdth' 78;
   letter-spacing: -0.05em;
-  color: var(--text);
-  /* Re-keyed each tick, so this replays as a stamp on every number. */
-  animation: cd-stamp 0.42s var(--snap) both;
+  color: #f7f7f2;
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.55);
+  animation: cd-stamp 0.44s var(--snap) both;
+}
+
+.cd-number.go {
+  font-size: 9vh;
+  color: var(--lime);
 }
 
 @keyframes cd-stamp {
   0% {
     opacity: 0;
-    transform: scale(1.6);
+    transform: scale(1.55);
   }
   60% {
     opacity: 1;
-    transform: scale(0.94);
+    transform: scale(0.95);
   }
   100% {
     opacity: 1;
@@ -1219,10 +1271,10 @@ dialog.info a {
 
 .cd-label {
   font-family: var(--font-mono);
-  font-size: 13px;
-  letter-spacing: 0.22em;
+  font-size: 1.7vh;
+  letter-spacing: 0.34em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 /* Live preview inside a source card. */
