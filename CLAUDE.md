@@ -32,6 +32,7 @@ npm run dist         # packaged .dmg via electron-builder
 
 npm run fixture      # regenerate the synthetic test take (needs ffmpeg)
 npm run verify       # numerical check of the zoom/cursor engines against it
+npm run zoom-report -- <take dir>   # what the auto-zoom does to real material
 ```
 
 ### Testing without a webcam or a real recording
@@ -102,7 +103,7 @@ counters, no accumulated state. The preview and the exporter call the same
 method, which is the only reason the exported file matches what you previewed.
 Anything that makes rendering stateful will silently desynchronise them.
 
-Two non-obvious pieces of the design, both learned by getting them wrong:
+Four non-obvious pieces of the design, all learned by getting them wrong:
 
 - **Overlapping zoom segments are trimmed, never merged.** Averaging two anchors
   half a screen apart yields a wide shot centred on nothing, and because each
@@ -117,13 +118,14 @@ Two non-obvious pieces of the design, both learned by getting them wrong:
   actually is; holding the zoom and panning reads as deliberate. `bridgeGap`
   is the main control over how busy a result feels.
 
-Tune with real material, not by feel: `npm run zoom-report -- <take dir>`
-reports segment count, how often the camera returns to 1x, and the fraction of
-the take spent zoomed.
 - **The cursor filter runs in both directions.** A causal filter always lags, and
   a pointer that trails behind its own clicks looks broken. The reverse pass
   cancels the phase shift exactly — only possible because this is
   post-processing.
+
+Tune with real material, not by feel: `npm run zoom-report -- <take dir>`
+reports segment count, how often the camera returns to 1x, and the fraction of
+the take spent zoomed.
 
 ### Coordinate spaces
 
