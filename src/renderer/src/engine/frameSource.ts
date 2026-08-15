@@ -287,7 +287,18 @@ function codecDescription(file: ISOFile, trackId: number): Uint8Array | undefine
 class SeekingFrameSource implements FrameSource {
   readonly kind = 'seek' as const
 
-  private constructor(private video: HTMLVideoElement) {}
+  private constructor(
+    private video: HTMLVideoElement,
+    /**
+     * Requests closer together than this reuse the frame already decoded.
+     *
+     * A 30fps camera against a 60fps output is asked for a new time every
+     * output frame, but half of those land inside the same source frame — and
+     * each needless seek costs a full decode. Measured at ~23% of export time
+     * before this.
+     */
+    private frameTolerance = 0
+  ) {}
 
   get width(): number {
     return this.video.videoWidth
@@ -297,34 +308,52 @@ class SeekingFrameSource implements FrameSource {
     return this.video.videoHeight
   }
 
-  static create(url: string): Promise<SeekingFrameSource> {
+  static create(url: string, frameTolerance = 0): Promise<SeekingFrameSource> {
     return new Promise((resolve, reject) => {
       const video = document.createElement('video')
       video.src = url
       video.muted = true
       video.preload = 'auto'
-      video.onloadedmetadata = () => resolve(new SeekingFrameSource(video))
+      video.onloadedmetadata = () => resolve(new SeekingFrameSource(video, frameTolerance))
       video.onerror = () => reject(new Error(`could not load ${url}`))
     })
   }
 
   async frameAt(t: number): Promise<CanvasImageSource | null> {
     const video = this.video
-    if (!Number.isFinite(video.duration)) return null
-    if (t >= video.duration) return video.readyState >= 2 ? video : null
+    if (t < 0) return null
 
-    const target = Math.max(0, Math.min(t, video.duration - 1e-3))
-    if (Math.abs(video.currentTime - target) < 1e-4 && video.readyState >= 2) return video
+    // A WebM written by MediaRecorder is a *streaming* file: it carries no
+    // duration in its header, so `video.duration` is Infinity or NaN. Treating
+    // that as "no video" silently dropped the camera from every export, so an
+    // unknown duration simply means "unbounded" here.
+    const duration = video.duration
+    const bounded = Number.isFinite(duration) && duration > 0
+    if (bounded && t >= duration) return video.readyState >= 2 ? video : null
+
+    const target = bounded ? Math.min(t, duration - 1e-3) : t
+    // `currentTime` after a seek is the *actual* decoded frame's time, so this
+    // compares against real frame boundaries rather than requested ones.
+    const near = Math.max(1e-4, this.frameTolerance)
+    if (Math.abs(video.currentTime - target) < near && video.readyState >= 2) return video
 
     await new Promise<void>((resolve) => {
+      let settled = false
       const done = (): void => {
+        if (settled) return
+        settled = true
+        clearTimeout(guard)
         video.removeEventListener('seeked', done)
         resolve()
       }
+      // Seeking past the end of an unbounded file may never fire 'seeked';
+      // an export must not hang waiting for it.
+      const guard = setTimeout(done, 2000)
       video.addEventListener('seeked', done)
       video.currentTime = target
     })
-    return video
+
+    return video.readyState >= 2 ? video : null
   }
 
   close(): void {
@@ -342,7 +371,8 @@ class SeekingFrameSource implements FrameSource {
  */
 export async function openFrameSource(
   url: string,
-  prefer: 'decode' | 'seek' = 'decode'
+  prefer: 'decode' | 'seek' = 'decode',
+  frameTolerance = 0
 ): Promise<FrameSource> {
   if (prefer === 'decode' && typeof VideoDecoder !== 'undefined') {
     try {
@@ -351,5 +381,5 @@ export async function openFrameSource(
       console.warn('[export] sequential decode unavailable, seeking instead:', error)
     }
   }
-  return SeekingFrameSource.create(url)
+  return SeekingFrameSource.create(url, frameTolerance)
 }

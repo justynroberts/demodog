@@ -79,7 +79,7 @@ export default function Editor({
       const camera = cameraRef.current
       if (camera) {
         const ct = clamped - recording.cameraOffset - cameraSync
-        if (ct >= 0 && ct <= camera.duration) camera.currentTime = ct
+        if (ct >= 0) camera.currentTime = ct
       }
     },
     [recording, cameraSync]
@@ -98,7 +98,7 @@ export default function Editor({
       const camera = cameraRef.current
       if (camera) {
         const ct = timeRef.current - recording.cameraOffset - cameraSync
-        if (ct >= 0 && ct <= camera.duration) {
+        if (ct >= 0) {
           camera.currentTime = ct
           void camera.play()
         }
@@ -136,7 +136,7 @@ export default function Editor({
         const camera = cameraRef.current
         if (camera && !camera.paused) {
           const want = screen.currentTime - recording.cameraOffset - cameraSync
-          if (want >= 0 && want < camera.duration && Math.abs(camera.currentTime - want) > 0.12) {
+          if (want >= 0 && Math.abs(camera.currentTime - want) > 0.12) {
             camera.currentTime = want
           }
         }

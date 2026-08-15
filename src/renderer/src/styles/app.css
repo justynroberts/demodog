@@ -1233,3 +1233,19 @@ dialog.info a {
   display: block;
   animation: snap-in 0.3s var(--snap) both;
 }
+
+/* Text entry, squared off like the rest of the controls. */
+.text-input {
+  width: 100%;
+  padding: 8px 10px;
+  margin: 10px 0;
+  background: var(--surface-2);
+  border: var(--border);
+  border-radius: 0;
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+.text-input::placeholder {
+  color: var(--muted);
+}

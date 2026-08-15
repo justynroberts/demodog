@@ -57,8 +57,10 @@ export async function exportMP4(options: ExportOptions): Promise<ExportResult> {
   // export notes in CLAUDE.md. The camera is WebM, which the MP4 demuxer cannot
   // read at all.
   const screen = await openFrameSource(options.screenURL, SEQUENTIAL_DECODE ? 'decode' : 'seek')
+  // Cameras record at 30fps or below, so anything within ~21ms is the same
+  // frame and does not need seeking for again.
   const camera = options.cameraURL
-    ? await openFrameSource(options.cameraURL, 'seek').catch(() => null)
+    ? await openFrameSource(options.cameraURL, 'seek', 1 / 48).catch(() => null)
     : null
 
   const canvas = new OffscreenCanvas(output.width, output.height)

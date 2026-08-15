@@ -97,19 +97,29 @@ function Profiles({
 }): ReactNode {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [selected, setSelected] = useState('')
+  const [name, setName] = useState('')
 
   useEffect(() => {
     void api.listProfiles().then(setProfiles)
   }, [])
 
+  const current = profiles.find((p) => p.id === selected) ?? null
+
+  /**
+   * Creates or updates a profile.
+   *
+   * The name comes from a real input rather than `window.prompt`, which Electron
+   * does not implement — it returns null without showing anything, so naming a
+   * profile silently did nothing.
+   */
   const save = async (): Promise<void> => {
-    const existing = profiles.find((p) => p.id === selected)
-    const name = window.prompt('Name this profile', existing?.name ?? 'My look')
-    if (!name) return
+    const trimmed = name.trim()
+    if (!trimmed) return
     const profile: Profile = {
-      id: existing && existing.name === name ? existing.id : `p-${Date.now()}`,
-      name,
-      isDefault: existing?.isDefault ?? false,
+      // Keeping the id when one is selected makes this a rename.
+      id: current?.id ?? `p-${Date.now()}`,
+      name: trimmed,
+      isDefault: current?.isDefault ?? false,
       settings: extractProfileSettings(project)
     }
     setProfiles(await api.saveProfile(profile))
@@ -119,22 +129,23 @@ function Profiles({
   const apply = (id: string): void => {
     setSelected(id)
     const profile = profiles.find((p) => p.id === id)
+    setName(profile?.name ?? '')
     if (profile) onApply(profile.settings as Partial<Project>)
   }
 
   const makeDefault = async (): Promise<void> => {
-    const profile = profiles.find((p) => p.id === selected)
-    if (!profile) return
-    setProfiles(await api.saveProfile({ ...profile, isDefault: true }))
+    if (!current) return
+    setProfiles(await api.saveProfile({ ...current, isDefault: !current.isDefault }))
   }
 
   const remove = async (): Promise<void> => {
-    if (!selected) return
-    setProfiles(await api.deleteProfile(selected))
+    if (!current) return
+    setProfiles(await api.deleteProfile(current.id))
     setSelected('')
+    setName('')
   }
 
-  const current = profiles.find((p) => p.id === selected)
+  const isRename = Boolean(current) && current!.name !== name.trim()
 
   return (
     <Group title="Profile">
@@ -143,32 +154,49 @@ function Profiles({
         {profiles.map((profile) => (
           <option key={profile.id} value={profile.id}>
             {profile.name}
-            {profile.isDefault ? ' · default' : ''}
+            {profile.isDefault ? ' \u00b7 default' : ''}
           </option>
         ))}
       </select>
-      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+
+      <input
+        className="text-input"
+        placeholder="Profile name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void save()
+        }}
+      />
+
+      <div style={{ display: 'flex', gap: 8 }}>
         <button
           className="btn"
           style={{ flex: 1, justifyContent: 'center' }}
           onClick={() => void save()}
+          disabled={!name.trim()}
+          title={isRename ? 'Rename and update this profile' : 'Save these settings'}
         >
-          Save…
+          {current ? (isRename ? 'Rename' : 'Update') : 'Save'}
         </button>
         <button
           className="btn"
           onClick={() => void makeDefault()}
-          disabled={!current || current.isDefault}
-          title="Apply this profile to new recordings"
+          disabled={!current}
+          title="Use this profile for new recordings"
+          style={
+            current?.isDefault ? { background: 'var(--lime)', color: 'var(--lime-ink)' } : undefined
+          }
         >
-          ★
+          \u2605
         </button>
-        <button className="btn" onClick={() => void remove()} disabled={!selected} title="Delete">
-          ✕
+        <button className="btn" onClick={() => void remove()} disabled={!current} title="Delete">
+          \u2715
         </button>
       </div>
+
       <p style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.5, margin: '10px 0 0' }}>
-        Saves background, frame, zoom, cursor, camera and output settings. The default profile is
+        Saves background, frame, zoom, cursor, camera and output settings. The starred profile is
         applied to every new recording.
       </p>
     </Group>
