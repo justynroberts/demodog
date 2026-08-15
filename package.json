@@ -1,0 +1,61 @@
+{
+  "name": "finscreen",
+  "version": "0.1.0",
+  "description": "Screen recorder with automatic zoom, smoothed cursor and camera picture-in-picture",
+  "author": "Justyn Roberts",
+  "license": "MIT",
+  "private": true,
+  "main": "./out/main/index.js",
+  "scripts": {
+    "native": "./native/build.sh",
+    "postinstall": "./native/build.sh",
+    "dev": "npm run native && electron-vite dev",
+    "build": "npm run native && electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
+    "fixture": "node scripts/make-fixture.mjs",
+    "verify": "mkdir -p node_modules/.cache && esbuild scripts/verify-engine.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/verify.mjs --log-level=warning && node node_modules/.cache/verify.mjs",
+    "dist": "npm run build && electron-builder --mac"
+  },
+  "dependencies": {
+    "mp4-muxer": "^5.2.2",
+    "mp4box": "^2.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-vite": "^2.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11"
+  },
+  "build": {
+    "appId": "com.fintonlabs.finscreen",
+    "productName": "FinScreen",
+    "files": [
+      "out/**/*",
+      "resources/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/finscreen-recorder",
+        "to": "bin/finscreen-recorder"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "target": [
+        "dmg"
+      ],
+      "extendInfo": {
+        "NSCameraUsageDescription": "FinScreen records your camera for picture-in-picture overlays.",
+        "NSMicrophoneUsageDescription": "FinScreen records your microphone narration.",
+        "NSScreenCaptureUsageDescription": "FinScreen records your screen."
+      }
+    }
+  }
+}

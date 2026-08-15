@@ -1,0 +1,177 @@
+// MIT License - Copyright (c) fintonlabs.com
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { api } from '../api'
+
+export function Slider({
+  label,
+  value,
+  min,
+  max,
+  step = 0.01,
+  format,
+  onChange
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step?: number
+  format?: (v: number) => string
+  onChange: (v: number) => void
+}): ReactNode {
+  return (
+    <div className="slider-row">
+      <div className="slider-head">
+        <span className="name">{label}</span>
+        <span className="value">{format ? format(value) : value.toFixed(2)}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+      />
+    </div>
+  )
+}
+
+export function Toggle({
+  label,
+  checked,
+  onChange
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}): ReactNode {
+  return (
+    <label className="row" style={{ cursor: 'pointer' }}>
+      <span className="name">{label}</span>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    </label>
+  )
+}
+
+export function Segmented<T extends string>({
+  options,
+  value,
+  onChange
+}: {
+  options: { value: T; label: string }[]
+  value: T
+  onChange: (v: T) => void
+}): ReactNode {
+  return (
+    <div className="seg">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export function Group({ title, children }: { title: string; children: ReactNode }): ReactNode {
+  return (
+    <div className="insp-group">
+      <span className="label">{title}</span>
+      {children}
+    </div>
+  )
+}
+
+/** Light / dark / system, persisted, applied to <html data-theme>. */
+export function ThemeToggle(): ReactNode {
+  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() => {
+    const stored = localStorage.getItem('finscreen-theme')
+    return stored === 'light' || stored === 'dark' ? stored : 'system'
+  })
+
+  useEffect(() => {
+    if (theme === 'system') {
+      document.documentElement.removeAttribute('data-theme')
+      localStorage.removeItem('finscreen-theme')
+    } else {
+      document.documentElement.setAttribute('data-theme', theme)
+      localStorage.setItem('finscreen-theme', theme)
+    }
+  }, [theme])
+
+  const next = (): void =>
+    setTheme(theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system')
+
+  const glyph = theme === 'light' ? '☀' : theme === 'dark' ? '☾' : '◐'
+
+  return (
+    <button
+      className="btn icon"
+      onClick={next}
+      aria-label={`Theme: ${theme}. Click to change.`}
+      title={`Theme: ${theme}`}
+    >
+      <span style={{ fontSize: 15, lineHeight: 1 }}>{glyph}</span>
+    </button>
+  )
+}
+
+/** The house-style credit affordance; present on every screen. */
+export function InfoButton(): ReactNode {
+  const ref = useRef<HTMLDialogElement>(null)
+
+  return (
+    <>
+      <button
+        className="info-btn"
+        aria-label="About this app"
+        onClick={() => ref.current?.showModal()}
+      >
+        i
+      </button>
+      <dialog
+        className="info"
+        ref={ref}
+        onClick={(e) => {
+          if (e.target === ref.current) ref.current?.close()
+        }}
+      >
+        <div className="body">
+          <h2>FinScreen</h2>
+          <p>
+            Screen recording with automatic zoom, a reconstructed cursor and camera
+            picture-in-picture. Version 0.1.0.
+          </p>
+          <p>
+            <a
+              href="https://fintonlabs.com"
+              target="_blank"
+              rel="noopener"
+              onClick={(e) => {
+                e.preventDefault()
+                api.openExternal('https://fintonlabs.com')
+              }}
+            >
+              Made by FintonLabs
+            </a>
+          </p>
+          <button className="btn" onClick={() => ref.current?.close()}>
+            Close
+          </button>
+        </div>
+      </dialog>
+    </>
+  )
+}
+
+export function formatTime(seconds: number): string {
+  const s = Math.max(0, seconds)
+  const m = Math.floor(s / 60)
+  const rest = s - m * 60
+  return `${String(m).padStart(2, '0')}:${rest.toFixed(2).padStart(5, '0')}`
+}

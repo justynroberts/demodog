@@ -1,0 +1,12 @@
+node_modules/
+out/
+dist/
+release/
+
+# Compiled Swift helper — rebuilt by `npm run native` / postinstall
+bin/finscreen-recorder
+*.dSYM/
+
+.DS_Store
+*.log
+.vite/

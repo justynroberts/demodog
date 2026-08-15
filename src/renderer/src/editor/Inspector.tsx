@@ -1,0 +1,638 @@
+// MIT License - Copyright (c) fintonlabs.com
+import { useState, type ReactNode } from 'react'
+import { BACKGROUND_PRESETS, OUTPUT_PRESETS } from '../engine/defaults'
+import { Group, Segmented, Slider, Toggle } from '../ui/controls'
+import type { Project, Recording, ZoomSegment } from '../engine/types'
+
+interface Props {
+  project: Project
+  onChange: (project: Project) => void
+  segments: ZoomSegment[]
+  onSegmentsChange: (segments: ZoomSegment[]) => void
+  selected: string | null
+  onSelect: (id: string | null) => void
+  recording: Recording
+  cameraSync: number
+  onCameraSync: (v: number) => void
+}
+
+type Tab = 'style' | 'zoom' | 'cursor' | 'camera'
+
+export default function Inspector(props: Props): ReactNode {
+  const { project, onChange } = props
+  const [tab, setTab] = useState<Tab>('style')
+
+  // Shallow-merge helpers keep the call sites readable while preserving the
+  // immutable update React needs to see.
+  const set = <K extends keyof Project>(key: K, value: Project[K]): void =>
+    onChange({ ...project, [key]: value })
+
+  const patch = <K extends keyof Project>(key: K, value: Partial<Project[K]>): void =>
+    onChange({ ...project, [key]: { ...(project[key] as object), ...value } as Project[K] })
+
+  return (
+    <aside className="inspector">
+      <div className="insp-tabs" role="tablist">
+        {(['style', 'zoom', 'cursor', 'camera'] as Tab[]).map((id) => (
+          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
+            {id}
+          </button>
+        ))}
+      </div>
+
+      <div className="insp-body">
+        {tab === 'style' && <StyleTab project={project} set={set} patch={patch} />}
+        {tab === 'zoom' && <ZoomTab {...props} patch={patch} />}
+        {tab === 'cursor' && <CursorTab project={project} patch={patch} />}
+        {tab === 'camera' && <CameraTab {...props} patch={patch} />}
+      </div>
+    </aside>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+type Setter = <K extends keyof Project>(key: K, value: Project[K]) => void
+type Patcher = <K extends keyof Project>(key: K, value: Partial<Project[K]>) => void
+
+function StyleTab({
+  project,
+  set,
+  patch
+}: {
+  project: Project
+  set: Setter
+  patch: Patcher
+}): ReactNode {
+  const { frame, background, output } = project
+
+  return (
+    <>
+      <Group title="Background">
+        <div className="swatches">
+          {BACKGROUND_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              className="swatch"
+              title={preset.name}
+              aria-pressed={JSON.stringify(background) === JSON.stringify(preset.background)}
+              style={{ background: swatchCSS(preset.background.colors, preset.background.angle) }}
+              onClick={() => set('background', { ...preset.background })}
+            />
+          ))}
+        </div>
+        <div style={{ height: 12 }} />
+        <Slider
+          label="Grain"
+          value={background.grain}
+          min={0}
+          max={1}
+          onChange={(v) => patch('background', { grain: v })}
+          format={(v) => `${Math.round(v * 100)}%`}
+        />
+      </Group>
+
+      <Group title="Frame">
+        <Slider
+          label="Padding"
+          value={frame.padding}
+          min={0}
+          max={0.24}
+          onChange={(v) => patch('frame', { padding: v })}
+          format={(v) => `${Math.round(v * 100)}%`}
+        />
+        <Slider
+          label="Corner radius"
+          value={frame.radius}
+          min={0}
+          max={64}
+          step={1}
+          onChange={(v) => patch('frame', { radius: v })}
+          format={(v) => `${v}px`}
+        />
+        <Slider
+          label="Shadow"
+          value={frame.shadow.opacity}
+          min={0}
+          max={0.9}
+          onChange={(v) => patch('frame', { shadow: { ...frame.shadow, opacity: v } })}
+          format={(v) => `${Math.round(v * 100)}%`}
+        />
+        <Slider
+          label="Shadow size"
+          value={frame.shadow.blur}
+          min={0}
+          max={200}
+          step={2}
+          onChange={(v) => patch('frame', { shadow: { ...frame.shadow, blur: v } })}
+          format={(v) => `${v}px`}
+        />
+        <Slider
+          label="Rotation"
+          value={frame.rotate}
+          min={-6}
+          max={6}
+          step={0.1}
+          onChange={(v) => patch('frame', { rotate: v })}
+          format={(v) => `${v.toFixed(1)}°`}
+        />
+        <div style={{ marginTop: 10 }}>
+          <span className="label">Fit</span>
+          <Segmented
+            value={frame.fitMode}
+            options={[
+              { value: 'contain', label: 'Contain' },
+              { value: 'cover', label: 'Crop' }
+            ]}
+            onChange={(v) => patch('frame', { fitMode: v })}
+          />
+        </div>
+      </Group>
+
+      <Group title="Output">
+        <select
+          value={`${output.width}x${output.height}`}
+          onChange={(e) => {
+            const preset = OUTPUT_PRESETS.find((p) => `${p.width}x${p.height}` === e.target.value)
+            if (preset) patch('output', { width: preset.width, height: preset.height })
+          }}
+        >
+          {OUTPUT_PRESETS.map((preset) => (
+            <option key={preset.id} value={`${preset.width}x${preset.height}`}>
+              {preset.name}
+            </option>
+          ))}
+          <option value={`${output.width}x${output.height}`}>
+            Current · {output.width}×{output.height}
+          </option>
+        </select>
+        <div style={{ height: 12 }} />
+        <span className="label">Frame rate</span>
+        <Segmented
+          value={String(output.fps)}
+          options={[
+            { value: '30', label: '30' },
+            { value: '60', label: '60' }
+          ]}
+          onChange={(v) => patch('output', { fps: Number(v) })}
+        />
+      </Group>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+function ZoomTab({
+  project,
+  patch,
+  segments,
+  onSegmentsChange,
+  selected,
+  onSelect
+}: Props & { patch: Patcher }): ReactNode {
+  const { zoom } = project
+  const active = segments.find((s) => s.id === selected) ?? null
+
+  const updateSelected = (changes: Partial<ZoomSegment>): void => {
+    if (!active) return
+    onSegmentsChange(
+      segments.map((s) => (s.id === active.id ? { ...s, ...changes, auto: false } : s))
+    )
+  }
+
+  return (
+    <>
+      <Group title="Automatic zoom">
+        <Toggle
+          label="Enabled"
+          checked={zoom.enabled}
+          onChange={(v) => patch('zoom', { enabled: v })}
+        />
+        <div style={{ height: 8 }} />
+        <Slider
+          label="Maximum zoom"
+          value={zoom.maxScale}
+          min={1.2}
+          max={4}
+          step={0.05}
+          onChange={(v) => patch('zoom', { maxScale: v })}
+          format={(v) => `${v.toFixed(2)}×`}
+        />
+        <Slider
+          label="Lead in"
+          value={zoom.lead}
+          min={0}
+          max={1.5}
+          onChange={(v) => patch('zoom', { lead: v })}
+          format={(v) => `${v.toFixed(2)}s`}
+        />
+        <Slider
+          label="Hold after"
+          value={zoom.hold}
+          min={0.3}
+          max={4}
+          onChange={(v) => patch('zoom', { hold: v })}
+          format={(v) => `${v.toFixed(2)}s`}
+        />
+        <Slider
+          label="Merge gap"
+          value={zoom.mergeGap}
+          min={0.2}
+          max={4}
+          onChange={(v) => patch('zoom', { mergeGap: v })}
+          format={(v) => `${v.toFixed(2)}s`}
+        />
+        <Slider
+          label="Ease in"
+          value={zoom.easeIn}
+          min={0.1}
+          max={2}
+          onChange={(v) => patch('zoom', { easeIn: v })}
+          format={(v) => `${v.toFixed(2)}s`}
+        />
+        <Slider
+          label="Ease out"
+          value={zoom.easeOut}
+          min={0.1}
+          max={2}
+          onChange={(v) => patch('zoom', { easeOut: v })}
+          format={(v) => `${v.toFixed(2)}s`}
+        />
+        <Slider
+          label="Follow cursor"
+          value={zoom.follow}
+          min={0}
+          max={1}
+          onChange={(v) => patch('zoom', { follow: v })}
+          format={(v) => `${Math.round(v * 100)}%`}
+        />
+        <Slider
+          label="Camera smoothing"
+          value={zoom.smoothing}
+          min={0}
+          max={0.6}
+          onChange={(v) => patch('zoom', { smoothing: v })}
+          format={(v) => `${Math.round(v * 1000)}ms`}
+        />
+      </Group>
+
+      <Group title="Triggers">
+        {(
+          [
+            ['clicks', 'Clicks'],
+            ['scrolls', 'Scrolling'],
+            ['appSwitches', 'App switches'],
+            ['dwell', 'Pointer arrives'],
+            ['keys', 'Shortcuts']
+          ] as const
+        ).map(([key, label]) => (
+          <Toggle
+            key={key}
+            label={label}
+            checked={zoom.triggers[key]}
+            onChange={(v) => patch('zoom', { triggers: { ...zoom.triggers, [key]: v } })}
+          />
+        ))}
+      </Group>
+
+      <Group title={active ? 'Selected zoom' : 'No zoom selected'}>
+        {active ? (
+          <>
+            <Slider
+              label="Zoom level"
+              value={active.scale}
+              min={1}
+              max={5}
+              step={0.05}
+              onChange={(v) => updateSelected({ scale: v })}
+              format={(v) => `${v.toFixed(2)}×`}
+            />
+            <Slider
+              label="Ease in"
+              value={active.easeIn}
+              min={0.05}
+              max={2}
+              onChange={(v) => updateSelected({ easeIn: v })}
+              format={(v) => `${v.toFixed(2)}s`}
+            />
+            <Slider
+              label="Ease out"
+              value={active.easeOut}
+              min={0.05}
+              max={2}
+              onChange={(v) => updateSelected({ easeOut: v })}
+              format={(v) => `${v.toFixed(2)}s`}
+            />
+            <Slider
+              label="Follow cursor"
+              value={active.follow}
+              min={0}
+              max={1}
+              onChange={(v) => updateSelected({ follow: v })}
+              format={(v) => `${Math.round(v * 100)}%`}
+            />
+            <button
+              className="btn"
+              style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}
+              onClick={() => {
+                onSegmentsChange(segments.filter((s) => s.id !== active.id))
+                onSelect(null)
+              }}
+            >
+              Delete zoom
+            </button>
+          </>
+        ) : (
+          <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
+            Click a block on the zoom track to adjust it, or double-click the empty track to add
+            one. Editing a generated zoom converts it to a manual one so it survives regeneration.
+          </p>
+        )}
+      </Group>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+function CursorTab({ project, patch }: { project: Project; patch: Patcher }): ReactNode {
+  const { cursor } = project
+
+  return (
+    <>
+      <Group title="Pointer">
+        <Toggle
+          label="Show cursor"
+          checked={cursor.visible}
+          onChange={(v) => patch('cursor', { visible: v })}
+        />
+        <div style={{ height: 8 }} />
+        <Slider
+          label="Size"
+          value={cursor.size}
+          min={0.4}
+          max={3}
+          onChange={(v) => patch('cursor', { size: v })}
+          format={(v) => `${v.toFixed(2)}×`}
+        />
+        <Slider
+          label="Smoothing"
+          value={cursor.smoothing}
+          min={0}
+          max={1}
+          onChange={(v) => patch('cursor', { smoothing: v })}
+          format={(v) => `${Math.round(v * 100)}%`}
+        />
+        <Toggle
+          label="Snap to clicks"
+          checked={cursor.clickAnchoring}
+          onChange={(v) => patch('cursor', { clickAnchoring: v })}
+        />
+        <Toggle
+          label="Return to start at end"
+          checked={cursor.returnToStart}
+          onChange={(v) => patch('cursor', { returnToStart: v })}
+        />
+        <div style={{ height: 8 }} />
+        <Slider
+          label="Hide when idle"
+          value={cursor.idleHide}
+          min={0}
+          max={10}
+          step={0.5}
+          onChange={(v) => patch('cursor', { idleHide: v })}
+          format={(v) => (v === 0 ? 'never' : `${v.toFixed(1)}s`)}
+        />
+      </Group>
+
+      <Group title="Clicks">
+        <Toggle
+          label="Click effect"
+          checked={cursor.clicks.enabled}
+          onChange={(v) => patch('cursor', { clicks: { ...cursor.clicks, enabled: v } })}
+        />
+        <Toggle
+          label="Press animation"
+          checked={cursor.clicks.press}
+          onChange={(v) => patch('cursor', { clicks: { ...cursor.clicks, press: v } })}
+        />
+        <div style={{ height: 8 }} />
+        <Slider
+          label="Ring size"
+          value={cursor.clicks.radius}
+          min={0.3}
+          max={3}
+          onChange={(v) => patch('cursor', { clicks: { ...cursor.clicks, radius: v } })}
+          format={(v) => `${v.toFixed(2)}×`}
+        />
+        <Slider
+          label="Ring duration"
+          value={cursor.clicks.duration}
+          min={0.15}
+          max={1.5}
+          onChange={(v) => patch('cursor', { clicks: { ...cursor.clicks, duration: v } })}
+          format={(v) => `${v.toFixed(2)}s`}
+        />
+      </Group>
+
+      <Group title="Spotlight">
+        <Toggle
+          label="Dim around pointer"
+          checked={cursor.spotlight.enabled}
+          onChange={(v) => patch('cursor', { spotlight: { ...cursor.spotlight, enabled: v } })}
+        />
+        {cursor.spotlight.enabled && (
+          <>
+            <div style={{ height: 8 }} />
+            <Slider
+              label="Radius"
+              value={cursor.spotlight.radius}
+              min={0.1}
+              max={0.7}
+              onChange={(v) => patch('cursor', { spotlight: { ...cursor.spotlight, radius: v } })}
+              format={(v) => `${Math.round(v * 100)}%`}
+            />
+            <Slider
+              label="Dimming"
+              value={cursor.spotlight.dim}
+              min={0.1}
+              max={0.9}
+              onChange={(v) => patch('cursor', { spotlight: { ...cursor.spotlight, dim: v } })}
+              format={(v) => `${Math.round(v * 100)}%`}
+            />
+          </>
+        )}
+      </Group>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+function CameraTab({
+  project,
+  patch,
+  recording,
+  cameraSync,
+  onCameraSync
+}: Props & { patch: Patcher }): ReactNode {
+  const { pip, keystrokes } = project
+  const hasCamera = Boolean(recording.cameraURL)
+
+  return (
+    <>
+      <Group title="Picture in picture">
+        {!hasCamera && (
+          <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, marginTop: 0 }}>
+            This take has no camera track. Pick a camera on the setup screen before recording.
+          </p>
+        )}
+        <Toggle
+          label="Show camera"
+          checked={pip.enabled}
+          onChange={(v) => patch('pip', { enabled: v })}
+        />
+        {pip.enabled && (
+          <>
+            <div style={{ height: 10 }} />
+            <span className="label">Shape</span>
+            <Segmented
+              value={pip.shape}
+              options={[
+                { value: 'circle', label: 'Circle' },
+                { value: 'rounded', label: 'Rounded' },
+                { value: 'square', label: 'Square' }
+              ]}
+              onChange={(v) => patch('pip', { shape: v })}
+            />
+            <div style={{ height: 12 }} />
+            <span className="label">Position</span>
+            <Segmented
+              value={pip.position}
+              options={[
+                { value: 'bottom-left', label: '◱' },
+                { value: 'bottom-right', label: '◲' },
+                { value: 'top-left', label: '◰' },
+                { value: 'top-right', label: '◳' }
+              ]}
+              onChange={(v) => patch('pip', { position: v })}
+            />
+            <div style={{ height: 12 }} />
+            <Slider
+              label="Size"
+              value={pip.size}
+              min={0.1}
+              max={0.55}
+              onChange={(v) => patch('pip', { size: v })}
+              format={(v) => `${Math.round(v * 100)}%`}
+            />
+            <Slider
+              label="Margin"
+              value={pip.margin}
+              min={0}
+              max={0.15}
+              onChange={(v) => patch('pip', { margin: v })}
+              format={(v) => `${Math.round(v * 100)}%`}
+            />
+            <Slider
+              label="Face zoom"
+              value={pip.zoom}
+              min={1}
+              max={2.5}
+              onChange={(v) => patch('pip', { zoom: v })}
+              format={(v) => `${v.toFixed(2)}×`}
+            />
+            <Slider
+              label="Frame X"
+              value={pip.offsetX}
+              min={-0.4}
+              max={0.4}
+              onChange={(v) => patch('pip', { offsetX: v })}
+              format={(v) => v.toFixed(2)}
+            />
+            <Slider
+              label="Frame Y"
+              value={pip.offsetY}
+              min={-0.4}
+              max={0.4}
+              onChange={(v) => patch('pip', { offsetY: v })}
+              format={(v) => v.toFixed(2)}
+            />
+            <Toggle
+              label="Mirror"
+              checked={pip.mirror}
+              onChange={(v) => patch('pip', { mirror: v })}
+            />
+            <Toggle
+              label="Move aside for pointer"
+              checked={pip.avoidCursor}
+              onChange={(v) => patch('pip', { avoidCursor: v })}
+            />
+            <div style={{ height: 10 }} />
+            <Slider
+              label="Sync offset"
+              value={cameraSync}
+              min={-2}
+              max={2}
+              step={0.01}
+              onChange={onCameraSync}
+              format={(v) => `${v > 0 ? '+' : ''}${v.toFixed(2)}s`}
+            />
+          </>
+        )}
+      </Group>
+
+      <Group title="Keyboard shortcuts">
+        <Toggle
+          label="Show shortcuts"
+          checked={keystrokes.enabled}
+          onChange={(v) => patch('keystrokes', { enabled: v })}
+        />
+        {recording.input.keys.length === 0 && (
+          <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 0 }}>
+            No shortcuts were captured in this take.
+          </p>
+        )}
+        {keystrokes.enabled && (
+          <>
+            <div style={{ height: 8 }} />
+            <span className="label">Position</span>
+            <Segmented
+              value={keystrokes.position}
+              options={[
+                { value: 'bottom', label: 'Bottom' },
+                { value: 'top', label: 'Top' }
+              ]}
+              onChange={(v) => patch('keystrokes', { position: v })}
+            />
+          </>
+        )}
+      </Group>
+
+      <Group title="Audio">
+        <Slider
+          label="System audio"
+          value={project.audio.systemGain}
+          min={0}
+          max={2}
+          onChange={(v) => patch('audio', { systemGain: v })}
+          format={(v) => `${Math.round(v * 100)}%`}
+        />
+        <Slider
+          label="Microphone"
+          value={project.audio.micGain}
+          min={0}
+          max={2}
+          onChange={(v) => patch('audio', { micGain: v })}
+          format={(v) => `${Math.round(v * 100)}%`}
+        />
+      </Group>
+    </>
+  )
+}
+
+function swatchCSS(colors: string[], angle: number): string {
+  if (colors.length === 1) return colors[0]
+  return `linear-gradient(${angle + 90}deg, ${colors.join(', ')})`
+}

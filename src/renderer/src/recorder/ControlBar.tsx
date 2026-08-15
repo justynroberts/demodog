@@ -1,0 +1,173 @@
+// MIT License - Copyright (c) fintonlabs.com
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { api } from '../api'
+
+/**
+ * The floating transport shown while recording, in its own always-on-top
+ * window.
+ *
+ * It also owns camera and microphone capture. That lives here rather than in
+ * the studio window for one reason: this is the only renderer guaranteed to
+ * stay alive and unthrottled for the whole take. Chromium aggressively throttles
+ * hidden windows, which would stall a MediaRecorder running in the background.
+ */
+export default function ControlBar(): ReactNode {
+  const [elapsed, setElapsed] = useState(0)
+  const [running, setRunning] = useState(false)
+  const [stopping, setStopping] = useState(false)
+
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const startRef = useRef(0)
+  const [hasCamera, setHasCamera] = useState(false)
+
+  // ---- device setup ------------------------------------------------------
+
+  useEffect(() => {
+    return api.on('bar:prepare', async (payload) => {
+      const { cameraDeviceId, micDeviceId } = payload as {
+        cameraDeviceId: string | null
+        micDeviceId: string | null
+      }
+      if (!cameraDeviceId && !micDeviceId) return
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: cameraDeviceId
+            ? {
+                deviceId: { exact: cameraDeviceId },
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                frameRate: { ideal: 30 }
+              }
+            : false,
+          audio: micDeviceId
+            ? {
+                deviceId: { exact: micDeviceId },
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+              }
+            : false
+        })
+        streamRef.current = stream
+        setHasCamera(Boolean(cameraDeviceId))
+        if (videoRef.current && cameraDeviceId) {
+          videoRef.current.srcObject = stream
+          await videoRef.current.play().catch(() => undefined)
+        }
+      } catch (error) {
+        console.error('camera/mic unavailable', error)
+      }
+    })
+  }, [])
+
+  // ---- start on the screen recorder's signal -----------------------------
+
+  useEffect(() => {
+    return api.on('bar:started', async () => {
+      startRef.current = performance.now()
+      setRunning(true)
+
+      const stream = streamRef.current
+      if (!stream) return
+
+      const mimeType = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm'
+      ].find((type) => MediaRecorder.isTypeSupported(type))
+      if (!mimeType) return
+
+      // Record the wall clock as close to the first sample as possible; the
+      // editor uses it to line the camera up against the screen track, and
+      // exposes a manual nudge for the residual error.
+      await api.openCameraFile({ startWallClock: Date.now() / 1000, mimeType })
+
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: 4_000_000,
+        audioBitsPerSecond: 128_000
+      })
+      recorder.ondataavailable = async (event) => {
+        if (event.data.size > 0) api.writeCameraChunk(await event.data.arrayBuffer())
+      }
+      // Chunked writes keep a long take off the heap.
+      recorder.start(1000)
+      recorderRef.current = recorder
+    })
+  }, [])
+
+  // ---- timer -------------------------------------------------------------
+
+  useEffect(() => {
+    if (!running) return
+    const id = setInterval(() => setElapsed((performance.now() - startRef.current) / 1000), 100)
+    return () => clearInterval(id)
+  }, [running])
+
+  // ---- stop --------------------------------------------------------------
+
+  const stop = useCallback(async () => {
+    if (stopping) return
+    setStopping(true)
+
+    const recorder = recorderRef.current
+    if (recorder && recorder.state !== 'inactive') {
+      // Flush the tail chunk before the main process closes the file.
+      await new Promise<void>((resolve) => {
+        recorder.addEventListener('stop', () => resolve(), { once: true })
+        recorder.stop()
+      })
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+    recorderRef.current = null
+
+    await api.stopRecording().catch((error) => console.error(error))
+    setRunning(false)
+    setStopping(false)
+    setElapsed(0)
+  }, [stopping])
+
+  useEffect(() => api.on('bar:request-stop', () => void stop()), [stop])
+
+  const cancel = async (): Promise<void> => {
+    recorderRef.current?.stop()
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    await api.cancelRecording()
+    setRunning(false)
+    setElapsed(0)
+  }
+
+  const minutes = Math.floor(elapsed / 60)
+  const seconds = Math.floor(elapsed % 60)
+
+  return (
+    <div className="bar-root">
+      <div className="bar">
+        <span className="rec-dot" aria-hidden />
+        <span className="bar-time">
+          {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+        </span>
+
+        <video
+          ref={videoRef}
+          className="bar-cam"
+          muted
+          playsInline
+          style={{ display: hasCamera ? 'block' : 'none' }}
+        />
+
+        <button className="btn primary" onClick={() => void stop()} disabled={stopping}>
+          {stopping ? 'Finishing…' : 'Stop'}
+        </button>
+        <button className="btn ghost" onClick={() => void cancel()} title="Discard this take">
+          Discard
+        </button>
+        <span className="bar-hint">⌘⇧2</span>
+      </div>
+    </div>
+  )
+}
