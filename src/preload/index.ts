@@ -1,6 +1,13 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Permissions, Profile, RecordOptions, RecordingResult, Sources } from '../shared/types'
+import type {
+  CapturePreset,
+  Permissions,
+  Profile,
+  RecordOptions,
+  RecordingResult,
+  Sources
+} from '../shared/types'
 
 export interface CameraInfo {
   path: string
@@ -54,6 +61,11 @@ const api = {
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:open-external', url),
 
   pickImage: (): Promise<string | null> => ipcRenderer.invoke('dialog:image'),
+
+  listPresets: (): Promise<CapturePreset[]> => ipcRenderer.invoke('presets:list'),
+  savePreset: (preset: CapturePreset): Promise<CapturePreset[]> =>
+    ipcRenderer.invoke('presets:save', preset),
+  deletePreset: (id: string): Promise<CapturePreset[]> => ipcRenderer.invoke('presets:delete', id),
 
   listProfiles: (): Promise<Profile[]> => ipcRenderer.invoke('profiles:list'),
   saveProfile: (profile: Profile): Promise<Profile[]> =>

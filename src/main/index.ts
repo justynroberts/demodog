@@ -27,7 +27,8 @@ import type {
   RecordingResult,
   CaptureMeta,
   RawEvent,
-  Profile
+  Profile,
+  CapturePreset
 } from '../shared/types'
 
 // `rec:` streams recording artefacts into the renderer. A privileged scheme is
@@ -529,6 +530,38 @@ async function readProfiles(): Promise<Profile[]> {
 }
 
 ipcMain.handle('profiles:list', () => readProfiles())
+
+// --- Capture presets: the recording setup, saved for next time ---------------
+
+function presetsPath(): string {
+  return join(app.getPath('userData'), 'capture-presets.json')
+}
+
+async function readPresets(): Promise<CapturePreset[]> {
+  try {
+    return JSON.parse(await readFile(presetsPath(), 'utf8')) as CapturePreset[]
+  } catch {
+    return []
+  }
+}
+
+ipcMain.handle('presets:list', () => readPresets())
+
+ipcMain.handle('presets:save', async (_e, preset: CapturePreset): Promise<CapturePreset[]> => {
+  const presets = await readPresets()
+  const index = presets.findIndex((p) => p.id === preset.id)
+  const next = preset.isDefault ? presets.map((p) => ({ ...p, isDefault: false })) : [...presets]
+  if (index >= 0) next[index] = preset
+  else next.push(preset)
+  await writeFile(presetsPath(), JSON.stringify(next, null, 2))
+  return next
+})
+
+ipcMain.handle('presets:delete', async (_e, id: string): Promise<CapturePreset[]> => {
+  const next = (await readPresets()).filter((p) => p.id !== id)
+  await writeFile(presetsPath(), JSON.stringify(next, null, 2))
+  return next
+})
 
 ipcMain.handle('profiles:save', async (_e, profile: Profile): Promise<Profile[]> => {
   const profiles = await readProfiles()

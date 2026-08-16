@@ -50,6 +50,27 @@ export interface RecordOptions {
   countdown: number
 }
 
+/**
+ * A saved recording setup, so a repeat session is one click.
+ *
+ * Devices are stored with both id and label: media device ids are not stable
+ * across reboots or replugs, so the label is what makes a preset survive.
+ * Windows are matched back by app and title for the same reason — window ids
+ * are per-session.
+ */
+export interface CapturePreset {
+  id: string
+  name: string
+  isDefault?: boolean
+  source: { kind: 'display' | 'window'; id: number; label: string; app?: string }
+  camera: { deviceId: string; label: string } | null
+  mic: { deviceId: string; label: string } | null
+  fps: number
+  systemAudio: boolean
+  keystrokes: boolean
+  countdown: number
+}
+
 /** A saved set of look-and-feel settings, reusable across recordings. */
 export interface Profile {
   id: string
