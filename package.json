@@ -24,6 +24,7 @@
     "mp4box": "^2.4.1"
   },
   "devDependencies": {
+    "@electron/notarize": "^3.1.1",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
@@ -65,9 +66,12 @@
         "NSScreenCaptureUsageDescription": "DemoDog records your screen."
       },
       "icon": "resources/icon.icns",
-      "identity": null,
-      "hardenedRuntime": false,
-      "gatekeeperAssess": false
+      "identity": "Justyn Roberts (2H574B6N62)",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": false
     },
     "directories": {
       "output": "release",
@@ -90,6 +94,7 @@
         }
       ]
     },
-    "afterPack": "scripts/after-pack.js"
+    "afterPack": "scripts/after-pack.js",
+    "afterSign": "scripts/notarize.js"
   }
 }
