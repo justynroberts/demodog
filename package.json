@@ -125,6 +125,7 @@
       ]
     },
     "afterPack": "scripts/after-pack.js",
-    "afterSign": "scripts/notarize.js"
+    "afterSign": "scripts/notarize.js",
+    "afterAllArtifactBuild": "scripts/staple-dmg.js"
   }
 }

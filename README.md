@@ -23,17 +23,8 @@ and your camera in the corner.
 Download the latest **`DemoDog-<version>-arm64.dmg`** from
 [Releases](../../releases), open it, and drag DemoDog to Applications.
 
-The app is signed with an Apple Developer ID but not yet notarised, so
-Gatekeeper still refuses a plain double-click and says Apple cannot check it for
-malicious software. The first time only:
-
-> **Right-click DemoDog → Open → Open**
-
-or, from Terminal:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/DemoDog.app
-```
+The app is signed with an Apple Developer ID and notarised by Apple, so it opens
+with a normal double-click — no right-click, no `xattr`, no security warning.
 
 Apple silicon, macOS 14 (Sonoma) or later. There is nothing else to install —
 no Python, no runtime, no command line tools. Everything is inside the app.
