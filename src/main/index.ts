@@ -14,6 +14,7 @@ import {
 } from 'electron'
 import { join, resolve as resolvePath, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { setupUpdates } from './updater'
 import { mkdir, writeFile, readFile } from 'node:fs/promises'
 import { createWriteStream, existsSync, WriteStream } from 'node:fs'
 import {
@@ -392,6 +393,10 @@ app.whenReady().then(() => {
 
   if (!process.env['DEMODOG_BENCH']) createSplashWindow()
   createStudioWindow()
+
+  // Never while a take is in progress: an update dialog stealing focus would be
+  // captured into the recording.
+  if (studioWindow) setupUpdates(studioWindow, () => Boolean(recorder))
 
   globalShortcut.register('CommandOrControl+Shift+2', () => {
     if (recorder) barWindow?.webContents.send('bar:request-stop')
