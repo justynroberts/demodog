@@ -893,6 +893,11 @@ function CameraTab({
               checked={pip.avoidCursor}
               onChange={(v) => patch('pip', { avoidCursor: v })}
             />
+            <p className="hint">
+              For a blurred background behind you, turn on <strong>Portrait</strong> in the macOS
+              menu bar: Control Centre → Video Effects, while recording. It applies to the camera
+              itself, so it is baked into the take.
+            </p>
             <div style={{ height: 10 }} />
             <Slider
               label="Sync offset"

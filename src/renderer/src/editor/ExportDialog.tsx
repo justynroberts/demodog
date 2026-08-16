@@ -1,5 +1,6 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { api } from '../api'
 import { EXPORT_TARGETS, OUTPUT_PRESETS } from '../engine/defaults'
 import { Segmented } from '../ui/controls'
 
@@ -10,6 +11,8 @@ export interface ExportChoice {
   quality: 'good' | 'high' | 'max'
   /** 'cover' crops the recording to the target shape instead of letterboxing. */
   fitMode: 'contain' | 'cover'
+  /** Where the file will be written. Chosen before rendering, not after. */
+  destination: string | null
 }
 
 /**
@@ -51,10 +54,13 @@ export default function ExportDialog({
   initial,
   duration,
   sourceAspect,
+  suggestedName,
   onCancel,
   onStart
 }: {
   initial: ExportChoice
+  /** Default filename, derived from the take. */
+  suggestedName: string
   /** Length of the range about to be exported, in seconds. */
   duration: number
   /** Width over height of the recording, used to warn about reshaping. */
@@ -63,6 +69,14 @@ export default function ExportDialog({
   onStart: (choice: ExportChoice) => void
 }): ReactNode {
   const [choice, setChoice] = useState<ExportChoice>(initial)
+
+  const chooseDestination = async (): Promise<void> => {
+    const path = await api.saveDialog({
+      defaultPath: choice.destination ?? suggestedName,
+      filters: [{ name: 'MP4 video', extensions: ['mp4'] }]
+    })
+    if (path) setChoice({ ...choice, destination: path })
+  }
 
   const target = EXPORT_TARGETS.find(
     (t) =>
@@ -79,6 +93,7 @@ export default function ExportDialog({
     // mostly background with a letterboxed strip in the middle.
     const reshapes = Math.abs(next.width / next.height - sourceAspect) > sourceAspect * 0.15
     setChoice({
+      ...choice,
       width: next.width,
       height: next.height,
       fps: next.fps,
@@ -93,7 +108,7 @@ export default function ExportDialog({
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') onCancel()
-      if (event.key === 'Enter') onStart(choice)
+      if (event.key === 'Enter' && choice.destination) onStart(choice)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -216,13 +231,29 @@ export default function ExportDialog({
           use.
         </p>
 
+        <div style={{ height: 14 }} />
+        <span className="label">Save to</span>
+        <button className="destination" onClick={() => void chooseDestination()}>
+          {choice.destination ? (
+            <>
+              <strong>{choice.destination.split('/').pop()}</strong>
+              <span>{choice.destination.split('/').slice(0, -1).join('/')}</span>
+            </>
+          ) : (
+            <>
+              <strong>Choose a location…</strong>
+              <span>{suggestedName}</span>
+            </>
+          )}
+        </button>
+
         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
           <button
             className="btn violet"
             style={{ flex: 1, justifyContent: 'center' }}
-            onClick={() => onStart(choice)}
+            onClick={() => (choice.destination ? onStart(choice) : void chooseDestination())}
           >
-            Export
+            {choice.destination ? 'Export' : 'Choose location…'}
           </button>
           <button className="btn" onClick={onCancel}>
             Cancel

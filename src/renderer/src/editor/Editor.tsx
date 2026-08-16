@@ -13,6 +13,14 @@ import Timeline from './Timeline'
 import Inspector from './Inspector'
 import ExportDialog, { formatDuration, rememberRate, type ExportChoice } from './ExportDialog'
 
+/** Names the export after the take it came from, rather than a bare timestamp. */
+function suggestedExportName(takeDir: string): string {
+  const base = (takeDir.split('/').pop() ?? 'demodog')
+    .replace(/\.demodog$/, '')
+    .replace(/^take_/, '')
+  return `DemoDog ${base.replace(/_/g, ' ')}.mp4`
+}
+
 export default function Editor({
   recording,
   bench = null
@@ -226,11 +234,23 @@ export default function Editor({
       }
 
       const camera = cameraRef.current
+
+      // Keep the camera on the right frame while paused too. Editing a setting
+      // re-renders, and if the element has drifted or has not been positioned
+      // since load it shows nothing — which looked like the camera vanishing
+      // until the playhead was dragged back.
+      if (!playing && camera) {
+        const want = timeRef.current - recording.cameraOffset - cameraSync
+        if (want >= 0 && Math.abs(camera.currentTime - want) > 0.05) {
+          camera.currentTime = want
+        }
+      }
+
       // Fades are relative to the trimmed range, not the raw recording.
       composition.range = trim
       composition.render(ctx, timeRef.current, {
         screen,
-        camera: camera && camera.readyState >= 2 ? camera : null,
+        camera: camera && camera.videoWidth > 0 ? camera : null,
         cameraSize:
           camera && camera.videoWidth
             ? { width: camera.videoWidth, height: camera.videoHeight }
@@ -364,10 +384,14 @@ export default function Editor({
         return
       }
 
-      const path = await api.saveDialog({
-        defaultPath: `demodog-${Date.now()}.mp4`,
-        filters: [{ name: 'MP4 video', extensions: ['mp4'] }]
-      })
+      // The destination was chosen before rendering started, so there is no
+      // dialog waiting at the end of a long export.
+      const path =
+        choice.destination ??
+        (await api.saveDialog({
+          defaultPath: suggestedExportName(recording.dir),
+          filters: [{ name: 'MP4 video', extensions: ['mp4'] }]
+        }))
       if (path) {
         await api.writeFile(path, result.buffer)
         await api.reveal(path)
@@ -401,7 +425,8 @@ export default function Editor({
           height: project.output.height,
           fps: project.output.fps,
           quality: 'high',
-          fitMode: project.frame.fitMode
+          fitMode: project.frame.fitMode,
+          destination: null
         }),
       1800
     )
@@ -448,10 +473,12 @@ export default function Editor({
               height: project.output.height,
               fps: project.output.fps,
               quality: 'high',
-              fitMode: project.frame.fitMode
+              fitMode: project.frame.fitMode,
+              destination: null
             }}
             duration={Math.max(0.05, trim.end - trim.start)}
             sourceAspect={recording.source.width / recording.source.height}
+            suggestedName={suggestedExportName(recording.dir)}
             onCancel={() => setAskingExport(false)}
             onStart={(choice) => void runExport(choice)}
           />

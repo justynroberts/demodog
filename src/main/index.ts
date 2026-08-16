@@ -189,6 +189,13 @@ function createStudioWindow(): void {
   }
 
   studioWindow.on('ready-to-show', () => void reveal())
+  studioWindow.webContents.once('did-finish-load', () => {
+    if (pendingOpen) {
+      const path = pendingOpen
+      pendingOpen = null
+      void deliverTake(path)
+    }
+  })
   // If the renderer fails before first paint, `ready-to-show` never fires and
   // the app looks like it silently did nothing. Show it anyway.
   studioWindow.webContents.on('did-finish-load', () => void reveal())
@@ -305,6 +312,14 @@ async function runCountdown(seconds: number, displayId?: number): Promise<void> 
   if (!win.isDestroyed()) win.destroy()
 }
 
+/**
+ * Takes are directories, but macOS can present a directory with a registered
+ * extension as a single document — a package. That gives them an icon, one
+ * double-clickable item in Finder, and something the open dialog can filter on,
+ * without changing the fact that a take is several files.
+ */
+const TAKE_EXTENSION = 'demodog'
+
 function recordingDir(): string {
   // Local time, not toISOString — a take recorded at 19:18 BST should not be
   // filed under 18:18.
@@ -313,7 +328,7 @@ function recordingDir(): string {
   const stamp =
     `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
     `_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
-  return join(app.getPath('videos'), 'DemoDog', `take_${stamp}`)
+  return join(app.getPath('videos'), 'DemoDog', `take_${stamp}.${TAKE_EXTENSION}`)
 }
 
 app.whenReady().then(() => {
@@ -378,6 +393,30 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createStudioWindow()
   })
+})
+
+/**
+ * Opening a take from Finder. The event can arrive before the window exists, so
+ * the path is held until the studio is ready to receive it.
+ */
+let pendingOpen: string | null = null
+
+async function deliverTake(path: string): Promise<void> {
+  try {
+    const take = await loadTake(path)
+    studioWindow?.webContents.send('recording:opened', take)
+    studioWindow?.show()
+    studioWindow?.focus()
+  } catch (error) {
+    console.error('[open-file]', error)
+    dialog.showErrorBox('Could not open take', `${path} does not look like a DemoDog take.`)
+  }
+}
+
+app.on('open-file', (event, path) => {
+  event.preventDefault()
+  if (studioWindow && !studioWindow.webContents.isLoading()) void deliverTake(path)
+  else pendingOpen = path
 })
 
 app.on('window-all-closed', () => {
@@ -616,7 +655,10 @@ async function loadTake(dir: string): Promise<RecordingResult> {
 /** Re-opens a take from disk so the editor can be reloaded on a later launch. */
 ipcMain.handle('recording:open', async (): Promise<RecordingResult | null> => {
   const result = await dialog.showOpenDialog(studioWindow!, {
-    properties: ['openDirectory'],
+    // Both, deliberately: new takes are packages and behave like files, while
+    // takes recorded before the extension existed are plain directories.
+    properties: ['openFile', 'openDirectory'],
+    filters: [{ name: 'DemoDog take', extensions: [TAKE_EXTENSION] }],
     defaultPath: join(app.getPath('videos'), 'DemoDog'),
     title: 'Open a DemoDog take'
   })

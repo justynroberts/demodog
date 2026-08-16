@@ -63,7 +63,37 @@
       "extendInfo": {
         "NSCameraUsageDescription": "DemoDog records your camera for picture-in-picture overlays.",
         "NSMicrophoneUsageDescription": "DemoDog records your microphone narration.",
-        "NSScreenCaptureUsageDescription": "DemoDog records your screen."
+        "NSScreenCaptureUsageDescription": "DemoDog records your screen.",
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "DemoDog take",
+            "CFBundleTypeRole": "Editor",
+            "LSHandlerRank": "Owner",
+            "LSTypeIsPackage": true,
+            "LSItemContentTypes": [
+              "com.fintonlabs.demodog.take"
+            ],
+            "CFBundleTypeExtensions": [
+              "demodog"
+            ],
+            "CFBundleTypeIconFile": "icon.icns"
+          }
+        ],
+        "UTExportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "com.fintonlabs.demodog.take",
+            "UTTypeDescription": "DemoDog take",
+            "UTTypeConformsTo": [
+              "com.apple.package"
+            ],
+            "UTTypeIconFile": "icon.icns",
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "demodog"
+              ]
+            }
+          }
+        ]
       },
       "icon": "resources/icon.icns",
       "identity": "Justyn Roberts (2H574B6N62)",

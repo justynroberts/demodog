@@ -44,6 +44,15 @@ export default function StudioApp(): ReactNode {
   const [recording, setRecording] = useState<Recording | null>(null)
   const [bench, setBench] = useState<{ out: string; seconds: number } | null>(null)
 
+  // Opened from Finder, rather than from inside the app.
+  useEffect(() => {
+    return api.on('recording:opened', (payload) => {
+      const result = payload as RecordingResult
+      setRecording(toRecording(result, result.camera))
+      setMode('editor')
+    })
+  }, [])
+
   useEffect(() => {
     return api.on('recording:complete', (payload) => {
       const result = payload as CompleteRecording
