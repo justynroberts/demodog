@@ -1,6 +1,6 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { OUTPUT_PRESETS } from '../engine/defaults'
+import { EXPORT_TARGETS, OUTPUT_PRESETS } from '../engine/defaults'
 import { Segmented } from '../ui/controls'
 
 export interface ExportChoice {
@@ -8,6 +8,8 @@ export interface ExportChoice {
   height: number
   fps: number
   quality: 'good' | 'high' | 'max'
+  /** 'cover' crops the recording to the target shape instead of letterboxing. */
+  fitMode: 'contain' | 'cover'
 }
 
 /**
@@ -48,16 +50,45 @@ function bitrateFor(width: number, height: number, fps: number, quality: string)
 export default function ExportDialog({
   initial,
   duration,
+  sourceAspect,
   onCancel,
   onStart
 }: {
   initial: ExportChoice
   /** Length of the range about to be exported, in seconds. */
   duration: number
+  /** Width over height of the recording, used to warn about reshaping. */
+  sourceAspect: number
   onCancel: () => void
   onStart: (choice: ExportChoice) => void
 }): ReactNode {
   const [choice, setChoice] = useState<ExportChoice>(initial)
+
+  const target = EXPORT_TARGETS.find(
+    (t) =>
+      t.width === choice.width &&
+      t.height === choice.height &&
+      t.fps === choice.fps &&
+      t.quality === choice.quality
+  )
+
+  const applyTarget = (id: string): void => {
+    const next = EXPORT_TARGETS.find((t) => t.id === id)
+    if (!next) return
+    // A target far from the recording's shape has to crop, or the frame ends up
+    // mostly background with a letterboxed strip in the middle.
+    const reshapes = Math.abs(next.width / next.height - sourceAspect) > sourceAspect * 0.15
+    setChoice({
+      width: next.width,
+      height: next.height,
+      fps: next.fps,
+      quality: next.quality,
+      fitMode: reshapes ? 'cover' : 'contain'
+    })
+  }
+
+  const targetAspect = choice.width / choice.height
+  const reshaping = Math.abs(targetAspect - sourceAspect) > sourceAspect * 0.15
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -90,6 +121,20 @@ export default function ExportDialog({
       <div className="export-card" onClick={(e) => e.stopPropagation()}>
         <h2>Export</h2>
 
+        <span className="label">For</span>
+        <select value={target?.id ?? ''} onChange={(e) => applyTarget(e.target.value)}>
+          {!target && <option value="">Custom</option>}
+          {EXPORT_TARGETS.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        <p className="hint" style={{ margin: '6px 0 0' }}>
+          {target?.hint ?? 'Your own combination of size, frame rate and quality.'}
+        </p>
+
+        <div style={{ height: 14 }} />
         <span className="label">Size</span>
         <select
           value={sizeValue}
@@ -129,6 +174,23 @@ export default function ExportDialog({
           ]}
           onChange={(v) => setChoice({ ...choice, quality: v })}
         />
+
+        <div style={{ height: 14 }} />
+        <span className="label">Fit</span>
+        <Segmented
+          value={choice.fitMode}
+          options={[
+            { value: 'contain', label: 'Fit whole screen' },
+            { value: 'cover', label: 'Crop to shape' }
+          ]}
+          onChange={(v) => setChoice({ ...choice, fitMode: v })}
+        />
+        {reshaping && choice.fitMode === 'contain' && (
+          <p className="hint" style={{ color: 'var(--danger)', margin: '8px 0 0' }}>
+            This shape is a long way from your recording, so fitting the whole screen will leave
+            large bands of background. Crop usually looks better.
+          </p>
+        )}
 
         <div className="export-estimate">
           <div>

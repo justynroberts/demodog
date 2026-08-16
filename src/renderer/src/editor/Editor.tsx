@@ -309,7 +309,11 @@ export default function Editor({
 
     // The chosen size and rate are the project's from here on, so the preview
     // and the exported file cannot disagree about framing.
-    const project2 = { ...project, output: { ...project.output, ...choice } }
+    const project2 = {
+      ...project,
+      output: { ...project.output, width: choice.width, height: choice.height, fps: choice.fps },
+      frame: { ...project.frame, fitMode: choice.fitMode }
+    }
     setProject(project2)
     composition.project = project2
     composition.rebuildLayout()
@@ -396,7 +400,8 @@ export default function Editor({
           width: project.output.width,
           height: project.output.height,
           fps: project.output.fps,
-          quality: 'high'
+          quality: 'high',
+          fitMode: project.frame.fitMode
         }),
       1800
     )
@@ -442,9 +447,11 @@ export default function Editor({
               width: project.output.width,
               height: project.output.height,
               fps: project.output.fps,
-              quality: 'high'
+              quality: 'high',
+              fitMode: project.frame.fitMode
             }}
             duration={Math.max(0.05, trim.end - trim.start)}
+            sourceAspect={recording.source.width / recording.source.height}
             onCancel={() => setAskingExport(false)}
             onStart={(choice) => void runExport(choice)}
           />

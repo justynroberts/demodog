@@ -184,6 +184,108 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/**
+ * Where the video is going, rather than what size it is.
+ *
+ * Each carries the size, frame rate and quality that destination actually
+ * wants. The rates are deliberate: platforms that re-encode hard gain nothing
+ * from 60fps and only cost upload time, while a screen demo on YouTube is worth
+ * the smoother rate.
+ */
+export interface ExportTarget {
+  id: string
+  name: string
+  hint: string
+  width: number
+  height: number
+  fps: number
+  quality: 'good' | 'high' | 'max'
+}
+
+export const EXPORT_TARGETS: ExportTarget[] = [
+  {
+    id: 'youtube-1080',
+    name: 'YouTube · 1080p',
+    hint: '1920×1080 · 60fps — smooth motion for screen demos',
+    width: 1920,
+    height: 1080,
+    fps: 60,
+    quality: 'high'
+  },
+  {
+    id: 'youtube-4k',
+    name: 'YouTube · 4K',
+    hint: '3840×2160 · 60fps — survives YouTube re-encoding best',
+    width: 3840,
+    height: 2160,
+    fps: 60,
+    quality: 'max'
+  },
+  {
+    id: 'shorts',
+    name: 'Shorts / Reels / TikTok',
+    hint: '1080×1920 vertical · 30fps',
+    width: 1080,
+    height: 1920,
+    fps: 30,
+    quality: 'high'
+  },
+  {
+    id: 'linkedin',
+    name: 'LinkedIn',
+    hint: '1920×1080 · 30fps — plays inline in the feed',
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    quality: 'high'
+  },
+  {
+    id: 'x',
+    name: 'X / Twitter',
+    hint: '1280×720 · 30fps — heavily re-encoded, so keep it small',
+    width: 1280,
+    height: 720,
+    fps: 30,
+    quality: 'good'
+  },
+  {
+    id: 'instagram',
+    name: 'Instagram feed',
+    hint: '1080×1350 portrait · 30fps',
+    width: 1080,
+    height: 1350,
+    fps: 30,
+    quality: 'high'
+  },
+  {
+    id: 'slack',
+    name: 'Slack / email',
+    hint: '1280×720 · 30fps — small enough to attach',
+    width: 1280,
+    height: 720,
+    fps: 30,
+    quality: 'good'
+  },
+  {
+    id: 'docs',
+    name: 'Docs / web embed',
+    hint: '1920×1080 · 30fps — crisp text at a modest size',
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    quality: 'good'
+  },
+  {
+    id: 'master',
+    name: 'Master · highest quality',
+    hint: '2560×1440 · 60fps — for re-editing elsewhere',
+    width: 2560,
+    height: 1440,
+    fps: 60,
+    quality: 'max'
+  }
+]
+
 export const OUTPUT_PRESETS: { id: string; name: string; width: number; height: number }[] = [
   { id: '1080p', name: '1080p · 16:9', width: 1920, height: 1080 },
   { id: '1440p', name: '1440p · 16:9', width: 2560, height: 1440 },
