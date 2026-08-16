@@ -102,6 +102,8 @@ export function defaultProject(
       hold: 1.4,
       mergeGap: 1.8,
       bridgeGap: 1.4,
+      openingHold: 1.5,
+      maxShot: 7,
       easeIn: 0.85,
       easeOut: 0.95,
       follow: 0.42,

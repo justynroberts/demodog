@@ -46,7 +46,12 @@ protocol.registerSchemesAsPrivileged([
   }
 ])
 
+let splashWindow: BrowserWindow | null = null
+let splashShownAt = 0
 let studioWindow: BrowserWindow | null = null
+
+/** Minimum time the splash stays up, so a fast launch does not flash it. */
+const SPLASH_MIN_MS = 1400
 let barWindow: BrowserWindow | null = null
 let recorder: RecorderProcess | null = null
 let cameraStream: WriteStream | null = null
@@ -71,6 +76,50 @@ function rendererURL(hash: string): string {
   return `${pathToFileURL(join(__dirname, '../renderer/index.html')).toString()}#${hash}`
 }
 
+/**
+ * Brand splash shown while the studio window loads.
+ *
+ * Frameless and transparent so it reads as a card rather than a window, and
+ * deliberately not focusable — it should never take a keystroke meant for
+ * whatever the user was already doing.
+ */
+function createSplashWindow(): void {
+  splashWindow = new BrowserWindow({
+    width: 460,
+    height: 320,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    center: true,
+    skipTaskbar: true,
+    focusable: false,
+    show: false,
+    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
+  })
+  splashWindow.once('ready-to-show', () => {
+    splashShownAt = Date.now()
+    splashWindow?.showInactive()
+  })
+  splashWindow.on('closed', () => (splashWindow = null))
+  splashWindow.loadURL(rendererURL('/splash'))
+}
+
+/** Closes the splash once it has been up long enough to be read. */
+function dismissSplash(): Promise<void> {
+  if (!splashWindow) return Promise.resolve()
+  const elapsed = Date.now() - (splashShownAt || Date.now())
+  const wait = Math.max(0, SPLASH_MIN_MS - elapsed)
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      if (splashWindow && !splashWindow.isDestroyed()) splashWindow.destroy()
+      splashWindow = null
+      resolve()
+    }, wait)
+  })
+}
+
 function createStudioWindow(): void {
   studioWindow = new BrowserWindow({
     width: 1440,
@@ -91,17 +140,20 @@ function createStudioWindow(): void {
   // whatever else is on screen, including a real editing session.
   const headless = Boolean(process.env['DEMODOG_BENCH'])
 
-  studioWindow.on('ready-to-show', () => {
-    if (!headless) studioWindow?.show()
-  })
+  // Hold the studio back until the splash has had its moment, then swap.
+  const reveal = async (): Promise<void> => {
+    if (headless) return
+    await dismissSplash()
+    studioWindow?.show()
+  }
+
+  studioWindow.on('ready-to-show', () => void reveal())
   // If the renderer fails before first paint, `ready-to-show` never fires and
   // the app looks like it silently did nothing. Show it anyway.
-  studioWindow.webContents.on('did-finish-load', () => {
-    if (!headless) studioWindow?.show()
-  })
+  studioWindow.webContents.on('did-finish-load', () => void reveal())
   studioWindow.webContents.on('did-fail-load', (_e, code, description, url) => {
     console.error(`[renderer] failed to load ${url}: ${description} (${code})`)
-    studioWindow?.show()
+    void dismissSplash().then(() => studioWindow?.show())
   })
   studioWindow.webContents.on('console-message', (_e, level, message, line, source) => {
     console.log(`[renderer:${level}] ${message} (${source}:${line})`)
@@ -232,6 +284,7 @@ app.whenReady().then(() => {
 
   console.log(`[demodog] ready. DEMODOG_OPEN=${process.env['DEMODOG_OPEN'] ?? '(unset)'}`)
 
+  if (!process.env['DEMODOG_BENCH']) createSplashWindow()
   createStudioWindow()
 
   globalShortcut.register('CommandOrControl+Shift+2', () => {
@@ -413,6 +466,7 @@ ipcMain.handle('file:write', async (_e, path: string, data: ArrayBuffer) => {
   return path
 })
 
+ipcMain.handle('app:version', () => app.getVersion())
 ipcMain.handle('shell:reveal', (_e, path: string) => shell.showItemInFolder(path))
 ipcMain.handle('shell:open-external', (_e, url: string) => shell.openExternal(url))
 

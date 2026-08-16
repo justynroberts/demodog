@@ -1545,3 +1545,113 @@ dialog.info a {
   color: #fff;
   border-radius: 2px;
 }
+
+/* --------------------------------------------------------------------------
+   Splash (its own transparent, non-focusable window)
+   -------------------------------------------------------------------------- */
+
+.splash {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  background: transparent;
+}
+
+.splash-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 26px;
+  background: var(--surface);
+  border: 3px solid var(--line);
+  box-shadow: 8px 8px 0 var(--line);
+  animation: snap-in 0.4s var(--snap) both;
+}
+
+.splash-logo {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  border: 3px solid var(--line);
+  border-radius: 2px;
+  background: #0a0a0b;
+  margin-bottom: 6px;
+  animation: splash-mark 0.6s var(--snap) both;
+}
+
+@keyframes splash-mark {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) rotate(-8deg) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.splash-name {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  font-variation-settings: 'wdth' 80;
+  letter-spacing: -0.03em;
+  animation: snap-in 0.45s var(--snap) both;
+  animation-delay: 0.08s;
+}
+
+.splash-tag {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--muted);
+  animation: snap-in 0.45s var(--snap) both;
+  animation-delay: 0.14s;
+}
+
+.splash-rule {
+  width: 54px;
+  /* Tall enough that the 2px keyline does not swallow the fill entirely. */
+  height: 10px;
+  margin: 12px 0 10px;
+  background: var(--lime);
+  border: 2px solid var(--line);
+  animation: splash-rule 0.5s var(--snap) both;
+  animation-delay: 0.2s;
+}
+
+@keyframes splash-rule {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.splash-by {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  animation: snap-in 0.45s var(--snap) both;
+  animation-delay: 0.26s;
+}
+
+.splash-by strong {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.splash-version {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  font-size: 10px;
+  color: var(--muted);
+}

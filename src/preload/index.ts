@@ -57,6 +57,7 @@ const api = {
   }): Promise<string | null> => ipcRenderer.invoke('dialog:save', options),
   writeFile: (path: string, data: ArrayBuffer): Promise<string> =>
     ipcRenderer.invoke('file:write', path, data),
+  getVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
   reveal: (path: string): Promise<void> => ipcRenderer.invoke('shell:reveal', path),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:open-external', url),
 

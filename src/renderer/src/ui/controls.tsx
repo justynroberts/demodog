@@ -124,6 +124,14 @@ export function ThemeToggle(): ReactNode {
 /** The house-style credit affordance; present on every screen. */
 export function InfoButton(): ReactNode {
   const ref = useRef<HTMLDialogElement>(null)
+  const [version, setVersion] = useState('')
+
+  useEffect(() => {
+    void api
+      .getVersion()
+      .then(setVersion)
+      .catch(() => undefined)
+  }, [])
 
   return (
     <>
@@ -145,7 +153,7 @@ export function InfoButton(): ReactNode {
           <h2>DemoDog</h2>
           <p>
             Screen recording with automatic zoom, a reconstructed cursor and camera
-            picture-in-picture. Version 0.1.0.
+            picture-in-picture{version ? ` — version ${version}` : ''}.
           </p>
           <p>
             <a

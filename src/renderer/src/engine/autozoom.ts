@@ -69,7 +69,10 @@ export function generateSegments(
 
     if (scale < settings.minScale + 0.001) continue
 
-    const start = Math.max(0, first.t - settings.lead)
+    // Hold the opening wide: a shot that begins at t=0 denies the viewer the
+    // establishing frame, and is the main reason a result feels permanently
+    // zoomed even when the overall proportion is modest.
+    const start = Math.max(settings.openingHold, first.t - settings.lead)
     const end = Math.min(duration, last.t + settings.hold)
     if (end - start < 0.5) continue
 
@@ -87,7 +90,7 @@ export function generateSegments(
     })
   }
 
-  return stitchSegments(segments, settings.bridgeGap, source)
+  return stitchSegments(segments, settings.bridgeGap, settings.maxShot, source)
 }
 
 function collectMoments(
@@ -323,6 +326,7 @@ function sameArea(
 function stitchSegments(
   segments: ZoomSegment[],
   bridgeGap: number,
+  maxShot: number,
   source: { width: number; height: number }
 ): ZoomSegment[] {
   const MIN_LENGTH = 1.2
@@ -335,7 +339,13 @@ function stitchSegments(
     if (prev) {
       const gap = segment.start - prev.end
 
-      if (gap < bridgeGap && sameArea(prev, segment, source)) {
+      // A shot that has already run long enough must be allowed to release,
+      // however close the next one is — otherwise a session spent in one
+      // corner of the screen fuses into a single unbroken zoom.
+      const prevRun = prev.end - prev.start
+      const canExtend = prevRun < maxShot
+
+      if (canExtend && gap < bridgeGap && sameArea(prev, segment, source)) {
         // One continuous shot: hold it and let the anchor drift.
         const prevSpan = prev.end - prev.start
         const nextSpan = segment.end - segment.start
@@ -347,7 +357,7 @@ function stitchSegments(
         continue
       }
 
-      if (gap < bridgeGap) {
+      if (canExtend && gap < bridgeGap) {
         // Different area, but too close to be worth releasing: pan instead.
         const overlap = Math.max(
           MIN_OVERLAP,

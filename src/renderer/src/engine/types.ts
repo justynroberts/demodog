@@ -103,6 +103,16 @@ export interface ZoomSettings {
    * punching back in. The single biggest control over how busy the result feels.
    */
   bridgeGap: number
+  /**
+   * Seconds of full-frame at the start before any zoom is allowed.
+   *
+   * Without it a take where the first click lands immediately opens already
+   * zoomed in, so the viewer never sees what they are looking at — which reads
+   * as the zoom being on the whole time.
+   */
+  openingHold: number
+  /** Longest a single shot may run before the camera is made to release. */
+  maxShot: number
   easeIn: number
   easeOut: number
   /** Camera tracking of the cursor while zoomed, 0..1. */

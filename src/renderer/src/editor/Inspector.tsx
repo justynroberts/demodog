@@ -494,6 +494,24 @@ function ZoomTab({
           format={(v) => `${v.toFixed(2)}s`}
         />
         <Slider
+          label="Opening wide shot"
+          value={zoom.openingHold}
+          min={0}
+          max={5}
+          step={0.1}
+          onChange={(v) => patch('zoom', { openingHold: v })}
+          format={(v) => (v === 0 ? 'off' : `${v.toFixed(1)}s`)}
+        />
+        <Slider
+          label="Longest shot"
+          value={zoom.maxShot}
+          min={2}
+          max={20}
+          step={0.5}
+          onChange={(v) => patch('zoom', { maxShot: v })}
+          format={(v) => `${v.toFixed(1)}s`}
+        />
+        <Slider
           label="Stay zoomed between"
           value={zoom.bridgeGap}
           min={0}
