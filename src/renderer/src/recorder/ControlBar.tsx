@@ -85,7 +85,13 @@ export default function ControlBar(): ReactNode {
         return
       }
 
+      // MP4 first: a fragmented MP4 can be demuxed and decoded sequentially at
+      // export time, where a MediaRecorder WebM can only be seeked — and
+      // seeking the camera once per output frame was the single largest cost
+      // in the exporter. WebM stays as the fallback.
       const mimeType = [
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4',
         'video/webm;codecs=vp9,opus',
         'video/webm;codecs=vp8,opus',
         'video/webm'

@@ -522,7 +522,8 @@ ipcMain.handle('recording:cancel', async () => {
 // take never has to be held in memory.
 ipcMain.handle('camera:open', async (_e, info: { startWallClock: number; mimeType: string }) => {
   if (!recorder) throw new Error('no recording is running')
-  const path = join(recorder.outputDir, 'camera.webm')
+  const extension = info.mimeType.startsWith('video/mp4') ? 'mp4' : 'webm'
+  const path = join(recorder.outputDir, `camera.${extension}`)
   cameraStream = createWriteStream(path)
   cameraMeta = { path, startWallClock: info.startWallClock, mimeType: info.mimeType }
   // Persist the sync point so the take survives being reopened later.
@@ -587,15 +588,18 @@ async function loadTake(dir: string): Promise<RecordingResult> {
 
   // The camera sidecar carries the wall-clock start the editor needs to line
   // the two tracks up; without it a reopened take would lose its camera.
+  // Older takes recorded WebM; newer ones record MP4.
   let camera: RecordingResult['camera'] = null
-  const cameraPath = join(dir, 'camera.webm')
-  if (existsSync(cameraPath)) {
+  const cameraPath = ['camera.mp4', 'camera.webm']
+    .map((name) => join(dir, name))
+    .find((candidate) => existsSync(candidate))
+  if (cameraPath) {
     try {
       const sidecar = JSON.parse(await readFile(join(dir, 'camera.json'), 'utf8'))
       camera = { ...sidecar, path: cameraPath }
     } catch {
       // No sidecar: assume it starts with the screen track.
-      camera = { path: cameraPath, startWallClock: meta.startWallClock, mimeType: 'video/webm' }
+      camera = { path: cameraPath, startWallClock: meta.startWallClock, mimeType: 'video/mp4' }
     }
   }
 

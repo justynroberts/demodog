@@ -80,6 +80,10 @@ class DecodingFrameSource implements FrameSource {
   private current: QueuedFrame | null = null
   private flushed = false
   private decoded = 0
+  /** How many decoded frames have been handed out, in presentation order. */
+  private emitted = 0
+  /** Presentation time of every frame, in seconds from the track start. */
+  private times: number[] = []
   private baseTime = 0
   private heartbeat: ReturnType<typeof setInterval> | null = null
   private failure: unknown = null
@@ -244,35 +248,62 @@ class DecodingFrameSource implements FrameSource {
   private adopt(): CanvasImageSource {
     this.current?.frame.close()
     this.current = this.queue.shift()!
+    this.emitted++
     return this.current.frame
+  }
+
+  /**
+   * Index of the last frame whose presentation time has arrived by `t`.
+   *
+   * The sample table already carries every frame's time, so which frame belongs
+   * at `t` is known up front. The previous implementation tried to infer it by
+   * peeking at the *next* decoded frame, which needed two frames in hand to
+   * decide anything and deadlocked against the queue cap that limits how many
+   * frames may be held.
+   */
+  private indexAt(t: number): number {
+    const times = this.times
+    if (t <= times[0]) return 0
+    let lo = 0
+    let hi = times.length - 1
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1
+      if (times[mid] <= t) lo = mid
+      else hi = mid - 1
+    }
+    return lo
   }
 
   async frameAt(t: number): Promise<CanvasImageSource | null> {
     if (this.failure) throw this.failure
+    // The camera track starts after the screen's, so it is asked for negative
+    // times before it is due.
+    if (t < 0) return null
 
+    const wanted = this.indexAt(t)
+    // Already holding it: the common case, since output frame rates are
+    // usually a multiple of the source rate.
+    if (this.current && this.emitted - 1 === wanted) return this.current.frame
+    // Asking backwards would mean re-decoding from the start; the exporter only
+    // ever moves forwards, so hold what we have.
+    if (this.current && this.emitted - 1 > wanted) return this.current.frame
 
     for (;;) {
       if (this.failure) throw this.failure
       this.pump()
 
-      // Advance past any frame that the following one has already superseded.
-      while (this.queue.length >= 2 && this.queue[1].start <= t) this.adopt()
+      // Take everything decoded so far, up to the frame we actually want.
+      while (this.queue.length > 0 && this.emitted - 1 < wanted) this.adopt()
+      if (this.emitted - 1 >= wanted) return this.current?.frame ?? null
 
-      // With a successor in hand we know where the head frame stops being
-      // current, so the decision can be made without waiting for more.
-      if (this.queue.length >= 2) {
-        if (this.queue[0].start <= t) return this.adopt()
-        return this.current?.frame ?? this.adopt()
-      }
-
-      const drained = this.next >= this.samples.length && this.next - this.decoded <= 0
-      if (drained) {
+      const exhausted = this.next >= this.samples.length && this.decoded >= this.samples.length
+      if (exhausted) {
         if (!this.flushed) {
           this.flushed = true
           await this.decoder.flush().catch(() => undefined)
           continue
         }
-        if (this.queue.length === 1) return this.adopt()
+        while (this.queue.length > 0) this.adopt()
         return this.current?.frame ?? null
       }
 

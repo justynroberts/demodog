@@ -160,57 +160,46 @@ Chromium throttles hidden windows, which would stall a `MediaRecorder`.
 process, so its own pid is not the one that matters — Electron passes
 `--exclude-pids` with its pid.
 
-**Export is correct but slow** — about 3.6 output frames per second, so a ten
-minute recording takes roughly three hours. Measured breakdown, from a real take:
+**Export decodes sequentially.** Export renders strictly forwards, so seeking
+the source once per output frame was pure waste: each seek threw the decoder
+back to the previous keyframe and re-decoded the whole group of pictures, about
+sixty frames of 2880x1800 for every frame written. Measured on one take:
 
-    180 frames in 50.4s — screen seek 38.8s, camera seek 11.4s,
-                          render 0.1s, encode 0.0s
-
-Rendering and encoding are free. It is entirely `SeekingFrameSource`: setting
-`currentTime` per output frame forces the decoder back to the previous keyframe
-and re-decodes the whole group of pictures, roughly sixty frames of 2880x1800
-for every frame written.
-
-Measured alternatives, on the same take, so these do not need re-testing:
-
-| Change | Speed | Cost |
+| | before | after |
 |---|---|---|
-| Keyframes every 12 frames | 11.6 fps | recording grows 25 → 214 MB/min |
-| All intra | 16.7 fps | 177 MB for 26 seconds |
+| throughput | 3.6 fps | **203 fps** |
+| screen decode | 38.8s | 0.1s |
+| camera decode | 11.4s | 0.0s |
 
-Both were rejected: screen content compresses to almost nothing between
-keyframes, so buying speed with keyframes costs an unreasonable amount of disk,
-and neither helps the camera track, which is now a comparable share of the time.
+A 26 second take now exports in under eight seconds. What remains is encoder
+drain, which is the encoder doing its job.
 
-**The real fix is `DecodingFrameSource`** — sequential WebCodecs decoding, which
-makes keyframe spacing irrelevant for both tracks. It is behind
-`SEQUENTIAL_DECODE` in `export.ts` and **still does not work**. Bugs found and
-fixed so far, all real:
+Getting `DecodingFrameSource` working took several wrong turns, all of which are
+easy to repeat:
 
 - `setExtractionOptions` must be called after `onReady` and before `flush()`,
   with the file created `keepMdatData`, or mp4box returns zero samples.
-- `VideoFrame.duration` is frequently null, so a frame's coverage must come from
-  the *next* frame's timestamp.
+- `VideoFrame.duration` is frequently null.
 - The first sample's PTS is not zero; `video.currentTime` is normalised against
   the track start but raw decoder timestamps are not.
 - `sample.data` is a view into a buffer mp4box recycles, so chunks must copy it.
-- The in-flight chunk window must exceed the codec's reorder depth (16 for H.264
-  High) or the decoder waits for input while we wait for frames, but the decoded
-  *frame* queue must stay small — a few dozen 2880x1800 surfaces is hundreds of
-  megabytes of GPU memory and stalls the pipeline.
+- The in-flight *chunk* window must exceed the codec's reorder depth — H.264
+  High holds 16 frames in its DPB and emits nothing until it can resolve
+  presentation order — while the decoded *frame* queue must stay small, because
+  a few dozen 2880x1800 surfaces is hundreds of megabytes of GPU memory.
 
-**What remains.** With a 32-chunk window and an 8-frame queue the decoder is
-healthy — `fed 33, decoded 24, queued 24, decoderQueue 0, state configured` —
-but `frameAt` is entered exactly once, spins while the queue is empty, and never
-returns once frames arrive. The fault is in the read loop, not the decoder. Add
-tracing inside `frameAt` around the queue-length branches and watch what it does
-on the iteration where `queue.length` first reaches two.
+**The one that actually mattered**, and the reason it stalled for so long: the
+reader tried to work out which frame belonged at time `t` by peeking at the
+*next* decoded frame. That needs two frames in hand to decide anything, which
+deadlocks against the very queue cap that stops frames piling up. The sample
+table already carries every frame's presentation time, so `indexAt` resolves the
+wanted frame from `t` directly and the reader simply pulls until it has that
+many. No lookahead, no deadlock.
 
-An alternative worth considering instead: drive export from `video.play()` plus
-`requestVideoFrameCallback`, rendering each presented frame at its own
-`mediaTime`. That never seeks, so a ten minute take exports in about ten
-minutes, and it needs no demuxer. It makes the output variable-frame-rate and
-depends on the window staying visible, since presentation throttles when hidden.
+**The camera is recorded as MP4** for the same reason. A MediaRecorder WebM can
+only be seeked, and seeking it once per output frame was the largest single cost
+once the screen was fixed. Older WebM takes still work — `openFrameSource` falls
+back to seeking for any container the demuxer cannot read.
 
 Use `DEMODOG_BENCH` to measure any of this — it exports headlessly, without
 stealing focus:
