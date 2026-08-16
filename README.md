@@ -23,8 +23,9 @@ and your camera in the corner.
 Download the latest **`DemoDog-<version>-arm64.dmg`** from
 [Releases](../../releases), open it, and drag DemoDog to Applications.
 
-The app is not yet signed with an Apple Developer ID, so macOS will refuse to
-open it the usual way. The first time only:
+The app is signed with an Apple Developer ID but not yet notarised, so
+Gatekeeper still refuses a plain double-click and says Apple cannot check it for
+malicious software. The first time only:
 
 > **Right-click DemoDog → Open → Open**
 
