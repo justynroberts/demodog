@@ -12,11 +12,6 @@ import type { CaptureMeta, RawEvent } from '../../../shared/types'
  * The camera maps a *viewport* rect in source space onto the content rect.
  */
 
-export interface Vec2 {
-  x: number
-  y: number
-}
-
 export interface Rect {
   x: number
   y: number
@@ -203,18 +198,6 @@ export interface PipSettings {
   offsetY: number
 }
 
-// ---------------------------------------------------------------------------
-// Timeline
-// ---------------------------------------------------------------------------
-
-export interface TimelineClip {
-  /** Source-time bounds of the retained region, in seconds. */
-  start: number
-  end: number
-  /** Playback rate; >1 speeds the region up. */
-  speed: number
-}
-
 /** Fade to black at the start and end of the exported range. */
 export interface FadeSettings {
   /** Seconds; 0 disables. */
@@ -238,7 +221,6 @@ export interface Project {
   pip: PipSettings
   keystrokes: KeystrokeSettings
   fade: FadeSettings
-  clips: TimelineClip[]
   audio: { systemGain: number; micGain: number }
 }
 

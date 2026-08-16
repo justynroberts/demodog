@@ -154,9 +154,34 @@ export function defaultProject(
     keystrokes: { enabled: false, position: 'bottom', duration: 1.4 },
     // Short enough to read as polish rather than as a transition.
     fade: { in: 0.4, out: 0.6 },
-    clips: [],
     audio: { systemGain: 1, micGain: 1 }
   }
+}
+
+/**
+ * Merges saved settings over the current defaults, key by key.
+ *
+ * A profile is JSON written by whatever version of the app saved it. Spreading
+ * it wholesale replaces entire sections, so any setting added later arrives as
+ * `undefined` — which is not a cosmetic problem: a missing `openingHold` makes
+ * every zoom segment start at NaN and silently disappear. Merging means an old
+ * profile simply inherits the new defaults for anything it has never heard of.
+ */
+export function mergeSettings<T>(base: T, saved: unknown): T {
+  if (!isPlainObject(base) || !isPlainObject(saved)) {
+    return saved === undefined ? base : (saved as T)
+  }
+  const out: Record<string, unknown> = { ...base }
+  for (const [key, value] of Object.entries(saved)) {
+    // Only adopt keys the current version actually knows about.
+    if (!(key in out)) continue
+    out[key] = mergeSettings(out[key], value)
+  }
+  return out as T
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export const OUTPUT_PRESETS: { id: string; name: string; width: number; height: number }[] = [

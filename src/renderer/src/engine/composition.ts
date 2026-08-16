@@ -656,8 +656,20 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
  */
 const backgroundImages = new Map<string, HTMLImageElement>()
 
+/**
+ * Backgrounds may only come from a take's own media or an inline data URI.
+ *
+ * Profiles are JSON on disk and are spread straight into the project, so an
+ * edited one could otherwise set the background to a remote URL and have every
+ * render quietly phone home.
+ */
+function isPermittedImageSource(src: string): boolean {
+  return src.startsWith('rec://') || src.startsWith('data:image/')
+}
+
 function getBackgroundImage(src: string): HTMLImageElement | null {
   if (typeof Image === 'undefined') return null
+  if (!isPermittedImageSource(src)) return null
   let image = backgroundImages.get(src)
   if (!image) {
     image = new Image()

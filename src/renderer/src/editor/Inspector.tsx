@@ -1,7 +1,7 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { useEffect, useState, type ReactNode } from 'react'
 import { api } from '../api'
-import { BACKGROUND_PRESETS, OUTPUT_PRESETS } from '../engine/defaults'
+import { BACKGROUND_PRESETS, OUTPUT_PRESETS, mergeSettings } from '../engine/defaults'
 import { Group, Segmented, Slider, Toggle } from '../ui/controls'
 import type { CursorSettings, Project, Recording, ZoomSegment } from '../engine/types'
 import type { Profile } from '../../../shared/types'
@@ -35,6 +35,9 @@ interface Props {
   recording: Recording
   cameraSync: number
   onCameraSync: (v: number) => void
+  /** Which look profile is currently applied, owned by the editor. */
+  profileId: string
+  onProfileId: (id: string) => void
 }
 
 type Tab = 'style' | 'zoom' | 'cursor' | 'camera'
@@ -69,7 +72,9 @@ export default function Inspector(props: Props): ReactNode {
             patch={patch}
             // Applied in one update; setting each key in turn would read stale
             // state and only the last change would survive.
-            applyProfile={(settings) => onChange({ ...project, ...settings })}
+            applyProfile={(settings) => onChange(mergeSettings(project, settings))}
+            profileId={props.profileId}
+            onProfileId={props.onProfileId}
           />
         )}
         {tab === 'zoom' && <ZoomTab {...props} patch={patch} />}
@@ -91,18 +96,28 @@ type Patcher = <K extends keyof Project>(key: K, value: Partial<Project[K]>) => 
  */
 function Profiles({
   project,
-  onApply
+  onApply,
+  selected,
+  onSelected
 }: {
   project: Project
   onApply: (settings: Partial<Project>) => void
+  selected: string
+  onSelected: (id: string) => void
 }): ReactNode {
   const [profiles, setProfiles] = useState<Profile[]>([])
-  const [selected, setSelected] = useState('')
   const [name, setName] = useState('')
 
   useEffect(() => {
     void api.listProfiles().then(setProfiles)
   }, [])
+
+  // The editor may have applied the default before this tab was ever opened,
+  // so adopt its name rather than showing an empty field over a live profile.
+  useEffect(() => {
+    const active = profiles.find((p) => p.id === selected)
+    if (active) setName(active.name)
+  }, [profiles, selected])
 
   const current = profiles.find((p) => p.id === selected) ?? null
 
@@ -124,11 +139,11 @@ function Profiles({
       settings: extractProfileSettings(project)
     }
     setProfiles(await api.saveProfile(profile))
-    setSelected(profile.id)
+    onSelected(profile.id)
   }
 
   const apply = (id: string): void => {
-    setSelected(id)
+    onSelected(id)
     const profile = profiles.find((p) => p.id === id)
     setName(profile?.name ?? '')
     if (profile) onApply(profile.settings as Partial<Project>)
@@ -142,7 +157,7 @@ function Profiles({
   const remove = async (): Promise<void> => {
     if (!current) return
     setProfiles(await api.deleteProfile(current.id))
-    setSelected('')
+    onSelected('')
     setName('')
   }
 
@@ -208,18 +223,27 @@ function StyleTab({
   project,
   set,
   patch,
-  applyProfile
+  applyProfile,
+  profileId,
+  onProfileId
 }: {
   project: Project
   set: Setter
   patch: Patcher
   applyProfile: (settings: Partial<Project>) => void
+  profileId: string
+  onProfileId: (id: string) => void
 }): ReactNode {
   const { frame, background, output } = project
 
   return (
     <>
-      <Profiles project={project} onApply={applyProfile} />
+      <Profiles
+        project={project}
+        onApply={applyProfile}
+        selected={profileId}
+        onSelected={onProfileId}
+      />
 
       <Group title="Background">
         <div className="swatches">

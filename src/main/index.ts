@@ -7,13 +7,14 @@ import {
   protocol,
   net,
   dialog,
+  session,
   shell,
   screen,
   globalShortcut
 } from 'electron'
-import { join, dirname } from 'node:path'
-import { pathToFileURL, fileURLToPath } from 'node:url'
-import { mkdir, writeFile, appendFile, readFile } from 'node:fs/promises'
+import { join, resolve as resolvePath, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { mkdir, writeFile, readFile } from 'node:fs/promises'
 import { createWriteStream, existsSync, WriteStream } from 'node:fs'
 import {
   RecorderProcess,
@@ -70,6 +71,37 @@ let markBarReady: () => void = () => {}
 
 const isDev = !app.isPackaged
 
+/**
+ * Directories the `rec:` scheme is allowed to serve from.
+ *
+ * The scheme exists to stream a take's own media into the renderer. Without a
+ * boundary it will serve *any* path the user can read, which turns any script
+ * running in the renderer — an injected string, a compromised font host — into
+ * an arbitrary file read. Seeded with the recordings folder and extended only
+ * by paths the user has explicitly chosen through a dialog.
+ */
+const mediaRoots = new Set<string>()
+
+function allowMediaPath(target: string): void {
+  mediaRoots.add(resolvePath(target))
+}
+
+function isMediaPathAllowed(target: string): boolean {
+  const candidate = resolvePath(target)
+  for (const root of mediaRoots) {
+    if (candidate === root || candidate.startsWith(root + sep)) return true
+  }
+  return false
+}
+
+/**
+ * Paths the user picked in our own save dialog.
+ *
+ * `file:write` takes a path from the renderer, so without this it is an
+ * arbitrary file write. Membership is consumed on use.
+ */
+const permittedWrites = new Set<string>()
+
 function rendererURL(hash: string): string {
   const devServer = process.env['ELECTRON_RENDERER_URL']
   if (isDev && devServer) return `${devServer}#${hash}`
@@ -96,7 +128,12 @@ function createSplashWindow(): void {
     skipTaskbar: true,
     focusable: false,
     show: false,
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
   })
   splashWindow.once('ready-to-show', () => {
     splashShownAt = Date.now()
@@ -132,7 +169,11 @@ function createStudioWindow(): void {
     trafficLightPosition: { x: 18, y: 22 },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      // The preload only uses contextBridge and ipcRenderer, both of which
+      // work in a sandboxed renderer.
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
     }
   })
 
@@ -196,7 +237,11 @@ function createBarWindow(): BrowserWindow {
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      // The preload only uses contextBridge and ipcRenderer, both of which
+      // work in a sandboxed renderer.
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
     }
   })
 
@@ -240,7 +285,12 @@ async function runCountdown(seconds: number, displayId?: number): Promise<void> 
     skipTaskbar: true,
     focusable: false,
     show: false,
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
   })
 
   // Never intercept clicks — the user may want to arrange things while it runs.
@@ -267,16 +317,50 @@ function recordingDir(): string {
 }
 
 app.whenReady().then(() => {
+  // Everything DemoDog records lives here, so this is the default boundary.
+  allowMediaPath(join(app.getPath('videos'), 'DemoDog'))
+
   protocol.handle('rec', (request) => {
-    // rec://local/<absolute path> — serve straight off disk, with the range
-    // support that net.fetch gives us for free.
+    // rec://local/<absolute path> — served off disk, with the range support
+    // that net.fetch gives us for free, but only from an allowed root.
     const url = new URL(request.url)
     const filePath = decodeURIComponent(url.pathname)
+    if (!isMediaPathAllowed(filePath)) {
+      console.warn(`[rec] refused ${filePath}: outside the permitted media roots`)
+      return new Response('Forbidden', { status: 403 })
+    }
     return net.fetch(pathToFileURL(filePath).toString(), {
       headers: request.headers,
       method: request.method
     })
   })
+
+  // Lock the packaged renderer down. This is not applied in development
+  // because Vite's dev server needs inline scripts and a websocket.
+  if (app.isPackaged) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            [
+              "default-src 'self'",
+              "script-src 'self'",
+              // React and this app both set style attributes directly.
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com",
+              "img-src 'self' data: blob: rec:",
+              "media-src 'self' blob: rec:",
+              "connect-src 'self' data: blob: rec:",
+              "object-src 'none'",
+              "base-uri 'none'",
+              "frame-src 'none'"
+            ].join('; ')
+          ]
+        }
+      })
+    })
+  }
 
   // A helper stranded by a crash or a dev reload will break every later
   // capture, so clear them out before the first recording can be started.
@@ -457,21 +541,44 @@ ipcMain.handle(
       defaultPath: options.defaultPath,
       filters: options.filters
     })
-    return result.canceled ? null : result.filePath
+    if (result.canceled || !result.filePath) return null
+    permittedWrites.add(resolvePath(result.filePath))
+    return result.filePath
   }
 )
 
 ipcMain.handle('file:write', async (_e, path: string, data: ArrayBuffer) => {
-  await writeFile(path, Buffer.from(data))
-  return path
+  // Only ever write somewhere the user chose in our own save dialog.
+  const target = resolvePath(path)
+  if (!permittedWrites.has(target)) {
+    throw new Error('refusing to write to a path the user did not choose')
+  }
+  permittedWrites.delete(target)
+  await writeFile(target, Buffer.from(data))
+  return target
 })
 
 ipcMain.handle('app:version', () => app.getVersion())
 ipcMain.handle('shell:reveal', (_e, path: string) => shell.showItemInFolder(path))
-ipcMain.handle('shell:open-external', (_e, url: string) => shell.openExternal(url))
+ipcMain.handle('shell:open-external', (_e, url: string) => {
+  // Anything but the web means handing an arbitrary scheme to the OS.
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    console.warn(`[shell] refused to open ${parsed.protocol} URL`)
+    return
+  }
+  return shell.openExternal(parsed.toString())
+})
 
 /** Loads a take directory from disk into the shape the editor expects. */
 async function loadTake(dir: string): Promise<RecordingResult> {
+  // Opened deliberately by the user, so its media may be streamed.
+  allowMediaPath(dir)
   const meta = JSON.parse(await readFile(join(dir, 'meta.json'), 'utf8')) as CaptureMeta
   const events: RawEvent[] = (await readFile(join(dir, 'events.jsonl'), 'utf8'))
     .split('\n')
@@ -566,7 +673,10 @@ ipcMain.handle('dialog:image', async (): Promise<string | null> => {
     title: 'Choose a background image',
     filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'heic', 'gif'] }]
   })
-  return result.canceled ? null : (result.filePaths[0] ?? null)
+  if (result.canceled || !result.filePaths[0]) return null
+  // Picked deliberately by the user, so it may be loaded as a background.
+  allowMediaPath(result.filePaths[0])
+  return result.filePaths[0]
 })
 
 // --- Profiles: named look-and-feel presets, stored beside the app's data ----

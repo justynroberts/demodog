@@ -30,8 +30,6 @@ interface ShapeDef {
   path: (ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D) => void
   /** Hotspot offset from the drawing origin, in authoring units. */
   hotspot: { x: number; y: number }
-  /** Filled black with a white keyline (true) or stroked only (false). */
-  solid: boolean
 }
 
 function poly(
@@ -47,7 +45,6 @@ function poly(
 const SHAPES: Record<CursorShape, ShapeDef> = {
   arrow: {
     hotspot: { x: 0, y: 0 },
-    solid: true,
     path: (ctx) =>
       poly(ctx, [
         [0, 0],
@@ -62,7 +59,6 @@ const SHAPES: Record<CursorShape, ShapeDef> = {
 
   pointingHand: {
     hotspot: { x: 5.5, y: 0 },
-    solid: true,
     path: (ctx) => {
       // Index finger raised over a closed fist.
       ctx.beginPath()
@@ -93,7 +89,6 @@ const SHAPES: Record<CursorShape, ShapeDef> = {
 
   iBeam: {
     hotspot: { x: 4, y: 11 },
-    solid: true,
     path: (ctx) => {
       ctx.beginPath()
       // Vertical bar with serifs top and bottom.
@@ -105,7 +100,6 @@ const SHAPES: Record<CursorShape, ShapeDef> = {
 
   resizeLeftRight: {
     hotspot: { x: 11, y: 8 },
-    solid: true,
     path: (ctx) =>
       poly(ctx, [
         [0, 8.0],
@@ -123,7 +117,6 @@ const SHAPES: Record<CursorShape, ShapeDef> = {
 
   resizeUpDown: {
     hotspot: { x: 8, y: 11 },
-    solid: true,
     path: (ctx) =>
       poly(ctx, [
         [8.0, 0],
@@ -141,7 +134,6 @@ const SHAPES: Record<CursorShape, ShapeDef> = {
 
   crosshair: {
     hotspot: { x: 11, y: 11 },
-    solid: true,
     path: (ctx) => {
       ctx.beginPath()
       ctx.rect(10.1, 0, 1.8, 8.2)
@@ -153,7 +145,6 @@ const SHAPES: Record<CursorShape, ShapeDef> = {
 
   openHand: {
     hotspot: { x: 11, y: 11 },
-    solid: true,
     path: (ctx) => {
       ctx.beginPath()
       ctx.moveTo(2.6, 14.4)
@@ -180,7 +171,6 @@ const SHAPES: Record<CursorShape, ShapeDef> = {
 
   closedHand: {
     hotspot: { x: 11, y: 11 },
-    solid: true,
     path: (ctx) => {
       ctx.beginPath()
       ctx.moveTo(3.4, 13.6)

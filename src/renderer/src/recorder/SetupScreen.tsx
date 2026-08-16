@@ -46,6 +46,10 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
   const [keystrokes, setKeystrokes] = useState(false)
   const [countdown, setCountdown] = useState(3)
 
+  // Device enumeration needs a getUserMedia probe and finishes well after the
+  // source list. Applying a preset before it lands resolves the saved camera
+  // and microphone to nothing at all.
+  const [devicesReady, setDevicesReady] = useState(false)
   const [presets, setPresets] = useState<CapturePreset[]>([])
   const [presetId, setPresetId] = useState('')
   const [presetName, setPresetName] = useState('')
@@ -107,6 +111,7 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
       const devices = await navigator.mediaDevices.enumerateDevices()
       setCameras(devices.filter((d) => d.kind === 'videoinput'))
       setMics(devices.filter((d) => d.kind === 'audioinput'))
+      setDevicesReady(true)
     }
     void load()
   }, [])
@@ -134,8 +139,19 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
     setSystemAudio(preset.systemAudio)
     setKeystrokes(preset.keystrokes)
     setCountdown(preset.countdown)
-    setCameraId(resolveDevice(preset.camera, cameras))
-    setMicId(resolveDevice(preset.mic, mics))
+    const camera = resolveDevice(preset.camera, cameras)
+    const mic = resolveDevice(preset.mic, mics)
+    setCameraId(camera)
+    setMicId(mic)
+
+    const missing: string[] = []
+    if (preset.camera && !camera) missing.push(`camera “${preset.camera.label || 'saved'}”`)
+    if (preset.mic && !mic) missing.push(`microphone “${preset.mic.label || 'saved'}”`)
+    setError(
+      missing.length
+        ? `Preset “${preset.name}” refers to a ${missing.join(' and a ')} that is not connected.`
+        : null
+    )
 
     if (!sources) return
     if (preset.source.kind === 'display') {
@@ -159,15 +175,16 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
     }
   }
 
-  // Apply the starred preset once, after devices and sources have both arrived.
+  // Apply the starred preset once, and only once everything it refers to has
+  // actually loaded.
   useEffect(() => {
     if (appliedDefault.current) return
-    if (!sources || presets.length === 0) return
+    if (!sources || !devicesReady || presets.length === 0) return
     const preferred = presets.find((p) => p.isDefault)
     if (!preferred) return
     appliedDefault.current = true
     applyPreset(preferred)
-  }, [sources, presets, cameras, mics])
+  }, [sources, devicesReady, presets, cameras, mics])
 
   const currentPreset = presets.find((p) => p.id === presetId) ?? null
 

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { api } from '../api'
 import { Composition } from '../engine/composition'
 import { generateSegments } from '../engine/autozoom'
-import { defaultProject } from '../engine/defaults'
+import { defaultProject, mergeSettings } from '../engine/defaults'
 import { exportMP4 } from '../engine/export'
 import type { Project, Recording, ZoomSegment } from '../engine/types'
 import { fadeAlphaAt } from '../engine/composition'
@@ -33,6 +33,9 @@ export default function Editor({
     end: recording.duration
   })
   const [exporting, setExporting] = useState<{ fraction: number; stage: string } | null>(null)
+  // Held here rather than in the inspector: the inspector's tabs unmount, and a
+  // profile must not be re-applied over the user's edits when they come back.
+  const [profileId, setProfileId] = useState('')
 
   const screenRef = useRef<HTMLVideoElement>(null)
   const cameraRef = useRef<HTMLVideoElement>(null)
@@ -51,7 +54,10 @@ export default function Editor({
   useEffect(() => {
     void api.listProfiles().then((profiles) => {
       const preferred = profiles.find((p) => p.isDefault)
-      if (preferred) setProject((current) => ({ ...current, ...(preferred.settings as object) }))
+      if (!preferred) return
+      setProject((current) => mergeSettings(current, preferred.settings))
+      // Select it too, so saving updates this profile instead of making a copy.
+      setProfileId(preferred.id)
     })
   }, [recording])
 
@@ -478,6 +484,8 @@ export default function Editor({
         recording={recording}
         cameraSync={cameraSync}
         onCameraSync={setCameraSync}
+        profileId={profileId}
+        onProfileId={setProfileId}
       />
     </div>
   )

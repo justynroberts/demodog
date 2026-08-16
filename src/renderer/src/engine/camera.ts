@@ -55,9 +55,9 @@ export class CameraSolver {
 
   constructor(
     private segments: ZoomSegment[],
-    private settings: ZoomSettings,
+    settings: ZoomSettings,
     private track: CursorTrack | null,
-    private source: { width: number; height: number },
+    source: { width: number; height: number },
     aspect: number
   ) {
     this.base = baseViewport(source, aspect)
