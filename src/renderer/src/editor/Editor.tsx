@@ -6,6 +6,7 @@ import { generateSegments } from '../engine/autozoom'
 import { defaultProject } from '../engine/defaults'
 import { exportMP4 } from '../engine/export'
 import type { Project, Recording, ZoomSegment } from '../engine/types'
+import { fadeAlphaAt } from '../engine/composition'
 import { formatTime } from '../ui/controls'
 import Timeline from './Timeline'
 import Inspector from './Inspector'
@@ -101,6 +102,25 @@ export default function Editor({
     }
   }, [playing, seek, trim, recording, cameraSync])
 
+  // Whatever stopped playback — the end of the trim, the end of the file, or
+  // the user — nothing should still be running. Without this the camera and its
+  // audio carried on after the screen had finished, because the end-of-range
+  // check never fired when the file was a hair shorter than the trim.
+  useEffect(() => {
+    if (playing) return
+    screenRef.current?.pause()
+    cameraRef.current?.pause()
+  }, [playing])
+
+  // The screen element can reach its own end before the trim does.
+  useEffect(() => {
+    const screen = screenRef.current
+    if (!screen) return
+    const onEnded = (): void => setPlaying(false)
+    screen.addEventListener('ended', onEnded)
+    return () => screen.removeEventListener('ended', onEnded)
+  }, [recording])
+
   // ---- draw loop ---------------------------------------------------------
 
   useEffect(() => {
@@ -147,6 +167,8 @@ export default function Editor({
       }
 
       const camera = cameraRef.current
+      // Fades are relative to the trimmed range, not the raw recording.
+      composition.range = trim
       composition.render(ctx, timeRef.current, {
         screen,
         camera: camera && camera.readyState >= 2 ? camera : null,
@@ -169,10 +191,28 @@ export default function Editor({
     if (cameraRef.current) cameraRef.current.volume = clamp(project.audio.micGain)
   }, [project.audio.systemGain, project.audio.micGain, recording])
 
+  // Audio follows the visual fade during playback, so a faded-out ending is
+  // silent rather than cut off.
+  useEffect(() => {
+    if (!playing) return
+    const clamp = (v: number): number => Math.min(1, Math.max(0, v))
+    const id = setInterval(() => {
+      const level = 1 - fadeAlphaAt(timeRef.current, trim, project.fade)
+      if (screenRef.current) {
+        screenRef.current.volume = clamp(project.audio.systemGain) * level
+      }
+      if (cameraRef.current) cameraRef.current.volume = clamp(project.audio.micGain) * level
+    }, 50)
+    return () => clearInterval(id)
+  }, [playing, trim, project.fade, project.audio.systemGain, project.audio.micGain])
+
   // ---- keyboard ----------------------------------------------------------
   // Declared after runExport below; hoisted via the ref so the handler always
   // calls the current one.
   const exportRef = useRef<() => Promise<void>>(async () => {})
+  // Read inside the key handler, which is registered once.
+  const selectedRef = useRef<string | null>(null)
+  selectedRef.current = selected
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -185,6 +225,11 @@ export default function Editor({
         seek(timeRef.current - (event.shiftKey ? 1 : 1 / project.output.fps))
       } else if (event.code === 'ArrowRight') {
         seek(timeRef.current + (event.shiftKey ? 1 : 1 / project.output.fps))
+      } else if (event.code === 'Backspace' || event.code === 'Delete') {
+        if (!selectedRef.current) return
+        event.preventDefault()
+        setSegments((current) => current.filter((s) => s.id !== selectedRef.current))
+        setSelected(null)
       } else if (event.code === 'KeyE' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault()
         void exportRef.current()
@@ -207,6 +252,7 @@ export default function Editor({
     setExporting({ fraction: 0, stage: 'Starting' })
 
     try {
+      composition.range = trim
       const result = await exportMP4({
         composition,
         screenURL: recording.screenURL,

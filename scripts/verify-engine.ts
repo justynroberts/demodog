@@ -141,6 +141,25 @@ check(
 )
 check('no twitch-length shots', shortest >= 1.2, `shortest ${shortest.toFixed(2)}s`)
 
+// Handing over between two shots must not sag towards 1x: pulling out and
+// pushing back in on nearby content is the thing that reads as twitchy.
+let worstSag = 0
+for (let i = 1; i < calm.length; i++) {
+  const prev = calm[i - 1]
+  const next = calm[i]
+  if (next.start >= prev.end) continue
+  let low = Infinity
+  for (let t = next.start; t <= prev.end; t += 1 / 60) {
+    low = Math.min(low, calmSolver.at(t).scale)
+  }
+  worstSag = Math.max(worstSag, 1 - low / Math.min(prev.scale, next.scale))
+}
+check(
+  'holds the zoom across handovers',
+  worstSag < 0.05,
+  `worst sag ${Math.round(worstSag * 100)}%`
+)
+
 // ---------------------------------------------------------------------------
 console.log('\nCursor smoothing')
 const rawAt = (t: number): { x: number; y: number } => {

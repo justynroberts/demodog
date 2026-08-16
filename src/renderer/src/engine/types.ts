@@ -125,6 +125,18 @@ export interface ZoomSettings {
 
 export interface CursorSettings {
   visible: boolean
+  /**
+   * Pointer colouring. macOS ships a black pointer with a white keyline; the
+   * inverse reads better over dark UI, and 'accent' tints it to the click
+   * colour for highlight-style videos.
+   */
+  style: 'dark' | 'light' | 'accent'
+  /**
+   * Which pointer to draw. 'auto' follows what the recorder detected, but Apple
+   * has deprecated the only API that reports the system cursor, so in practice
+   * that is nearly always an arrow — hence the override.
+   */
+  shape: 'auto' | 'arrow' | 'pointingHand' | 'iBeam' | 'crosshair' | 'resizeLeftRight'
   /** 1 = true recorded size at output scale. */
   size: number
   /** 0 = raw recorded path, 1 = heavily smoothed glide. */
@@ -193,6 +205,13 @@ export interface TimelineClip {
   speed: number
 }
 
+/** Fade to black at the start and end of the exported range. */
+export interface FadeSettings {
+  /** Seconds; 0 disables. */
+  in: number
+  out: number
+}
+
 export interface KeystrokeSettings {
   enabled: boolean
   position: 'bottom' | 'top'
@@ -208,6 +227,7 @@ export interface Project {
   cursor: CursorSettings
   pip: PipSettings
   keystrokes: KeystrokeSettings
+  fade: FadeSettings
   clips: TimelineClip[]
   audio: { systemGain: number; micGain: number }
 }

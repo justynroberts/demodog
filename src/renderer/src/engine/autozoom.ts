@@ -87,7 +87,7 @@ export function generateSegments(
     })
   }
 
-  return stitchSegments(segments, settings.bridgeGap)
+  return stitchSegments(segments, settings.bridgeGap, source)
 }
 
 function collectMoments(
@@ -282,28 +282,86 @@ function cluster(
  *    the earlier segment to meet the next keeps the zoom held and turns the
  *    transition into a pan, which is what makes the result feel deliberate.
  */
-function stitchSegments(segments: ZoomSegment[], bridgeGap: number): ZoomSegment[] {
-  const CROSSFADE = 0.3
-  // A shot shorter than its own ramps never settles — it reads as a twitch
-  // rather than a move, so it is better not to make it at all.
+/**
+ * Are two shots looking at roughly the same thing?
+ *
+ * Judged against the viewport they are framed at, not in absolute pixels: two
+ * anchors 300px apart are the same shot at 1.3x and quite different at 3x.
+ */
+function sameArea(
+  a: ZoomSegment,
+  b: ZoomSegment,
+  source: { width: number; height: number }
+): boolean {
+  const scale = Math.min(a.scale, b.scale)
+  const viewW = source.width / scale
+  const viewH = source.height / scale
+  return Math.abs(a.x - b.x) < viewW * 0.3 && Math.abs(a.y - b.y) < viewH * 0.3
+}
+
+/**
+ * Joins neighbouring shots so the camera stops bouncing.
+ *
+ * Three things happen here, in order of how much they matter:
+ *
+ *  * **Shots on the same area are fused.** Releasing a zoom and re-acquiring it
+ *    on essentially the same spot is the most obviously wrong thing the camera
+ *    can do. Fusing is only safe because `sameArea` has already established the
+ *    anchors are close — merging distant ones produces a wide shot centred on
+ *    nothing, which is why it is not done unconditionally.
+ *  * **Short gaps elsewhere are bridged with an aligned crossfade.** The ramps
+ *    are given a common duration and made to start together, which matters:
+ *    the envelope is a smootherstep, and `S(x) + S(1-x) === 1` exactly, so
+ *    matched ramps sum to full weight throughout. Mismatched ones dip in the
+ *    middle, and that dip is visible as a pulse out and back in.
+ *  * **Overlaps are trimmed, never fused**, for the same reason as above.
+ */
+function stitchSegments(
+  segments: ZoomSegment[],
+  bridgeGap: number,
+  source: { width: number; height: number }
+): ZoomSegment[] {
   const MIN_LENGTH = 1.2
+  const MIN_OVERLAP = 0.35
 
   const out: ZoomSegment[] = []
   for (const segment of segments) {
     const prev = out[out.length - 1]
+
     if (prev) {
       const gap = segment.start - prev.end
-      if (gap < 0) {
-        prev.end = Math.max(prev.start + MIN_LENGTH, segment.start + CROSSFADE)
-      } else if (gap < bridgeGap) {
-        // Hold the zoom across the gap rather than releasing and re-acquiring.
-        prev.end = segment.start + CROSSFADE
+
+      if (gap < bridgeGap && sameArea(prev, segment, source)) {
+        // One continuous shot: hold it and let the anchor drift.
+        const prevSpan = prev.end - prev.start
+        const nextSpan = segment.end - segment.start
+        const w = prevSpan / (prevSpan + nextSpan)
+        prev.x = prev.x * w + segment.x * (1 - w)
+        prev.y = prev.y * w + segment.y * (1 - w)
+        prev.scale = Math.min(prev.scale, segment.scale)
+        prev.end = Math.max(prev.end, segment.end)
+        continue
       }
+
+      if (gap < bridgeGap) {
+        // Different area, but too close to be worth releasing: pan instead.
+        const overlap = Math.max(
+          MIN_OVERLAP,
+          Math.min(prev.easeOut, segment.easeIn, (prev.end - prev.start) / 2)
+        )
+        prev.end = segment.start + overlap
+        prev.easeOut = overlap
+        segment.easeIn = overlap
+      } else if (gap < 0) {
+        prev.end = Math.max(prev.start + MIN_LENGTH, segment.start + MIN_OVERLAP)
+      }
+
       // Ramps cannot outlast the segment they belong to.
       const span = prev.end - prev.start
       prev.easeOut = Math.min(prev.easeOut, span / 2)
       prev.easeIn = Math.min(prev.easeIn, span / 2)
     }
+
     if (segment.end - segment.start >= MIN_LENGTH) out.push(segment)
   }
   return out

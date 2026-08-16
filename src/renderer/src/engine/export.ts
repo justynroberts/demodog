@@ -255,11 +255,25 @@ async function buildAudio(options: ExportOptions): Promise<MixedAudio | null> {
   const offline = new OfflineAudioContext(2, Math.ceil(duration * sampleRate), sampleRate)
   const gains = options.composition.project.audio
 
+  // Match the visual fade, so a faded ending is silent rather than cut off.
+  const fade = options.composition.project.fade
+  const ramp = (gain: GainNode, level: number): void => {
+    gain.gain.value = level
+    if (fade.in > 0) {
+      gain.gain.setValueAtTime(0, 0)
+      gain.gain.linearRampToValueAtTime(level, Math.min(fade.in, duration))
+    }
+    if (fade.out > 0 && duration > fade.out) {
+      gain.gain.setValueAtTime(level, duration - fade.out)
+      gain.gain.linearRampToValueAtTime(0, duration)
+    }
+  }
+
   if (system && gains.systemGain > 0) {
     const node = offline.createBufferSource()
     node.buffer = system
     const gain = offline.createGain()
-    gain.gain.value = gains.systemGain
+    ramp(gain, gains.systemGain)
     node.connect(gain).connect(offline.destination)
     node.start(0, options.start, duration)
   }
@@ -268,7 +282,7 @@ async function buildAudio(options: ExportOptions): Promise<MixedAudio | null> {
     const node = offline.createBufferSource()
     node.buffer = mic
     const gain = offline.createGain()
-    gain.gain.value = gains.micGain
+    ramp(gain, gains.micGain)
     node.connect(gain).connect(offline.destination)
     // The camera file starts later than the screen track; skip into it by the
     // difference so speech lines up with what is on screen.

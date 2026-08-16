@@ -65,6 +65,24 @@ function report(label: string, zoom: ZoomSettings): void {
         `(${Math.round(s.x)}, ${Math.round(s.y)})`
     )
   }
+
+  // The measurement that answers "does it zoom out between shots": across each
+  // handover, how far does the scale sag below the two shots either side?
+  for (let i = 1; i < segments.length; i++) {
+    const prev = segments[i - 1]
+    const next = segments[i]
+    if (next.start >= prev.end) continue
+    let low = Infinity
+    for (let t = next.start; t <= prev.end; t += 1 / 60) {
+      low = Math.min(low, solver.at(t).scale)
+    }
+    const floor = Math.min(prev.scale, next.scale)
+    const sag = Math.round((1 - low / floor) * 100)
+    console.log(
+      `    handover ${next.start.toFixed(2)}–${prev.end.toFixed(2)}s: ` +
+        `dips to ${low.toFixed(2)}x of ${floor.toFixed(2)}x (${sag}% sag)`
+    )
+  }
 }
 
 console.log(`Take: ${dir}`)

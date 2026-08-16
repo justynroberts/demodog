@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { api } from '../api'
 import { BACKGROUND_PRESETS, OUTPUT_PRESETS } from '../engine/defaults'
 import { Group, Segmented, Slider, Toggle } from '../ui/controls'
-import type { Project, Recording, ZoomSegment } from '../engine/types'
+import type { CursorSettings, Project, Recording, ZoomSegment } from '../engine/types'
 import type { Profile } from '../../../shared/types'
 
 /** The parts of a Project that belong to a look, not to one recording. */
@@ -14,6 +14,7 @@ const PROFILE_KEYS = [
   'cursor',
   'pip',
   'keystrokes',
+  'fade',
   'audio',
   'output'
 ] as const
@@ -330,6 +331,31 @@ function StyleTab({
         </div>
       </Group>
 
+      <Group title="Fade">
+        <Slider
+          label="Fade in"
+          value={project.fade.in}
+          min={0}
+          max={3}
+          step={0.05}
+          onChange={(v) => patch('fade', { in: v })}
+          format={(v) => (v === 0 ? 'off' : `${v.toFixed(2)}s`)}
+        />
+        <Slider
+          label="Fade out"
+          value={project.fade.out}
+          min={0}
+          max={3}
+          step={0.05}
+          onChange={(v) => patch('fade', { out: v })}
+          format={(v) => (v === 0 ? 'off' : `${v.toFixed(2)}s`)}
+        />
+        <p style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.5, margin: '4px 0 0' }}>
+          Measured from the trimmed in and out points, and applied to the audio as well as the
+          picture.
+        </p>
+      </Group>
+
       <Group title="Output">
         <select
           value={`${output.width}x${output.height}`}
@@ -556,7 +582,31 @@ function CursorTab({ project, patch }: { project: Project; patch: Patcher }): Re
           checked={cursor.visible}
           onChange={(v) => patch('cursor', { visible: v })}
         />
-        <div style={{ height: 8 }} />
+        <div style={{ height: 10 }} />
+        <span className="label">Style</span>
+        <Segmented
+          value={cursor.style}
+          options={[
+            { value: 'dark', label: 'Dark' },
+            { value: 'light', label: 'Light' },
+            { value: 'accent', label: 'Accent' }
+          ]}
+          onChange={(v) => patch('cursor', { style: v })}
+        />
+        <div style={{ height: 12 }} />
+        <span className="label">Shape</span>
+        <select
+          value={cursor.shape}
+          onChange={(e) => patch('cursor', { shape: e.target.value as CursorSettings['shape'] })}
+        >
+          <option value="auto">Auto (as recorded)</option>
+          <option value="arrow">Arrow</option>
+          <option value="pointingHand">Pointing hand</option>
+          <option value="iBeam">Text I-beam</option>
+          <option value="crosshair">Crosshair</option>
+          <option value="resizeLeftRight">Resize</option>
+        </select>
+        <div style={{ height: 12 }} />
         <Slider
           label="Size"
           value={cursor.size}

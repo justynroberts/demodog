@@ -113,6 +113,8 @@ export function defaultProject(
     segments: [],
     cursor: {
       visible: true,
+      style: 'dark',
+      shape: 'auto',
       size: 1,
       smoothing: 0.62,
       clickAnchoring: true,
@@ -147,6 +149,8 @@ export function defaultProject(
       offsetY: 0
     },
     keystrokes: { enabled: false, position: 'bottom', duration: 1.4 },
+    // Short enough to read as polish rather than as a transition.
+    fade: { in: 0.4, out: 0.6 },
     clips: [],
     audio: { systemGain: 1, micGain: 1 }
   }

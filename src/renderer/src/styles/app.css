@@ -1180,10 +1180,12 @@ dialog.info a {
   gap: 3vh;
   pointer-events: none;
 
-  /* The scrim is the point: it dims the actual screen rather than floating a
-     dialog above it. Darker at the edges keeps the centre readable. */
+  /* Deliberately light: this is an overlay, not a replacement for the screen.
+     The user is often arranging what they are about to demonstrate, so the
+     content underneath has to stay legible. Readability of the counter comes
+     from the disc behind it, not from hiding everything else. */
   background:
-    radial-gradient(circle at 50% 45%, rgba(8, 8, 10, 0.36) 0%, rgba(8, 8, 10, 0.66) 72%);
+    radial-gradient(circle at 50% 45%, rgba(8, 8, 10, 0.08) 0%, rgba(8, 8, 10, 0.26) 75%);
   animation: cd-fade 0.35s ease both;
 }
 
@@ -1202,6 +1204,8 @@ dialog.info a {
   height: 26vh;
   display: grid;
   place-items: center;
+  /* Its own ground, so the number stays readable over any content. */
+  background: radial-gradient(circle, rgba(8, 8, 10, 0.82) 55%, rgba(8, 8, 10, 0) 72%);
 }
 
 .cd-ring {
@@ -1416,4 +1420,37 @@ dialog.info a {
   display: block;
   font-size: 11px;
   color: var(--muted);
+}
+
+/* Delete affordance on a zoom block; revealed on hover or selection. */
+.zoom-del {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 9px;
+  line-height: 1;
+  background: var(--surface);
+  color: var(--text);
+  border: 1.5px solid var(--line);
+  border-radius: 2px;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s ease,
+    background 0.12s ease;
+}
+
+.zoom-block:hover .zoom-del,
+.zoom-block.selected .zoom-del {
+  opacity: 1;
+}
+
+.zoom-del:hover {
+  background: var(--danger);
+  color: #fff;
 }

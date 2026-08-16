@@ -3,7 +3,7 @@ import { CameraSolver } from './camera'
 import { CursorTrack } from './cursorTrack'
 import { drawClickRing, drawCursor, resolveShape } from './cursorArt'
 import { generateSegments } from './autozoom'
-import type { Project, Recording, Rect, ZoomSegment } from './types'
+import type { FadeSettings, Project, Recording, Rect, ZoomSegment } from './types'
 
 export type Drawable = CanvasImageSource
 
@@ -25,9 +25,37 @@ type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
  * is what guarantees the exported file matches what was previewed rather than
  * drifting a few frames apart.
  */
+/**
+ * How black the frame should be at `t`, for a fade over `range`.
+ *
+ * Shared with the editor so preview audio can duck by the same amount the
+ * picture darkens — a faded ending that is still audible sounds like a cut.
+ */
+export function fadeAlphaAt(
+  t: number,
+  range: { start: number; end: number },
+  fade: FadeSettings
+): number {
+  let alpha = 0
+  if (fade.in > 0) {
+    const into = t - range.start
+    if (into < fade.in) alpha = Math.max(alpha, 1 - into / fade.in)
+  }
+  if (fade.out > 0) {
+    const left = range.end - t
+    if (left < fade.out) alpha = Math.max(alpha, 1 - left / fade.out)
+  }
+  return Math.min(1, Math.max(0, alpha))
+}
+
 export class Composition {
   recording: Recording
   project: Project
+  /**
+   * The span being played or exported. Fades are relative to this rather than
+   * to the whole recording, so trimming moves them with it.
+   */
+  range: { start: number; end: number }
   cursorTrack: CursorTrack
   camera!: CameraSolver
   content!: Rect
@@ -38,6 +66,7 @@ export class Composition {
   constructor(recording: Recording, project: Project) {
     this.recording = recording
     this.project = project
+    this.range = { start: 0, end: recording.duration }
     this.cursorTrack = new CursorTrack(recording.input, recording.duration, project.cursor)
     this.rebuildLayout()
   }
@@ -174,6 +203,13 @@ export class Composition {
 
     this.drawPip(ctx, sources, cursorOut)
     this.drawKeystrokes(ctx, t)
+
+    // Last, so it covers everything: background, frame, cursor and camera.
+    const fade = fadeAlphaAt(t, this.range, this.project.fade)
+    if (fade > 0.001) {
+      ctx.fillStyle = `rgba(0, 0, 0, ${fade})`
+      ctx.fillRect(0, 0, output.width, output.height)
+    }
 
     ctx.restore()
   }
@@ -423,13 +459,24 @@ export class Composition {
       }
     }
 
+    // 'auto' trusts what the recorder detected; anything else forces a shape,
+    // which matters because that detection is unreliable on current macOS.
+    const shape = settings.shape === 'auto' ? resolveShape(cursor.shape) : settings.shape
+    const palette =
+      settings.style === 'light'
+        ? { fill: '#ffffff', stroke: '#0a0a0a' }
+        : settings.style === 'accent'
+          ? { fill: settings.clicks.color, stroke: '#0a0a0a' }
+          : { fill: '#0a0a0a', stroke: '#ffffff' }
+
     drawCursor(ctx, {
       x: out.x,
       y: out.y,
       height: settings.size * this.project.output.height * 0.034,
-      shape: resolveShape(cursor.shape),
+      shape,
       opacity: cursor.opacity,
-      press
+      press,
+      ...palette
     })
   }
 

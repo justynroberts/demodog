@@ -222,6 +222,10 @@ export interface DrawCursorOptions {
   /** Extra scale applied about the hotspot, for the press squash. */
   press: number
   rotation?: number
+  /** Body colour. */
+  fill?: string
+  /** Keyline colour, which is what keeps it legible over busy content. */
+  stroke?: string
 }
 
 export function drawCursor(
@@ -245,8 +249,10 @@ export function drawCursor(
   ctx.shadowOffsetY = 1.8
 
   def.path(ctx)
-  ctx.fillStyle = '#ffffff'
-  ctx.strokeStyle = '#ffffff'
+  const fill = options.fill ?? '#0a0a0a'
+  const stroke = options.stroke ?? '#ffffff'
+  ctx.fillStyle = stroke
+  ctx.strokeStyle = stroke
   ctx.lineWidth = 3.4
   ctx.lineJoin = 'round'
   ctx.lineCap = 'round'
@@ -256,7 +262,7 @@ export function drawCursor(
   ctx.shadowBlur = 0
   ctx.shadowOffsetY = 0
 
-  ctx.fillStyle = '#0a0a0a'
+  ctx.fillStyle = fill
   ctx.fill()
 
   ctx.restore()
