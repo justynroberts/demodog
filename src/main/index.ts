@@ -712,7 +712,10 @@ ipcMain.handle('bench:config', () => {
     dir,
     out: process.env['DEMODOG_BENCH_OUT'] ?? join(dir, 'bench.mp4'),
     // Cap the exported duration so a benchmark can report a rate quickly.
-    seconds: Number(process.env['DEMODOG_BENCH_SECONDS'] ?? '0') || 0
+    seconds: Number(process.env['DEMODOG_BENCH_SECONDS'] ?? '0') || 0,
+    // Export with no zoom, cursor or picture-in-picture, so the only thing that
+    // can change between frames is the recording itself.
+    plain: process.env['DEMODOG_BENCH_PLAIN'] === '1'
   }
 })
 

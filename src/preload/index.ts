@@ -41,8 +41,12 @@ const api = {
     ipcRenderer.invoke('recording:autoload'),
 
   /** Headless export benchmark; null unless DEMODOG_BENCH is set. */
-  benchConfig: (): Promise<{ dir: string; out: string; seconds: number } | null> =>
-    ipcRenderer.invoke('bench:config'),
+  benchConfig: (): Promise<{
+    dir: string
+    out: string
+    seconds: number
+    plain: boolean
+  } | null> => ipcRenderer.invoke('bench:config'),
   benchFinish: (path: string, data: ArrayBuffer): Promise<void> =>
     ipcRenderer.invoke('bench:finish', path, data),
   benchFail: (message: string): Promise<void> => ipcRenderer.invoke('bench:fail', message),

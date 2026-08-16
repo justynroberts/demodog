@@ -31,7 +31,9 @@ npm run native       # rebuild only the Swift helper
 npm run dist         # packaged .dmg via electron-builder
 
 npm run fixture      # regenerate the synthetic test take (needs ffmpeg)
-npm run verify       # numerical check of the zoom/cursor engines against it
+npm run verify       # engine checks, then a real export of the fixture
+npm run verify:engine   # just the numerical zoom/cursor checks
+npm run verify:export   # just the end-to-end export check
 npm run zoom-report -- <take dir>   # what the auto-zoom does to real material
 ```
 
@@ -47,11 +49,24 @@ npm run verify                                   # asserts the engine framed eac
 DEMODOG_OPEN=~/Movies/DemoDog/fixture npm run dev   # boots straight into the editor
 ```
 
-`npm run verify` is the fastest way to know whether an engine change broke
-anything — it checks segment count, that each known target is framed and
+`npm run verify` is the fastest way to know whether a change broke anything — it checks segment count, that each known target is framed and
 centred, that camera motion has no jump cuts, that tremor is removed, and that
 the pointer still lands on its click targets. Screenshots can only show that
 *something* moved; this shows it moved to the right place.
+
+`verify:export` covers what the engine checks cannot. It runs the real exporter
+over the fixture and then decodes the result with ffmpeg to confirm the frames
+actually differ — a frozen export shipped in 0.1.0 with every engine check
+passing, because the fault was in the reader that turns a time into a source
+frame and nothing downstream of it was covered.
+
+It exports with `DEMODOG_BENCH_PLAIN=1`, which turns off zoom, the drawn cursor,
+the picture-in-picture and the fades. That is the whole trick: with any of them
+on, the picture changes every frame whether or not the recording underneath it
+does, and the check passes on a completely frozen export. It did exactly that
+until the overlays were removed. For the same reason the fixture's screen video
+carries a patch of per-frame animation — an earlier "moving element" was a
+drawbox with a time expression that silently never moved.
 
 ## Architecture
 

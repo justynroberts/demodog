@@ -42,7 +42,7 @@ function toRecording(
 export default function StudioApp(): ReactNode {
   const [mode, setMode] = useState<Mode>('setup')
   const [recording, setRecording] = useState<Recording | null>(null)
-  const [bench, setBench] = useState<{ out: string; seconds: number } | null>(null)
+  const [bench, setBench] = useState<{ out: string; seconds: number; plain: boolean } | null>(null)
 
   // Opened from Finder, rather than from inside the app.
   useEffect(() => {
@@ -69,7 +69,7 @@ export default function StudioApp(): ReactNode {
       const result = await api.autoloadRecording()
       if (!result) return
       setRecording(toRecording(result, result.camera))
-      if (bench) setBench({ out: bench.out, seconds: bench.seconds })
+      if (bench) setBench({ out: bench.out, seconds: bench.seconds, plain: bench.plain })
       setMode('editor')
     })()
   }, [])

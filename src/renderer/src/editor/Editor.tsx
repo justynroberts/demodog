@@ -27,11 +27,27 @@ export default function Editor({
 }: {
   recording: Recording
   /** Headless benchmark: export straight to this path, then quit. */
-  bench?: { out: string; seconds: number } | null
+  bench?: { out: string; seconds: number; plain?: boolean } | null
 }): ReactNode {
-  const [project, setProject] = useState<Project>(() =>
-    defaultProject(recording.source, Boolean(recording.cameraURL))
-  )
+  const [project, setProject] = useState<Project>(() => {
+    const base = defaultProject(recording.source, Boolean(recording.cameraURL))
+    // Applied here rather than in an effect, because the export closure
+    // captures the project it was created with — updating the state later left
+    // the overlays on and the check they exist to isolate meaningless.
+    if (!bench?.plain) return base
+    return {
+      ...base,
+      zoom: { ...base.zoom, enabled: false },
+      // `visible`, not `enabled` — the cursor has its own key, and setting the
+      // wrong one left the pointer drawn and moving, which is enough on its own
+      // to make every exported frame differ.
+      cursor: { ...base.cursor, visible: false },
+      pip: { ...base.pip, enabled: false },
+      // Fades brighten the picture across the opening and closing second, which
+      // changes it every frame regardless of the recording underneath.
+      fade: { in: 0, out: 0 }
+    }
+  })
   const [segments, setSegments] = useState<ZoomSegment[]>([])
   const [time, setTime] = useState(0)
   const [playing, setPlaying] = useState(false)

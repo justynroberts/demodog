@@ -61,11 +61,14 @@ async function buildVideo(path) {
         `x=${t.x}-text_w/2:y=${y + boxSize + 26}`
     )
   }
-  // A moving element proves the export is sampling distinct frames.
-  filters.push(
-    `drawbox=x='if(lt(mod(t*220\\,${WIDTH}),0),0,mod(t*220\\,${WIDTH}))':y=1740:w=120:h=40:color=0xff5e5e@1:t=fill`
-  )
 
+  // A patch of content that changes on *every* frame, composited over the
+  // static test card. Top-left, clear of the picture-in-picture, which sits
+  // bottom-left by default and hid it completely. This is what makes a frozen export detectable: the rest
+  // of the fixture only changes when a target lights up, so an export stuck on
+  // one source frame still looked plausible. An earlier attempt used a drawbox
+  // with a time expression, which silently never moved — hence a real animated
+  // source rather than an expression that has to be trusted.
   await run('ffmpeg', [
     '-v',
     'error',
@@ -74,8 +77,14 @@ async function buildVideo(path) {
     'lavfi',
     '-i',
     `color=c=0x101014:s=${WIDTH}x${HEIGHT}:d=${DURATION}:r=${FPS}`,
-    '-vf',
-    filters.join(','),
+    '-f',
+    'lavfi',
+    '-i',
+    `testsrc2=s=320x180:d=${DURATION}:r=${FPS}`,
+    '-filter_complex',
+    `[0:v]${filters.join(',')}[card];[card][1:v]overlay=x=40:y=40[out]`,
+    '-map',
+    '[out]',
     '-c:v',
     'libx264',
     '-preset',
@@ -185,6 +194,11 @@ const meta = {
  * A stand-in camera track, so picture-in-picture can be exercised without a
  * webcam. Deliberately 4:3 and animated: the PiP crops to a square, and a
  * static image would hide sync errors.
+ *
+ * MP4 rather than WebM because that is what the recorder writes now, and the
+ * two take different paths through the exporter — MP4 is decoded sequentially,
+ * WebM can only be seeked. A fixture on the fallback path would leave the path
+ * every real take uses untested.
  */
 async function buildCamera(path) {
   await run('ffmpeg', [
@@ -200,15 +214,15 @@ async function buildCamera(path) {
     '-i',
     `sine=frequency=420:duration=${DURATION}`,
     '-c:v',
-    'libvpx',
+    'libx264',
+    '-preset',
+    'ultrafast',
+    '-pix_fmt',
+    'yuv420p',
     '-b:v',
     '1M',
-    '-cpu-used',
-    '8',
-    '-deadline',
-    'realtime',
     '-c:a',
-    'libopus',
+    'aac',
     '-b:a',
     '96k',
     '-shortest',
@@ -218,7 +232,7 @@ async function buildCamera(path) {
 
 await mkdir(out, { recursive: true })
 await buildVideo(join(out, 'screen.mp4'))
-await buildCamera(join(out, 'camera.webm'))
+await buildCamera(join(out, 'camera.mp4'))
 
 // Line the camera up exactly with the screen track's first frame, so any
 // visible drift in the editor is a real bug rather than fixture noise.
@@ -227,7 +241,7 @@ await writeFile(
   JSON.stringify(
     {
       startWallClock: meta.startWallClock + (FIRST_FRAME_HOST - meta.startHost),
-      mimeType: 'video/webm;codecs=vp8,opus'
+      mimeType: 'video/mp4'
     },
     null,
     2
