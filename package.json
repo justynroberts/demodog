@@ -1,6 +1,6 @@
 {
   "name": "demodog",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Screen recorder with automatic zoom, smoothed cursor and camera picture-in-picture",
   "author": "Justyn Roberts",
   "license": "MIT",
@@ -59,6 +59,12 @@
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "universal"
           ]

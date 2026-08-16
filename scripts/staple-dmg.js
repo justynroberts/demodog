@@ -11,8 +11,16 @@
 //
 // This runs after every artifact is built, so it needs to pick the dmg out and
 // ignore the blockmap and anything else alongside it.
+//
+// Stapling rewrites the file, and electron-builder has already hashed it by
+// then to produce latest-mac.yml. Publishing that unchanged would advertise a
+// checksum the downloaded file cannot match, and every auto-update would fail
+// verification — so the update metadata is regenerated from the stapled bytes.
 
 const { execFileSync } = require('node:child_process')
+const { createHash } = require('node:crypto')
+const { existsSync, readFileSync, writeFileSync } = require('node:fs')
+const { basename, dirname, join } = require('node:path')
 
 const KEYCHAIN_PROFILE = process.env.NOTARYTOOL_PROFILE ?? 'notarytool'
 
@@ -82,7 +90,37 @@ exports.default = async function afterAllArtifactBuild(context) {
     )
     execFileSync('xcrun', ['stapler', 'staple', image], { stdio: 'inherit' })
     console.log('  • dmg notarised and stapled')
+    refreshUpdateMetadata(image)
   }
 
   return []
+}
+
+/**
+ * Rewrites latest-mac.yml to match the file as it now stands on disk.
+ *
+ * electron-updater verifies the download against the sha512 in this file and
+ * refuses anything that does not match. Since stapling changes the dmg after
+ * that hash was taken, the recorded one is stale the moment the ticket is
+ * attached.
+ */
+function refreshUpdateMetadata(image) {
+  const manifest = join(dirname(image), 'latest-mac.yml')
+  if (!existsSync(manifest)) return
+
+  const data = readFileSync(image)
+  const sha512 = createHash('sha512').update(data).digest('base64')
+  const name = basename(image)
+
+  let text = readFileSync(manifest, 'utf8')
+  // Only the entries describing this image; a build may emit several.
+  let replacements = 0
+  text = text.replace(/sha512: .*/g, () => {
+    replacements++
+    return `sha512: ${sha512}`
+  })
+  text = text.replace(/size: \d+/g, `size: ${data.byteLength}`)
+
+  writeFileSync(manifest, text)
+  console.log(`  • update metadata refreshed for ${name} (${replacements} hashes)`)
 }
