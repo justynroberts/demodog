@@ -52,7 +52,7 @@ let splashShownAt = 0
 let studioWindow: BrowserWindow | null = null
 
 /** Minimum time the splash stays up, so a fast launch does not flash it. */
-const SPLASH_MIN_MS = 1400
+const SPLASH_MIN_MS = 2600
 let barWindow: BrowserWindow | null = null
 let recorder: RecorderProcess | null = null
 let cameraStream: WriteStream | null = null
