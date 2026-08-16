@@ -26,8 +26,13 @@ Download the latest **`DemoDog-<version>-arm64.dmg`** from
 The app is signed with an Apple Developer ID and notarised by Apple, so it opens
 with a normal double-click — no right-click, no `xattr`, no security warning.
 
-Apple silicon, macOS 14 (Sonoma) or later. There is nothing else to install —
-no Python, no runtime, no command line tools. Everything is inside the app.
+Intel or Apple silicon, macOS 14 (Sonoma) or later — the build is universal.
+There is nothing else to install: no Python, no runtime, no command line tools.
+Everything is inside the app.
+
+DemoDog keeps itself up to date. It looks for a newer build shortly after
+launch, downloads it in the background and asks before restarting to install —
+never while you are recording.
 
 ### 2. Grant Screen Recording
 
