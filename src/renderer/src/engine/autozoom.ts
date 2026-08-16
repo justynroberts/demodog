@@ -166,11 +166,15 @@ function detectDwell(input: ParsedInput): Moment[] {
   const out: Moment[] = []
   if (moves.length < 8) return out
 
+  // Tuned against real takes rather than by feel: at 420px/10px/2.2s this
+  // fired at most once in a 25s session, which is the same as being off.
   const travelWindow = 0.5
   const stillWindow = 0.45
-  // A generous cooldown matters more than the thresholds: without it a slow
-  // sweep across the screen emits a moment every stride.
-  const cooldown = 2.2
+  const travelMin = 240
+  const stillMax = 20
+  // A cooldown matters more than the thresholds: without one a slow sweep
+  // across the screen emits a moment every stride.
+  const cooldown = 1.6
   let lastEmit = -Infinity
 
   for (let i = 0; i < moves.length; i++) {
@@ -181,7 +185,7 @@ function detectDwell(input: ParsedInput): Moment[] {
     for (let j = i - 1; j >= 0 && m.t - moves[j].t < travelWindow; j--) {
       travelled += Math.hypot(moves[j + 1].x - moves[j].x, moves[j + 1].y - moves[j].y)
     }
-    if (travelled < 420) continue
+    if (travelled < travelMin) continue
 
     let moved = 0
     let k = i + 1
@@ -190,7 +194,7 @@ function detectDwell(input: ParsedInput): Moment[] {
     }
     // Needs a real pause afterwards, not just the end of the samples.
     if (k >= moves.length) continue
-    if (moved > 10) continue
+    if (moved > stillMax) continue
 
     out.push({ t: m.t, x: m.x, y: m.y, weight: 0.45, kind: 'dwell' })
     lastEmit = m.t

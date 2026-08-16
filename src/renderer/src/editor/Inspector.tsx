@@ -396,7 +396,8 @@ function ZoomTab({
   segments,
   onSegmentsChange,
   selected,
-  onSelect
+  onSelect,
+  recording
 }: Props & { patch: Patcher }): ReactNode {
   const { zoom } = project
   const active = segments.find((s) => s.id === selected) ?? null
@@ -408,8 +409,25 @@ function ZoomTab({
     )
   }
 
+  const autoCount = segments.filter((s) => s.auto).length
+  const { clicks, scrolls } = recording.input
+
   return (
     <>
+      {zoom.enabled && autoCount === 0 && (
+        <div className="notice" style={{ borderLeftColor: 'var(--violet)' }}>
+          <strong>No automatic zooms in this take.</strong>
+          <p style={{ margin: '6px 0 0', fontSize: 12, lineHeight: 1.55 }}>
+            {clicks.length === 0 && scrolls.length === 0
+              ? 'Nothing was clicked or scrolled while recording, so there is no action to zoom in on.'
+              : `Found ${clicks.length} click${clicks.length === 1 ? '' : 's'} and ` +
+                `${scrolls.length} scroll${scrolls.length === 1 ? '' : 's'}, but none produced a ` +
+                'shot long enough to be worth making.'}{' '}
+            Add one by double-clicking the zoom lane, or loosen the settings below.
+          </p>
+        </div>
+      )}
+
       <Group title="Automatic zoom">
         <Toggle
           label="Enabled"

@@ -105,9 +105,10 @@ export function defaultProject(
       easeIn: 0.85,
       easeOut: 0.95,
       follow: 0.42,
-      // Dwell is off by default: it is the trigger that most often produces
-      // zooms the user did not ask for.
-      triggers: { clicks: true, scrolls: true, keys: false, appSwitches: true, dwell: false },
+      // Pointer-arrives is on: without it a take driven by mouse movement
+      // rather than clicking gets no zooms at all. The calming now comes from
+      // the thresholds and from bridging, not from switching triggers off.
+      triggers: { clicks: true, scrolls: true, keys: false, appSwitches: true, dwell: true },
       smoothing: 0.16
     },
     segments: [],

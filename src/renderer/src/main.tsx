@@ -11,6 +11,11 @@ import Countdown from './recorder/Countdown'
 const [route, query] = (window.location.hash.replace('#', '') || '/studio').split('?')
 const params = new URLSearchParams(query ?? '')
 
+// These routes render into transparent windows and must not paint a ground.
+if (route === '/countdown' || route === '/bar') {
+  document.documentElement.classList.add('transparent-window')
+}
+
 function Root(): React.ReactNode {
   if (route === '/bar') return <ControlBar />
   if (route === '/countdown') return <Countdown from={Number(params.get('n') ?? 3)} />

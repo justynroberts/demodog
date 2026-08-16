@@ -7,6 +7,7 @@ import { defaultProject } from '../engine/defaults'
 import { exportMP4 } from '../engine/export'
 import type { Project, Recording, ZoomSegment } from '../engine/types'
 import { fadeAlphaAt } from '../engine/composition'
+import { fadeOutAndPause, isRamping, rampVolume } from './mediaFade'
 import { formatTime } from '../ui/controls'
 import Timeline from './Timeline'
 import Inspector from './Inspector'
@@ -102,6 +103,12 @@ export default function Editor({
     }
   }, [playing, seek, trim, recording, cameraSync])
 
+  /** Current target level for the camera element. */
+  const cameraVolume = useCallback(
+    () => Math.min(1, Math.max(0, project.audio.micGain)),
+    [project.audio.micGain]
+  )
+
   // Whatever stopped playback — the end of the trim, the end of the file, or
   // the user — nothing should still be running. Without this the camera and its
   // audio carried on after the screen had finished, because the end-of-range
@@ -109,7 +116,9 @@ export default function Editor({
   useEffect(() => {
     if (playing) return
     screenRef.current?.pause()
-    cameraRef.current?.pause()
+    const camera = cameraRef.current
+    if (camera && !camera.paused) fadeOutAndPause(camera)
+    if (camera) camera.playbackRate = 1
   }, [playing])
 
   // The screen element can reach its own end before the trim does.
@@ -154,13 +163,28 @@ export default function Editor({
           const want = screen.currentTime - recording.cameraOffset - cameraSync
           if (want < 0) {
             // Not due yet; hold it at its first frame.
-            if (!camera.paused) camera.pause()
+            if (!camera.paused) fadeOutAndPause(camera)
+          } else if (camera.paused) {
+            camera.currentTime = want
+            camera.playbackRate = 1
+            // Starting mid-stream at full level pops; come up over a few frames.
+            void camera
+              .play()
+              .then(() => rampVolume(camera, cameraVolume()))
+              .catch(() => undefined)
           } else {
-            if (camera.paused) {
+            // Chase-lock rather than seek. Seeking a playing element restarts
+            // its audio, and doing that every time the tracks drift a little is
+            // exactly the clicking you hear — so only a large error is worth a
+            // seek, and small ones are corrected by easing the rate.
+            const drift = camera.currentTime - want
+            if (Math.abs(drift) > 0.5) {
               camera.currentTime = want
-              void camera.play().catch(() => undefined)
-            } else if (Math.abs(camera.currentTime - want) > 0.12) {
-              camera.currentTime = want
+              camera.playbackRate = 1
+            } else if (Math.abs(drift) > 0.04) {
+              camera.playbackRate = drift > 0 ? 0.97 : 1.03
+            } else {
+              camera.playbackRate = 1
             }
           }
         }
@@ -198,10 +222,13 @@ export default function Editor({
     const clamp = (v: number): number => Math.min(1, Math.max(0, v))
     const id = setInterval(() => {
       const level = 1 - fadeAlphaAt(timeRef.current, trim, project.fade)
-      if (screenRef.current) {
-        screenRef.current.volume = clamp(project.audio.systemGain) * level
+      const screen = screenRef.current
+      if (screen && !isRamping(screen)) {
+        screen.volume = clamp(project.audio.systemGain) * level
       }
-      if (cameraRef.current) cameraRef.current.volume = clamp(project.audio.micGain) * level
+      // Never fight an in-flight ramp; that is what makes pausing click.
+      const camera = cameraRef.current
+      if (camera && !isRamping(camera)) camera.volume = clamp(project.audio.micGain) * level
     }, 50)
     return () => clearInterval(id)
   }, [playing, trim, project.fade, project.audio.systemGain, project.audio.micGain])

@@ -103,6 +103,9 @@ const before: ZoomSettings = {
   triggers: { ...base.zoom.triggers, dwell: true }
 }
 
-report('BEFORE (previous defaults)', before)
-report('AFTER (current defaults)', base.zoom)
+report('WITHOUT pointer-arrives', {
+  ...base.zoom,
+  triggers: { ...base.zoom.triggers, dwell: false }
+})
+report('WITH pointer-arrives', { ...base.zoom, triggers: { ...base.zoom.triggers, dwell: true } })
 console.log()

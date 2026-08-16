@@ -84,6 +84,17 @@
   box-sizing: border-box;
 }
 
+/*
+ * The countdown and control bar live in transparent windows. Without this the
+ * page background paints over the whole window and you see a flat grey panel
+ * instead of the screen behind it — which a dark scrim happens to mask, so it
+ * only becomes obvious once the overlay is made light.
+ */
+html.transparent-window,
+html.transparent-window body {
+  background: transparent;
+}
+
 html,
 body,
 #root {
