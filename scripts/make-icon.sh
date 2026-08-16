@@ -22,19 +22,33 @@ if [[ ! -f "$SRC" ]]; then
 fi
 
 ICONSET="$ROOT/resources/DemoDog.iconset"
+WORK="$ROOT/resources/.icon-square.png"
 rm -rf "$ICONSET"
 mkdir -p "$ICONSET" "$ROOT/src/renderer/public"
 
+# Square the source by centre-cropping to its shorter edge. Forcing a
+# non-square image into a square icon would stretch it instead.
+W=$(sips -g pixelWidth "$SRC" | awk '/pixelWidth/{print $2}')
+H=$(sips -g pixelHeight "$SRC" | awk '/pixelHeight/{print $2}')
+SIDE=$((W < H ? W : H))
+sips -c $SIDE $SIDE "$SRC" --out "$WORK" >/dev/null
+
+if [[ $SIDE -lt 512 ]]; then
+  echo "note: source is only ${SIDE}px square; icons will be soft." >&2
+  echo "      supply 1024x1024 artwork for a crisp result." >&2
+fi
+
 # The sizes macOS expects in an iconset, each at 1x and 2x.
 for size in 16 32 128 256 512; do
-  sips -z $size $size "$SRC" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
-  sips -z $((size * 2)) $((size * 2)) "$SRC" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+  sips -z $size $size "$WORK" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+  sips -z $((size * 2)) $((size * 2)) "$WORK" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
 done
 
 iconutil -c icns "$ICONSET" -o "$ROOT/resources/icon.icns"
 rm -rf "$ICONSET"
 
 # The renderer loads the logo from the Vite public directory.
-sips -z 512 512 "$SRC" --out "$ROOT/src/renderer/public/logo.png" >/dev/null
+sips -z 512 512 "$WORK" --out "$ROOT/src/renderer/public/logo.png" >/dev/null
+rm -f "$WORK"
 
 echo "built resources/icon.icns and src/renderer/public/logo.png"

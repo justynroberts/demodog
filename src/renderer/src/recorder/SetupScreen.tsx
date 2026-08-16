@@ -1,7 +1,7 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api } from '../api'
-import { Segmented, Toggle } from '../ui/controls'
+import { MadeByFintonLabs, Segmented, Toggle } from '../ui/controls'
 import type { CapturePreset, Permissions, Sources } from '../../../shared/types'
 
 type SourceTab = 'display' | 'window'
@@ -401,6 +401,8 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
         </div>
 
         {error && <div className="notice">{error}</div>}
+
+        <MadeByFintonLabs />
       </div>
 
       <aside className="setup-side">

@@ -1465,3 +1465,45 @@ dialog.info a {
   background: var(--danger);
   color: #fff;
 }
+
+/* Credit line on the main screen. */
+.made-by {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 2px solid var(--line);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  flex: none;
+  animation: snap-in 0.4s var(--snap) both;
+  animation-delay: 0.15s;
+}
+
+.made-by-mark {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  border: 2px solid var(--line);
+  border-radius: 2px;
+  background: #0a0a0b;
+  transition: transform 0.18s var(--snap);
+}
+
+.made-by:hover .made-by-mark {
+  transform: rotate(-8deg) scale(1.12);
+}
+
+.made-by a {
+  color: var(--violet);
+  font-weight: 800;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: border-color 0.14s ease;
+}
+
+.made-by a:hover {
+  border-bottom-color: var(--violet);
+}

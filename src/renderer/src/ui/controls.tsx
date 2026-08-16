@@ -188,6 +188,35 @@ export function Brand(): ReactNode {
   )
 }
 
+/**
+ * Visible credit on the main screen, alongside the info button rather than
+ * instead of it — the button carries the detail, this carries the mark.
+ */
+export function MadeByFintonLabs(): ReactNode {
+  const [hasLogo, setHasLogo] = useState(true)
+  return (
+    <div className="made-by">
+      {hasLogo && (
+        <img src="/logo.png" alt="" className="made-by-mark" onError={() => setHasLogo(false)} />
+      )}
+      <span>
+        DemoDog — made by{' '}
+        <a
+          href="https://fintonlabs.com"
+          target="_blank"
+          rel="noopener"
+          onClick={(e) => {
+            e.preventDefault()
+            api.openExternal('https://fintonlabs.com')
+          }}
+        >
+          FintonLabs
+        </a>
+      </span>
+    </div>
+  )
+}
+
 export function formatTime(seconds: number): string {
   const s = Math.max(0, seconds)
   const m = Math.floor(s / 60)
