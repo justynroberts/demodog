@@ -160,38 +160,65 @@ Chromium throttles hidden windows, which would stall a `MediaRecorder`.
 process, so its own pid is not the one that matters — Electron passes
 `--exclude-pids` with its pid.
 
-**Export is correct but slow** — roughly 2.5–3 output frames per second. It seeks
-the source video once per output frame, which forces the decoder back to a
-keyframe every time.
+**Export is correct but slow** — about 3.6 output frames per second, so a ten
+minute recording takes roughly three hours. Measured breakdown, from a real take:
 
-A sequential WebCodecs decode path exists in `frameSource.ts` behind
-`SEQUENTIAL_DECODE` in `export.ts`, currently `false`. **It does not work yet.**
-Three bugs in it have been found and fixed, and the remaining one is not solved:
+    180 frames in 50.4s — screen seek 38.8s, camera seek 11.4s,
+                          render 0.1s, encode 0.0s
 
-- *Fixed:* `setExtractionOptions` must be called *after* `onReady` and *before*
-  `flush()`, and the file must be created with `keepMdatData`. Otherwise mp4box
-  parses happily and hands back zero samples.
-- *Fixed:* `VideoFrame.duration` is frequently null, so a frame's coverage has to
-  be derived from the *next* frame's timestamp. Relying on the duration made the
-  exporter grind through every sample in the file to produce frame 1.
-- *Fixed:* the first sample's PTS is not zero (`cts0=512` at timescale 15360 on
-  the fixture, i.e. 33ms). `video.currentTime` is normalised against the track
-  start but raw decoder timestamps are not, so the decode path needs the base
-  subtracted or it sits a frame off.
-- **Open:** the decoder emits exactly *one* frame and then stalls, whatever the
-  in-flight window is (tried 16 and 96 chunks, frame queues of 12 and 48). The
-  config reports supported, `is_sync` is true on the first sample, the avcC
-  description is 48 bytes, and no decoder error fires. Next things to try:
-  compare the description bytes against a known-good avcC, feed chunks with no
-  backpressure cap at all to see whether output resumes, and test against an
-  MP4 written by our own recorder rather than by ffmpeg.
+Rendering and encoding are free. It is entirely `SeekingFrameSource`: setting
+`currentTime` per output frame forces the decoder back to the previous keyframe
+and re-decodes the whole group of pictures, roughly sixty frames of 2880x1800
+for every frame written.
 
-Use `DEMODOG_BENCH` for this — it exports headlessly, without stealing focus:
+Measured alternatives, on the same take, so these do not need re-testing:
+
+| Change | Speed | Cost |
+|---|---|---|
+| Keyframes every 12 frames | 11.6 fps | recording grows 25 → 214 MB/min |
+| All intra | 16.7 fps | 177 MB for 26 seconds |
+
+Both were rejected: screen content compresses to almost nothing between
+keyframes, so buying speed with keyframes costs an unreasonable amount of disk,
+and neither helps the camera track, which is now a comparable share of the time.
+
+**The real fix is `DecodingFrameSource`** — sequential WebCodecs decoding, which
+makes keyframe spacing irrelevant for both tracks. It is behind
+`SEQUENTIAL_DECODE` in `export.ts` and **still does not work**. Bugs found and
+fixed so far, all real:
+
+- `setExtractionOptions` must be called after `onReady` and before `flush()`,
+  with the file created `keepMdatData`, or mp4box returns zero samples.
+- `VideoFrame.duration` is frequently null, so a frame's coverage must come from
+  the *next* frame's timestamp.
+- The first sample's PTS is not zero; `video.currentTime` is normalised against
+  the track start but raw decoder timestamps are not.
+- `sample.data` is a view into a buffer mp4box recycles, so chunks must copy it.
+- The in-flight chunk window must exceed the codec's reorder depth (16 for H.264
+  High) or the decoder waits for input while we wait for frames, but the decoded
+  *frame* queue must stay small — a few dozen 2880x1800 surfaces is hundreds of
+  megabytes of GPU memory and stalls the pipeline.
+
+**What remains.** With a 32-chunk window and an 8-frame queue the decoder is
+healthy — `fed 33, decoded 24, queued 24, decoderQueue 0, state configured` —
+but `frameAt` is entered exactly once, spins while the queue is empty, and never
+returns once frames arrive. The fault is in the read loop, not the decoder. Add
+tracing inside `frameAt` around the queue-length branches and watch what it does
+on the iteration where `queue.length` first reaches two.
+
+An alternative worth considering instead: drive export from `video.play()` plus
+`requestVideoFrameCallback`, rendering each presented frame at its own
+`mediaTime`. That never seeks, so a ten minute take exports in about ten
+minutes, and it needs no demuxer. It makes the output variable-frame-rate and
+depends on the window staying visible, since presentation throttles when hidden.
+
+Use `DEMODOG_BENCH` to measure any of this — it exports headlessly, without
+stealing focus:
 
 ```bash
-DEMODOG_BENCH=~/Movies/DemoDog/fixture \
+DEMODOG_BENCH=~/Movies/DemoDog/<take> \
 DEMODOG_BENCH_OUT=/tmp/bench.mp4 \
-DEMODOG_BENCH_SECONDS=2 npx electron .
+DEMODOG_BENCH_SECONDS=4 npx electron .
 ```
 
 Driving the real UI to time an export is unreliable — synthetic clicks and
