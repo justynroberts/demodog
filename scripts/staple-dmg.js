@@ -28,6 +28,18 @@ function hasKeychainProfile() {
   }
 }
 
+/** The identity codesign needs, with the prefix electron-builder strips. */
+function developerIdentity(context) {
+  const explicit = process.env.DEMODOG_SIGN_IDENTITY
+  if (explicit) return explicit
+  const configured =
+    context.packager?.config?.mac?.identity ??
+    context.configuration?.mac?.identity ??
+    process.env.CSC_NAME
+  if (!configured) return null
+  return configured.includes(':') ? configured : `Developer ID Application: ${configured}`
+}
+
 exports.default = async function afterAllArtifactBuild(context) {
   const images = (context.artifactPaths ?? []).filter((path) => path.endsWith('.dmg'))
   if (images.length === 0) return []
@@ -36,6 +48,8 @@ exports.default = async function afterAllArtifactBuild(context) {
     console.log('  • skipping dmg notarisation: no notarytool credentials')
     return []
   }
+
+  const identity = developerIdentity(context)
 
   for (const image of images) {
     // Already stapled: the app inside was notarised, so this submission is
@@ -46,6 +60,18 @@ exports.default = async function afterAllArtifactBuild(context) {
       continue
     } catch {
       // Not stapled yet, which is the normal case.
+    }
+
+    // Sign before submitting, and only in that order: stapling attaches the
+    // ticket to the file, so signing afterwards would invalidate it. An
+    // unsigned disk image can still be notarised, but Gatekeeper assesses it as
+    // having no usable signature, which is a warning on the way in for
+    // something that is otherwise perfectly trusted.
+    if (identity) {
+      execFileSync('codesign', ['--force', '--timestamp', '--sign', identity, image], {
+        stdio: 'inherit'
+      })
+      console.log('  • signed the disk image')
     }
 
     console.log(`  • notarising ${image}`)
