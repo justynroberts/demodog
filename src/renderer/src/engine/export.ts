@@ -60,7 +60,7 @@ export async function exportMP4(options: ExportOptions): Promise<ExportResult> {
   // Cameras record at 30fps or below, so anything within ~21ms is the same
   // frame and does not need seeking for again.
   const camera = options.cameraURL
-    ? await openFrameSource(options.cameraURL, 'seek', 1 / 48).catch(() => null)
+    ? await openFrameSource(options.cameraURL, 'seek', 1 / 31).catch(() => null)
     : null
 
   const canvas = new OffscreenCanvas(output.width, output.height)

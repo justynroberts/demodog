@@ -215,6 +215,13 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
                 AVVideoAverageBitRateKey: bitrate,
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
                 AVVideoAllowFrameReorderingKey: false,
+                // Keyframe spacing drives how fast a take can be exported and
+                // scrubbed, because every seek re-decodes from the previous
+                // keyframe. Shortening it to 15 frames measured 3.2x faster to
+                // export — but screen content compresses to almost nothing
+                // between keyframes, so the file went from 25 MB/min to
+                // 214 MB/min. Eight times the disk for three times the speed is
+                // the wrong trade; the fix belongs in the exporter.
                 AVVideoMaxKeyFrameIntervalKey: options.fps * 2,
                 AVVideoExpectedSourceFrameRateKey: options.fps,
             ],

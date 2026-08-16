@@ -35,11 +35,22 @@ export interface FrameSource {
 /** Above this the file is not worth holding in memory; fall back to seeking. */
 const MAX_IN_MEMORY_BYTES = 800 * 1024 * 1024
 
-/** Chunks allowed in flight; must exceed the codec's reorder depth. */
-const IN_FLIGHT_CHUNKS = 96
+/**
+ * Chunks allowed in flight. Must exceed the codec's reorder depth: H.264 High
+ * profile can hold 16 frames in its DPB and emits nothing until it has enough
+ * input to resolve presentation order, so a smaller window deadlocks — the
+ * decoder waits for chunks while we wait for frames.
+ */
+const IN_FLIGHT_CHUNKS = 32
 
-/** Decoded frames held before feeding pauses. */
-const MAX_QUEUED_FRAMES = 48
+/**
+ * Decoded frames held before feeding pauses. Deliberately much smaller than the
+ * chunk window: a decoded frame is a full uncompressed surface, so at 2880x1800
+ * even a few dozen is hundreds of megabytes of GPU memory. Holding that many
+ * stalls the whole pipeline — including `new VideoFrame(canvas)` on the encode
+ * side — which looks exactly like a decoder that has stopped.
+ */
+const MAX_QUEUED_FRAMES = 8
 
 // ---------------------------------------------------------------------------
 // Sequential decode
@@ -70,6 +81,7 @@ class DecodingFrameSource implements FrameSource {
   private flushed = false
   private decoded = 0
   private baseTime = 0
+  private heartbeat: ReturnType<typeof setInterval> | null = null
   private failure: unknown = null
   private wake: (() => void) | null = null
 
@@ -95,6 +107,23 @@ class DecodingFrameSource implements FrameSource {
       }
     })
     this.decoder.configure(config)
+
+    // Reports only when nothing has decoded since the last tick, so a stall is
+    // visible from outside the read loop rather than inferred from where it
+    // might be stuck. `process` does not exist in a sandboxed renderer, so this
+    // must not consult the environment to decide whether to run.
+    let lastSeen = -1
+    this.heartbeat = setInterval(() => {
+      if (this.decoded !== lastSeen) {
+        lastSeen = this.decoded
+        return
+      }
+      console.warn(
+        `[decode] stalled: fed ${this.next}/${this.samples.length}, decoded ${this.decoded}, ` +
+          `queued ${this.queue.length}, decoderQueue ${this.decoder.decodeQueueSize}, ` +
+          `state ${this.decoder.state}`
+      )
+    }, 3000)
   }
 
   static async create(url: string): Promise<DecodingFrameSource> {
@@ -201,7 +230,12 @@ class DecodingFrameSource implements FrameSource {
           type: sample.is_sync ? 'key' : 'delta',
           timestamp: (sample.cts / sample.timescale) * 1e6,
           duration: (sample.duration / sample.timescale) * 1e6,
-          data: sample.data
+          // Copy: mp4box hands out views into a buffer it recycles as
+          // extraction proceeds, so passing the view straight through feeds the
+          // decoder memory that has since been reused. The first chunk decodes,
+          // every later one is quietly garbage, and the decoder simply stops
+          // producing frames without reporting an error.
+          data: sample.data.slice()
         })
       )
     }
@@ -215,6 +249,7 @@ class DecodingFrameSource implements FrameSource {
 
   async frameAt(t: number): Promise<CanvasImageSource | null> {
     if (this.failure) throw this.failure
+
 
     for (;;) {
       if (this.failure) throw this.failure
@@ -254,6 +289,8 @@ class DecodingFrameSource implements FrameSource {
   }
 
   close(): void {
+    if (this.heartbeat) clearInterval(this.heartbeat)
+    this.heartbeat = null
     this.current?.frame.close()
     for (const queued of this.queue) queued.frame.close()
     this.queue = []
