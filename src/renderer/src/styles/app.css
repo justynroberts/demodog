@@ -1655,3 +1655,63 @@ dialog.info a {
   font-size: 10px;
   color: var(--muted);
 }
+
+/* --------------------------------------------------------------------------
+   Export dialog
+   -------------------------------------------------------------------------- */
+
+.export-card {
+  width: 380px;
+  padding: 20px;
+  background: var(--surface);
+  border: var(--border);
+  box-shadow: var(--shadow-hard);
+  animation: snap-in 0.28s var(--snap) both;
+}
+
+.export-card h2 {
+  margin: 0 0 16px;
+  font-size: var(--t-xl);
+  font-weight: 800;
+  font-variation-settings: 'wdth' 84;
+  letter-spacing: -0.02em;
+}
+
+/* The numbers that answer "how long will this take, and how big is it?" */
+.export-estimate {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin-top: 18px;
+  background: var(--line);
+  border: var(--border);
+}
+
+.export-estimate > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  background: var(--surface-2);
+}
+
+.export-estimate span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.export-estimate strong {
+  font-size: var(--t-md);
+  font-weight: 700;
+}
+
+.export-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}

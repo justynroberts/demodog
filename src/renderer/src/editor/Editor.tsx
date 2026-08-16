@@ -11,6 +11,7 @@ import { fadeOutAndPause, isRamping, rampVolume } from './mediaFade'
 import { formatTime } from '../ui/controls'
 import Timeline from './Timeline'
 import Inspector from './Inspector'
+import ExportDialog, { formatDuration, rememberRate, type ExportChoice } from './ExportDialog'
 
 export default function Editor({
   recording,
@@ -32,7 +33,13 @@ export default function Editor({
     start: 0,
     end: recording.duration
   })
-  const [exporting, setExporting] = useState<{ fraction: number; stage: string } | null>(null)
+  const [exporting, setExporting] = useState<{
+    fraction: number
+    stage: string
+    /** Seconds remaining, once enough of the run has happened to say. */
+    remaining: number | null
+  } | null>(null)
+  const [askingExport, setAskingExport] = useState(false)
   // Held here rather than in the inspector: the inspector's tabs unmount, and a
   // profile must not be re-applied over the user's edits when they come back.
   const [profileId, setProfileId] = useState('')
@@ -264,7 +271,7 @@ export default function Editor({
   // ---- keyboard ----------------------------------------------------------
   // Declared after runExport below; hoisted via the ref so the handler always
   // calls the current one.
-  const exportRef = useRef<() => Promise<void>>(async () => {})
+  const exportRef = useRef<() => void>(() => {})
   // Read inside the key handler, which is registered once.
   const selectedRef = useRef<string | null>(null)
   selectedRef.current = selected
@@ -287,7 +294,7 @@ export default function Editor({
         setSelected(null)
       } else if (event.code === 'KeyE' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault()
-        void exportRef.current()
+        exportRef.current()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -296,15 +303,25 @@ export default function Editor({
 
   // ---- export ------------------------------------------------------------
 
-  const runExport = async (): Promise<void> => {
+  const runExport = async (choice: ExportChoice): Promise<void> => {
     if (exporting) return
+    setAskingExport(false)
+
+    // The chosen size and rate are the project's from here on, so the preview
+    // and the exported file cannot disagree about framing.
+    const project2 = { ...project, output: { ...project.output, ...choice } }
+    setProject(project2)
+    composition.project = project2
+    composition.rebuildLayout()
+
     screenRef.current?.pause()
     cameraRef.current?.pause()
     setPlaying(false)
 
     const controller = new AbortController()
     abortRef.current = controller
-    setExporting({ fraction: 0, stage: 'Starting' })
+    const startedAt = performance.now()
+    setExporting({ fraction: 0, stage: 'Starting', remaining: null })
 
     try {
       composition.range = trim
@@ -316,10 +333,14 @@ export default function Editor({
         cameraSync,
         start: trim.start,
         end: trim.end,
-        quality: 'high',
+        quality: choice.quality,
         signal: controller.signal,
         onProgress: (fraction, stage) => {
-          setExporting({ fraction, stage })
+          // Estimate from the run in progress rather than the stored rate, so
+          // the number converges on the truth instead of restating a guess.
+          const elapsed = (performance.now() - startedAt) / 1000
+          const remaining = fraction > 0.03 ? Math.max(0, elapsed / fraction - elapsed) : null
+          setExporting({ fraction, stage, remaining })
           // A headless run has no UI, so the rate has to reach the log.
           if (bench && stage.startsWith('Encoding frame')) {
             const now = performance.now()
@@ -330,6 +351,9 @@ export default function Editor({
           }
         }
       })
+
+      // Feed the measured rate back, so the next estimate is better.
+      rememberRate(result.frames / Math.max(0.001, (performance.now() - startedAt) / 1000))
 
       if (bench) {
         await api.benchFinish(bench.out, result.buffer)
@@ -359,13 +383,23 @@ export default function Editor({
     }
   }
 
-  exportRef.current = runExport
+  exportRef.current = (): void => setAskingExport(true)
 
   // Headless benchmark: start as soon as the media is ready.
   useEffect(() => {
     if (!bench) return
     if (bench.seconds > 0) setTrim({ start: 0, end: Math.min(bench.seconds, recording.duration) })
-    const id = setTimeout(() => void exportRef.current(), 1800)
+    // Headless runs skip the dialog and use the project's own settings.
+    const id = setTimeout(
+      () =>
+        void runExport({
+          width: project.output.width,
+          height: project.output.height,
+          fps: project.output.fps,
+          quality: 'high'
+        }),
+      1800
+    )
     return () => clearTimeout(id)
   }, [bench, recording.duration])
 
@@ -402,6 +436,20 @@ export default function Editor({
           />
         )}
 
+        {askingExport && !exporting && (
+          <ExportDialog
+            initial={{
+              width: project.output.width,
+              height: project.output.height,
+              fps: project.output.fps,
+              quality: 'high'
+            }}
+            duration={Math.max(0.05, trim.end - trim.start)}
+            onCancel={() => setAskingExport(false)}
+            onStart={(choice) => void runExport(choice)}
+          />
+        )}
+
         {exporting && (
           <div className="progress-wrap">
             <div className="progress-card">
@@ -409,8 +457,13 @@ export default function Editor({
               <div className="progress-bar">
                 <div style={{ width: `${Math.round(exporting.fraction * 100)}%` }} />
               </div>
-              <div className="mono" style={{ fontSize: 12, color: 'var(--muted)' }}>
-                {exporting.stage}
+              <div className="export-progress-meta mono">
+                <span>{exporting.stage}</span>
+                <span>
+                  {exporting.remaining === null
+                    ? 'estimating…'
+                    : `${formatDuration(exporting.remaining)} left`}
+                </span>
               </div>
               <button
                 className="btn"
@@ -457,7 +510,11 @@ export default function Editor({
           >
             Reset
           </button>
-          <button className="btn violet" onClick={() => void runExport()} disabled={!!exporting}>
+          <button
+            className="btn violet"
+            onClick={() => setAskingExport(true)}
+            disabled={!!exporting}
+          >
             Export MP4
           </button>
         </div>
