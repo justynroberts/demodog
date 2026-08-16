@@ -87,7 +87,13 @@ class DecodingFrameSource implements FrameSource {
   private baseTime = 0
   private heartbeat: ReturnType<typeof setInterval> | null = null
   private failure: unknown = null
-  private wake: (() => void) | null = null
+  /**
+   * Everyone parked waiting for the decoder to produce something.
+   *
+   * A single slot was not enough: a second waiter overwrote the first, and the
+   * first then waited forever with frames sitting in the queue.
+   */
+  private waiters: (() => void)[] = []
 
   private constructor(
     samples: Sample[],
@@ -99,15 +105,24 @@ class DecodingFrameSource implements FrameSource {
     this.width = width
     this.height = height
 
+    // Which frame belongs at a given time is known from the sample table before
+    // anything is decoded — but only in *presentation* order, which is what the
+    // decoder emits. The table itself is in decode order, and with B-frames the
+    // two are not the same. Sorting is what makes `indexAt` agree with the
+    // order frames actually arrive in.
+    const presentation = samples.map((s) => s.cts / s.timescale).sort((a, b) => a - b)
+    this.baseTime = presentation[0] ?? 0
+    this.times = presentation.map((cts) => cts - this.baseTime)
+
     this.decoder = new VideoDecoder({
       output: (frame) => {
         this.decoded++
         this.queue.push({ frame, start: frame.timestamp / 1e6 - this.baseTime })
-        this.wake?.()
+        this.signal()
       },
       error: (error) => {
         this.failure = error
-        this.wake?.()
+        this.signal()
       }
     })
     this.decoder.configure(config)
@@ -125,7 +140,7 @@ class DecodingFrameSource implements FrameSource {
       console.warn(
         `[decode] stalled: fed ${this.next}/${this.samples.length}, decoded ${this.decoded}, ` +
           `queued ${this.queue.length}, decoderQueue ${this.decoder.decodeQueueSize}, ` +
-          `state ${this.decoder.state}`
+          `state ${this.decoder.state}, emitted ${this.emitted}`
       )
     }, 3000)
   }
@@ -245,6 +260,14 @@ class DecodingFrameSource implements FrameSource {
     }
   }
 
+  /** Releases everyone waiting on the decoder. */
+  private signal(): void {
+    if (this.waiters.length === 0) return
+    const waiting = this.waiters
+    this.waiters = []
+    for (const done of waiting) done()
+  }
+
   private adopt(): CanvasImageSource {
     this.current?.frame.close()
     this.current = this.queue.shift()!
@@ -296,30 +319,49 @@ class DecodingFrameSource implements FrameSource {
       while (this.queue.length > 0 && this.emitted - 1 < wanted) this.adopt()
       if (this.emitted - 1 >= wanted) return this.current?.frame ?? null
 
-      const exhausted = this.next >= this.samples.length && this.decoded >= this.samples.length
-      if (exhausted) {
+      // Every chunk fed is the condition for flushing — *not* every chunk
+      // decoded. A decoder holds its reorder buffer back until it is flushed,
+      // so the last frames of a track never arrive on their own: waiting for
+      // them before flushing waits forever, which is precisely how an export
+      // hung a few frames from the end of the recording.
+      if (this.next >= this.samples.length) {
         if (!this.flushed) {
           this.flushed = true
           await this.decoder.flush().catch(() => undefined)
           continue
         }
-        while (this.queue.length > 0) this.adopt()
+        // Flushed and drained: nothing further is coming, so whatever the last
+        // frame turned out to be is the frame for every later time.
+        while (this.queue.length > 0 && this.emitted - 1 < wanted) this.adopt()
         return this.current?.frame ?? null
       }
 
+      // The safety net matters as much as the wake-up: parking on a signal
+      // alone deadlocks the moment one is missed, which is how this stalled
+      // before.
       await new Promise<void>((resolve) => {
+        let settled = false
         const done = (): void => {
-          this.wake = null
+          if (settled) return
+          settled = true
           resolve()
         }
-        this.wake = done
-        // The decoder may already be idle with nothing left to emit.
-        setTimeout(() => this.wake && done(), 2)
+        this.waiters.push(done)
+        setTimeout(done, 20)
       })
     }
   }
 
   close(): void {
+    // A frozen export looks like a fast one — every frame written, none of them
+    // different. Saying how much of the track was actually walked makes that
+    // failure visible in the log instead of only in the file.
+    if (this.emitted > 0 && this.emitted < this.times.length * 0.5) {
+      console.warn(
+        `[decode] only advanced ${this.emitted}/${this.times.length} frames; ` +
+          'output is likely frozen'
+      )
+    }
     if (this.heartbeat) clearInterval(this.heartbeat)
     this.heartbeat = null
     this.current?.frame.close()

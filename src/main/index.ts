@@ -173,7 +173,14 @@ function createStudioWindow(): void {
       // work in a sandboxed renderer.
       sandbox: true,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // An export is minutes of work that must survive the user switching
+      // away. Chromium clamps timers in a hidden window to about one a second,
+      // and both the decode read loop and the encoder's backpressure yield are
+      // built on short timers — so throttling does not slow an export down, it
+      // stops it. This is also why the headless benchmark could not measure
+      // anything real.
+      backgroundThrottling: false
     }
   })
 
@@ -620,6 +627,12 @@ async function loadTake(dir: string): Promise<RecordingResult> {
   // Opened deliberately by the user, so its media may be streamed.
   allowMediaPath(dir)
   const meta = JSON.parse(await readFile(join(dir, 'meta.json'), 'utf8')) as CaptureMeta
+  // A recording that was stopped before the first frame leaves a take with no
+  // geometry and no duration. It is not editable, and opening one used to throw
+  // inside the editor, which surfaced as the app simply doing nothing.
+  if (!meta.capture?.width || !meta.duration) {
+    throw new Error('That take has no recorded video — it was stopped before capture started.')
+  }
   const events: RawEvent[] = (await readFile(join(dir, 'events.jsonl'), 'utf8'))
     .split('\n')
     .filter((l) => l.trim())
@@ -663,7 +676,20 @@ ipcMain.handle('recording:open', async (): Promise<RecordingResult | null> => {
     title: 'Open a DemoDog take'
   })
   if (result.canceled || !result.filePaths[0]) return null
-  return loadTake(result.filePaths[0])
+  try {
+    return await loadTake(result.filePaths[0])
+  } catch (error) {
+    // Reported here rather than thrown across IPC: an unhandled rejection in
+    // the renderer is invisible, and the user is left looking at a dialog that
+    // closed and did nothing.
+    await dialog.showMessageBox(studioWindow!, {
+      type: 'warning',
+      message: 'That take could not be opened',
+      detail: error instanceof Error ? error.message : String(error),
+      buttons: ['OK']
+    })
+    return null
+  }
 })
 
 /**
