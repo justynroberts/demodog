@@ -179,7 +179,7 @@ export function Brand(): ReactNode {
   return (
     <div className="brand">
       {hasLogo ? (
-        <img className="mark" src="/logo.png" alt="" onError={() => setHasLogo(false)} />
+        <img className="mark" src="./logo.png" alt="" onError={() => setHasLogo(false)} />
       ) : (
         <span className="dot" />
       )}
@@ -197,7 +197,7 @@ export function MadeByFintonLabs(): ReactNode {
   return (
     <div className="made-by">
       {hasLogo && (
-        <img src="/logo.png" alt="" className="made-by-mark" onError={() => setHasLogo(false)} />
+        <img src="./logo.png" alt="" className="made-by-mark" onError={() => setHasLogo(false)} />
       )}
       <span>
         DemoDog — made by{' '}

@@ -217,7 +217,10 @@ export default function Timeline(props: Props): ReactNode {
         )}
       </div>
 
-      <div className="playhead" style={{ left: toX(time) }} />
+      {/* Nudged off the very edge so it is still visible at t=0. */}
+      <div className="playhead" style={{ left: Math.max(1, toX(time)) }}>
+        <span className="playhead-time mono">{time.toFixed(2)}s</span>
+      </div>
     </div>
   )
 }

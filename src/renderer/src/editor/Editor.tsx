@@ -69,6 +69,14 @@ export default function Editor({
     )
   }, [recording, project.zoom])
 
+  // Open just past the fade-in. At t=0 the frame is legitimately black, which
+  // reads as a broken preview rather than as a fade — and it puts the playhead
+  // hard against the left edge where it is easy to miss.
+  const openedAt = useRef(false)
+  useEffect(() => {
+    openedAt.current = false
+  }, [recording])
+
   // ---- transport ---------------------------------------------------------
 
   const seek = useCallback(
@@ -129,6 +137,20 @@ export default function Editor({
     screen.addEventListener('ended', onEnded)
     return () => screen.removeEventListener('ended', onEnded)
   }, [recording])
+
+  useEffect(() => {
+    const screen = screenRef.current
+    if (!screen) return
+    const settle = (): void => {
+      if (openedAt.current) return
+      openedAt.current = true
+      // Far enough in to show real content, but still near the start.
+      seek(Math.min(project.fade.in + 0.05, recording.duration * 0.1))
+    }
+    if (screen.readyState >= 1) settle()
+    screen.addEventListener('loadedmetadata', settle)
+    return () => screen.removeEventListener('loadedmetadata', settle)
+  }, [recording, seek, project.fade.in])
 
   // ---- draw loop ---------------------------------------------------------
 

@@ -170,11 +170,11 @@ function detectDwell(input: ParsedInput): Moment[] {
   // fired at most once in a 25s session, which is the same as being off.
   const travelWindow = 0.5
   const stillWindow = 0.45
-  const travelMin = 240
+  const travelMin = 300
   const stillMax = 20
   // A cooldown matters more than the thresholds: without one a slow sweep
   // across the screen emits a moment every stride.
-  const cooldown = 1.6
+  const cooldown = 2.0
   let lastEmit = -Infinity
 
   for (let i = 0; i < moves.length; i++) {

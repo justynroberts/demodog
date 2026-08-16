@@ -1507,3 +1507,41 @@ dialog.info a {
 .made-by a:hover {
   border-bottom-color: var(--violet);
 }
+
+/* A readout is worth more than another slider: it answers "is it zoomed the
+   whole time?" directly. */
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: var(--surface-2);
+  border: 2px solid var(--line);
+  border-radius: 2px;
+  font-size: var(--t-xs);
+  color: var(--muted);
+}
+
+.stat-row strong {
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  color: var(--text);
+}
+
+.playhead {
+  width: 3px;
+}
+
+.playhead-time {
+  position: absolute;
+  top: -20px;
+  left: 6px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--danger);
+  color: #fff;
+  border-radius: 2px;
+}

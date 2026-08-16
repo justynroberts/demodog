@@ -52,18 +52,29 @@ function report(label: string, zoom: ZoomSettings): void {
     total++
   }
 
-  console.log(`\n${label}`)
-  console.log(`  segments        ${segments.length}`)
-  console.log(`  returns to 1x   ${releases}`)
-  console.log(`  time zoomed     ${Math.round((zoomedFrames / total) * 100)}%`)
-  console.log(
-    `  zoom every      ${segments.length ? (meta.duration / segments.length).toFixed(1) : '—'}s`
-  )
-  for (const s of segments) {
+  if (process.env.SWEEP) {
     console.log(
-      `    ${s.start.toFixed(2)}s → ${s.end.toFixed(2)}s  ${s.scale.toFixed(2)}x  ` +
-        `(${Math.round(s.x)}, ${Math.round(s.y)})`
+      `  ${label.padEnd(26)} shots ${String(segments.length).padStart(2)}  ` +
+        `releases ${String(releases).padStart(2)}  zoomed ${String(
+          Math.round((zoomedFrames / total) * 100)
+        ).padStart(3)}%`
     )
+  } else {
+    console.log(`\n${label}`)
+    console.log(`  segments        ${segments.length}`)
+    console.log(`  returns to 1x   ${releases}`)
+    console.log(`  time zoomed     ${Math.round((zoomedFrames / total) * 100)}%`)
+    console.log(
+      `  zoom every      ${segments.length ? (meta.duration / segments.length).toFixed(1) : '—'}s`
+    )
+  }
+  if (!process.env.SWEEP) {
+    for (const s of segments) {
+      console.log(
+        `    ${s.start.toFixed(2)}s → ${s.end.toFixed(2)}s  ${s.scale.toFixed(2)}x  ` +
+          `(${Math.round(s.x)}, ${Math.round(s.y)})`
+      )
+    }
   }
 
   // The measurement that answers "does it zoom out between shots": across each
@@ -103,9 +114,15 @@ const before: ZoomSettings = {
   triggers: { ...base.zoom.triggers, dwell: true }
 }
 
-report('WITHOUT pointer-arrives', {
-  ...base.zoom,
-  triggers: { ...base.zoom.triggers, dwell: false }
-})
-report('WITH pointer-arrives', { ...base.zoom, triggers: { ...base.zoom.triggers, dwell: true } })
+// Sweep the two settings that decide how much of a take is spent zoomed.
+if (process.env.SWEEP) {
+  for (const hold of [1.2, 1.5, 1.9]) {
+    for (const bridgeGap of [0.8, 1.4, 2.2]) {
+      report(`hold ${hold}s / bridge ${bridgeGap}s`, { ...base.zoom, hold, bridgeGap })
+    }
+  }
+} else {
+  report('current defaults', base.zoom)
+}
+
 console.log()

@@ -17,6 +17,9 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
+    // The packaged renderer is loaded over file://, where absolute URLs point
+    // at the filesystem root rather than at the app.
+    base: './',
     resolve: {
       alias: { '@': resolve(__dirname, 'src/renderer/src') }
     },

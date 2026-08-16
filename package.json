@@ -29,6 +29,7 @@
     "@types/react-dom": "^19.0.2",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.2.1",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -40,7 +41,7 @@
     "productName": "DemoDog",
     "files": [
       "out/**/*",
-      "resources/icon.icns"
+      "!**/*.map"
     ],
     "extraResources": [
       {
@@ -51,14 +52,44 @@
     "mac": {
       "category": "public.app-category.video",
       "target": [
-        "dmg"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
       "extendInfo": {
         "NSCameraUsageDescription": "DemoDog records your camera for picture-in-picture overlays.",
         "NSMicrophoneUsageDescription": "DemoDog records your microphone narration.",
         "NSScreenCaptureUsageDescription": "DemoDog records your screen."
       },
-      "icon": "resources/icon.icns"
-    }
+      "icon": "resources/icon.icns",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "dmg": {
+      "title": "${productName}",
+      "contents": [
+        {
+          "x": 140,
+          "y": 200,
+          "type": "file"
+        },
+        {
+          "x": 400,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "afterPack": "scripts/after-pack.js"
   }
 }

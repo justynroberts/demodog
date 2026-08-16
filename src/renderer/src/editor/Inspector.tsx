@@ -412,6 +412,23 @@ function ZoomTab({
   const autoCount = segments.filter((s) => s.auto).length
   const { clicks, scrolls } = recording.input
 
+  // Union of the shots, so overlapping ones are not double counted. This is
+  // the number that answers "is it zoomed the whole time?" — a question the
+  // settings alone cannot.
+  const covered = [...segments]
+    .sort((a, b) => a.start - b.start)
+    .reduce<{ total: number; until: number }>(
+      (acc, seg) => {
+        const from = Math.max(seg.start, acc.until)
+        return {
+          total: acc.total + Math.max(0, seg.end - from),
+          until: Math.max(acc.until, seg.end)
+        }
+      },
+      { total: 0, until: 0 }
+    ).total
+  const zoomedPercent = recording.duration ? Math.round((covered / recording.duration) * 100) : 0
+
   return (
     <>
       {zoom.enabled && autoCount === 0 && (
@@ -429,6 +446,14 @@ function ZoomTab({
       )}
 
       <Group title="Automatic zoom">
+        <div className="stat-row">
+          <span>
+            <strong>{autoCount + segments.filter((s) => !s.auto).length}</strong> shots
+          </span>
+          <span>
+            zoomed <strong>{zoomedPercent}%</strong> of the take
+          </span>
+        </div>
         <Toggle
           label="Enabled"
           checked={zoom.enabled}
