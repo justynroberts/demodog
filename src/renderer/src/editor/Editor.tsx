@@ -172,7 +172,17 @@ export default function Editor({
       cameraRef.current?.pause()
       setPlaying(false)
     } else {
-      if (timeRef.current >= trim.end + leadOut - 0.02) seek(trim.start - leadIn)
+      // Start again only from the very end; otherwise start from wherever the
+      // playhead is. The element can disagree with the playhead — a seek that
+      // was still in flight when playback stopped, for one — so the position is
+      // re-asserted rather than assumed, which is what made pressing play after
+      // clicking the timeline begin from the beginning.
+      if (timeRef.current >= trim.end + leadOut - 0.02) {
+        seek(trim.start - leadIn)
+      } else {
+        const want = Math.max(0, Math.min(timeRef.current, recording.duration))
+        if (Math.abs(screen.currentTime - want) > 0.05) screen.currentTime = want
+      }
       cardClock.current = performance.now()
       void screen.play()
       // The camera is started by the draw loop rather than here: its track
@@ -270,9 +280,13 @@ export default function Editor({
           return
         }
         cardClock.current = performance.now()
-        timeRef.current = screen.currentTime
-        setTime(screen.currentTime)
-        if (screen.currentTime >= trim.end - 0.01) {
+        // Not while a seek is in flight. Setting currentTime on a playing
+        // element does not take effect at once — it keeps reporting where it
+        // was until the seek lands — so reading it back every frame overwrote
+        // the position just asked for and dragged the playhead back to it.
+        if (!screen.seeking) timeRef.current = screen.currentTime
+        setTime(timeRef.current)
+        if (timeRef.current >= trim.end - 0.01) {
           screen.pause()
           cameraRef.current?.pause()
           // The outro is part of the piece, so playback continues into it.
@@ -284,7 +298,7 @@ export default function Editor({
         // Waiting for `ct >= 0` at press time meant it never started at all.
         const camera = cameraRef.current
         if (camera) {
-          const want = screen.currentTime - recording.cameraOffset - cameraSync
+          const want = timeRef.current - recording.cameraOffset - cameraSync
           // Past the end counts as "not due" just as much as before the start.
           // Seeking beyond a track's duration silently clamps, so the position
           // asked for is never reached, the error never closes, and the loop

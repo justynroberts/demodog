@@ -18,8 +18,9 @@ import { pathToFileURL } from 'node:url'
 import { setupUpdates } from './updater'
 import { installMenu } from './menu'
 import { clearQuarantine } from './quarantine'
-import { mkdir, writeFile, readFile } from 'node:fs/promises'
-import { createWriteStream, existsSync, WriteStream } from 'node:fs'
+import { mkdir, writeFile, readFile, stat } from 'node:fs/promises'
+import { createReadStream, createWriteStream, existsSync, WriteStream } from 'node:fs'
+import { Readable } from 'node:stream'
 import {
   RecorderProcess,
   listSources,
@@ -357,18 +358,71 @@ app.whenReady().then(() => {
   // Everything DemoDog records lives here, so this is the default boundary.
   allowMediaPath(join(app.getPath('videos'), 'DemoDog'))
 
-  protocol.handle('rec', (request) => {
-    // rec://local/<absolute path> — served off disk, with the range support
-    // that net.fetch gives us for free, but only from an allowed root.
+  protocol.handle('rec', async (request) => {
+    // rec://local/<absolute path> — served off disk, from an allowed root only.
+    //
+    // Byte ranges are served here rather than delegated. Handing the file to
+    // `net.fetch` returns the whole thing with a 200, and a <video> given a 200
+    // decides the stream is not seekable: `seekable.end(0)` stays at zero,
+    // every assignment to `currentTime` is refused, and the element sits at the
+    // first frame forever. Playback still works, because playing forwards is
+    // just reading — which is why this looked like a scrubbing bug rather than
+    // a transport one, and why clicking the timeline appeared to rewind.
     const url = new URL(request.url)
     const filePath = decodeURIComponent(url.pathname)
     if (!isMediaPathAllowed(filePath)) {
       console.warn(`[rec] refused ${filePath}: outside the permitted media roots`)
       return new Response('Forbidden', { status: 403 })
     }
-    return net.fetch(pathToFileURL(filePath).toString(), {
-      headers: request.headers,
-      method: request.method
+
+    let size: number
+    try {
+      size = (await stat(filePath)).size
+    } catch {
+      return new Response('Not found', { status: 404 })
+    }
+
+    const type = filePath.endsWith('.webm')
+      ? 'video/webm'
+      : filePath.endsWith('.mp4')
+        ? 'video/mp4'
+        : 'application/octet-stream'
+
+    const asStream = (start: number, end: number): ReadableStream =>
+      Readable.toWeb(createReadStream(filePath, { start, end })) as ReadableStream
+
+    const range = request.headers.get('Range')
+    const match = range?.match(/bytes=(\d*)-(\d*)/)
+    if (!match) {
+      return new Response(asStream(0, size - 1), {
+        status: 200,
+        headers: {
+          'Content-Type': type,
+          'Content-Length': String(size),
+          // Says the file can be seeked at all; without it the element does
+          // not even ask for a range.
+          'Accept-Ranges': 'bytes'
+        }
+      })
+    }
+
+    const start = match[1] ? Number(match[1]) : 0
+    const end = match[2] ? Math.min(Number(match[2]), size - 1) : size - 1
+    if (!Number.isFinite(start) || start >= size || end < start) {
+      return new Response('Range not satisfiable', {
+        status: 416,
+        headers: { 'Content-Range': `bytes */${size}` }
+      })
+    }
+
+    return new Response(asStream(start, end), {
+      status: 206,
+      headers: {
+        'Content-Type': type,
+        'Content-Length': String(end - start + 1),
+        'Content-Range': `bytes ${start}-${end}/${size}`,
+        'Accept-Ranges': 'bytes'
+      }
     })
   })
 
