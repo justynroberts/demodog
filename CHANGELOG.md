@@ -6,6 +6,26 @@ is where finished work waits.
 
 ## Unreleased
 
+_Nothing yet._
+
+## 1.0.4 — 2026-08-17
+
+Updating explains itself, and can no longer be mistaken for failing.
+
+- The window is brought forward before the update dialog is shown. It is
+  attached to that window, so with the app behind something else there was
+  nothing to see — a downloaded update waiting on an answer looked exactly like
+  one that had failed.
+- The dialog says the app will close for about ten seconds and that the gap is
+  the installer working. Measured: quits at five seconds, swapped by ten,
+  running again by fifteen.
+- Checks run every two hours and whenever the app is focused, rather than once
+  a day. A release published while the app was open went unnoticed until the
+  next day, which is indistinguishable from a broken updater.
+- A failed install offers to open the releases page instead of pointing at a log
+  file. It also waited four seconds before declaring failure — inside the time a
+  successful install takes — and now waits twenty-five.
+
 - **Intro and outro cards.** A title, a subtitle and an optional logo, held for
   as long as you like before the recording starts and after it ends. They are
   extra time either side of the take rather than separate clips, so they scrub,
