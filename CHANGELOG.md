@@ -11,6 +11,11 @@ is where finished work waits.
   lines appear on the timeline; clicking one selects it, jumps the playhead to
   it, and opens it for editing, so a misheard word is fixed in place rather than
   by re-transcribing.
+- Transcript lines are whole sentences. Filling each line to a character limit
+  and starting a new one on overflow left the tail of a sentence stranded on
+  screen — a caption reading "dog." for a third of a second — which looks
+  exactly like a transcript with words missing. Long sentences are now split
+  into even parts instead.
 - Captions are styled per project: font, size, weight, colour, upper case,
   position and alignment, line width and spacing, outline, shadow, a backing
   plate for busy footage, and a fade at each end. The style travels with a

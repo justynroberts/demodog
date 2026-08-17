@@ -21,7 +21,8 @@ enum Transcriber {
     static let windowSeconds: Double = 45
 
     /// Carried across a window boundary so a sentence split across two windows
-    /// is offered to both and de-duplicated by the caller.
+    /// is heard whole by the later one. Cues are assigned to the window their
+    /// midpoint falls in, so the extra second never produces a duplicate.
     static let overlapSeconds: Double = 1.0
 
     struct Cue {
@@ -93,7 +94,11 @@ enum Transcriber {
                 let clip = try await extract(asset: asset, start: clipped, seconds: span)
                 defer { try? FileManager.default.removeItem(at: clip) }
                 let cues = try await recognise(recognizer: recognizer, url: clip, shift: clipped)
-                for cue in cues {
+                // The overlap exists so a sentence crossing a boundary is heard
+                // whole, not so it is transcribed twice. Each cue belongs to the
+                // window its middle falls in, which assigns every one exactly
+                // once without needing to compare text.
+                for cue in cues where offset == 0 || (cue.start + cue.end) / 2 >= offset {
                     produced += 1
                     emit([
                         "event": "cue",
@@ -194,41 +199,65 @@ enum Transcriber {
     /// Words into lines.
     ///
     /// The recogniser returns one segment per word, which is useless as a
-    /// caption. Lines break on a real pause, on sentence-ending punctuation, or
-    /// once a line is long enough to be worth showing on its own — roughly how
-    /// a person would break them.
+    /// caption. Two passes: gather words into sentences, then break a sentence
+    /// that is too long to read into near-equal parts.
+    ///
+    /// The equal split is the point. Filling each line to a character limit and
+    /// starting a new one when it overflows leaves the tail of a sentence alone
+    /// on screen — a caption reading "dog." for a third of a second, which
+    /// looks exactly like a transcript with words missing from it. Nearly a
+    /// third of the lines were fragments like that.
     private static func group(segments: [SFTranscriptionSegment], shift: Double) -> [Cue] {
-        var cues: [Cue] = []
-        var words: [SFTranscriptionSegment] = []
+        // A caption wraps to a second line when it needs to, so a whole
+        // sentence usually belongs in one cue.
+        let comfortable = 90
 
-        func flush() {
-            guard let first = words.first, let last = words.last else { return }
-            let text = words.map(\.substring).joined(separator: " ")
+        func cue(_ words: [SFTranscriptionSegment]) -> Cue? {
+            guard let first = words.first, let last = words.last else { return nil }
             let confidence =
                 words.reduce(0.0) { $0 + Double($1.confidence) } / Double(words.count)
-            cues.append(
-                Cue(
-                    start: shift + first.timestamp,
-                    end: shift + last.timestamp + last.duration,
-                    text: text,
-                    confidence: confidence))
-            words.removeAll()
+            return Cue(
+                start: shift + first.timestamp,
+                end: shift + last.timestamp + last.duration,
+                text: words.map(\.substring).joined(separator: " "),
+                confidence: confidence)
         }
 
+        // ---- sentences ------------------------------------------------
+        var sentences: [[SFTranscriptionSegment]] = []
+        var current: [SFTranscriptionSegment] = []
         for (index, segment) in segments.enumerated() {
-            words.append(segment)
-
-            let ends = segment.substring.hasSuffix(".") || segment.substring.hasSuffix("?")
-                || segment.substring.hasSuffix("!")
+            current.append(segment)
+            let last = segment.substring.last
+            let ends = last == "." || last == "?" || last == "!"
             let next = index + 1 < segments.count ? segments[index + 1] : nil
             let gap = next.map { $0.timestamp - (segment.timestamp + segment.duration) } ?? 0
-            let line = words.map(\.substring).joined(separator: " ")
-
-            if ends || gap > 0.6 || line.count > 62 {
-                flush()
+            if ends || gap > 0.7 {
+                sentences.append(current)
+                current = []
             }
         }
-        flush()
+        if !current.isEmpty { sentences.append(current) }
+
+        // ---- break the long ones evenly -------------------------------
+        var cues: [Cue] = []
+        for words in sentences {
+            let length = words.map(\.substring).joined(separator: " ").count
+            if length <= comfortable || words.count < 4 {
+                if let one = cue(words) { cues.append(one) }
+                continue
+            }
+            let parts = max(2, Int(ceil(Double(length) / Double(comfortable))))
+            // Ceiling, so the last part is the short one and never emptier than
+            // the rest by more than a word.
+            let per = Int(ceil(Double(words.count) / Double(parts)))
+            var index = 0
+            while index < words.count {
+                let slice = Array(words[index..<min(index + per, words.count)])
+                if let one = cue(slice) { cues.append(one) }
+                index += per
+            }
+        }
         return cues
     }
 }
