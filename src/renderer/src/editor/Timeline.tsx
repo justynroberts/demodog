@@ -19,6 +19,9 @@ interface Props {
 
 type DragMode = 'move' | 'start' | 'end'
 
+/** Matches .track-label in the stylesheet. */
+const LABEL_WIDTH = 52
+
 /**
  * Two tracks: the generated zoom segments, which are directly editable, and a
  * read-only view of the input that produced them. Seeing the clicks under the
@@ -198,6 +201,10 @@ export default function Timeline(props: Props): ReactNode {
           {captions.map((caption) => {
             const left = toX(caption.start)
             const width = Math.max(6, toX(caption.end) - left)
+            // Nudge the words clear of the label chip when a line starts at the
+            // very beginning of the recording; the block itself still passes
+            // behind it, so the timing it shows stays honest.
+            const inset = Math.max(0, LABEL_WIDTH + 4 - left)
             return (
               <button
                 key={caption.id}
@@ -212,7 +219,7 @@ export default function Timeline(props: Props): ReactNode {
                   onSeek(caption.start + 0.01)
                 }}
               >
-                <span>{caption.text}</span>
+                <span style={{ paddingLeft: inset }}>{caption.text}</span>
               </button>
             )
           })}
