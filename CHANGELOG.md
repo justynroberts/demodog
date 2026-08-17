@@ -8,6 +8,17 @@ is where finished work waits.
 
 _Nothing yet._
 
+## 1.0.6 — 2026-08-17
+
+- **Updates that quit the app and never came back.** launchd showed what was
+  happening: Squirrel submits the installer as a job, launchd takes it as a
+  pending spawn, and then removes the service before it runs because the session
+  is already winding down. The installer was never refused — it was never
+  started, which is why no installer log ever existed on the affected machine.
+  The cause was this app destroying its own windows immediately before handing
+  over, which ended the process faster than launchd could spawn anything. That
+  teardown has been removed.
+
 ## 1.0.5 — 2026-08-17
 
 - Attempted a fix for updates failing on browser-downloaded copies, by having
