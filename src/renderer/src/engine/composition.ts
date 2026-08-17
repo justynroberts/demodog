@@ -1,6 +1,7 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { CameraSolver } from './camera'
 import { drawCaption } from './captions'
+import { drawTitleCard, introProgress, outroProgress } from './titles'
 import { CursorTrack } from './cursorTrack'
 import { drawClickRing, drawCursor, resolveShape } from './cursorArt'
 import { generateSegments } from './autozoom'
@@ -141,6 +142,21 @@ export class Composition {
     const { output, frame } = this.project
     ctx.save()
     ctx.clearRect(0, 0, output.width, output.height)
+
+    // Outside the recording entirely: a title card is the whole frame, so
+    // nothing else is drawn and nothing else needs to know it happened.
+    const opening = introProgress(t, this.project.intro)
+    if (opening !== null) {
+      drawTitleCard(ctx, this.project.intro, opening, output, this.project.captionStyle.fontFamily)
+      ctx.restore()
+      return
+    }
+    const closing = outroProgress(t, this.range.end, this.project.outro)
+    if (closing !== null) {
+      drawTitleCard(ctx, this.project.outro, closing, output, this.project.captionStyle.fontFamily)
+      ctx.restore()
+      return
+    }
 
     // The background, its grain and the frame's drop shadow are identical on
     // every frame, and the shadow in particular is expensive — a large

@@ -47,7 +47,15 @@ export async function exportMP4(options: ExportOptions): Promise<ExportResult> {
   const { composition, onProgress, signal } = options
   const { output } = composition.project
   const fps = output.fps
-  const duration = Math.max(0.05, options.end - options.start)
+  // Title cards are extra time either side of the recording rather than extra
+  // files: the range simply starts before zero and ends after the take, and the
+  // composition already knows what to draw there.
+  const project = composition.project
+  const leadIn = project.intro.enabled ? project.intro.seconds : 0
+  const leadOut = project.outro.enabled ? project.outro.seconds : 0
+  const from = options.start - leadIn
+  const to = options.end + leadOut
+  const duration = Math.max(0.05, to - from)
   const frameCount = Math.max(1, Math.round(duration * fps))
 
   onProgress(0, 'Preparing video')
@@ -123,19 +131,25 @@ export async function exportMP4(options: ExportOptions): Promise<ExportResult> {
       }
       if (encoderError) throw encoderError
 
-      const t = options.start + i / fps
+      const t = from + i / fps
       // Sample at the middle of the frame's interval — landing exactly on a
       // boundary makes the choice of source frame ambiguous.
       const sampleTime = t + 0.5 / fps
 
+      // A title card covers the whole frame, so decoding video underneath it is
+      // work thrown away — and asking a sequential reader for a negative time
+      // would disturb where it has got to.
+      const showingCard = t < options.start || t > options.end
+
       let mark = performance.now()
-      const screenFrame = await screen.frameAt(sampleTime)
+      const screenFrame = showingCard ? null : await screen.frameAt(sampleTime)
       spent.screen += performance.now() - mark
 
       mark = performance.now()
-      const cameraFrame = camera
-        ? await camera.frameAt(sampleTime - options.cameraOffset - options.cameraSync)
-        : null
+      const cameraFrame =
+        camera && !showingCard
+          ? await camera.frameAt(sampleTime - options.cameraOffset - options.cameraSync)
+          : null
       spent.camera += performance.now() - mark
 
       mark = performance.now()
@@ -238,6 +252,13 @@ interface MixedAudio {
 async function buildAudio(options: ExportOptions): Promise<MixedAudio | null> {
   const sampleRate = 48_000
   const duration = options.end - options.start
+  // Title cards are silent time either side of the recording. The mixdown has
+  // to be as long as the video or the audio finishes early, and the recording's
+  // own sound has to start after the intro rather than under it.
+  const project = options.composition.project
+  const leadIn = project.intro.enabled ? project.intro.seconds : 0
+  const leadOut = project.outro.enabled ? project.outro.seconds : 0
+  const total = leadIn + duration + leadOut
   const context = new AudioContext({ sampleRate })
 
   const decode = async (url: string): Promise<AudioBuffer | null> => {
@@ -256,7 +277,7 @@ async function buildAudio(options: ExportOptions): Promise<MixedAudio | null> {
 
   if (!system && !mic) return null
 
-  const offline = new OfflineAudioContext(2, Math.ceil(duration * sampleRate), sampleRate)
+  const offline = new OfflineAudioContext(2, Math.ceil(total * sampleRate), sampleRate)
   const gains = options.composition.project.audio
 
   // Match the visual fade, so a faded ending is silent rather than cut off.
@@ -264,12 +285,12 @@ async function buildAudio(options: ExportOptions): Promise<MixedAudio | null> {
   const ramp = (gain: GainNode, level: number): void => {
     gain.gain.value = level
     if (fade.in > 0) {
-      gain.gain.setValueAtTime(0, 0)
-      gain.gain.linearRampToValueAtTime(level, Math.min(fade.in, duration))
+      gain.gain.setValueAtTime(0, leadIn)
+      gain.gain.linearRampToValueAtTime(level, leadIn + Math.min(fade.in, duration))
     }
     if (fade.out > 0 && duration > fade.out) {
-      gain.gain.setValueAtTime(level, duration - fade.out)
-      gain.gain.linearRampToValueAtTime(0, duration)
+      gain.gain.setValueAtTime(level, leadIn + duration - fade.out)
+      gain.gain.linearRampToValueAtTime(0, leadIn + duration)
     }
   }
 
@@ -279,7 +300,7 @@ async function buildAudio(options: ExportOptions): Promise<MixedAudio | null> {
     const gain = offline.createGain()
     ramp(gain, gains.systemGain)
     node.connect(gain).connect(offline.destination)
-    node.start(0, options.start, duration)
+    node.start(leadIn, options.start, duration)
   }
 
   if (mic && gains.micGain > 0) {
@@ -291,8 +312,8 @@ async function buildAudio(options: ExportOptions): Promise<MixedAudio | null> {
     // The camera file starts later than the screen track; skip into it by the
     // difference so speech lines up with what is on screen.
     const into = options.start - options.cameraOffset - options.cameraSync
-    if (into >= 0) node.start(0, into, duration)
-    else node.start(-into, 0, duration + into)
+    if (into >= 0) node.start(leadIn, into, duration)
+    else node.start(leadIn - into, 0, duration + into)
   }
 
   return { buffer: await offline.startRendering(), sampleRate }

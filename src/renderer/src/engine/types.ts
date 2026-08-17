@@ -1,5 +1,6 @@
 // MIT License - Copyright (c) fintonlabs.com
 import type { Caption, CaptionStyle } from './captions'
+import type { TitleCard } from './titles'
 import type { CaptureMeta, RawEvent } from '../../../shared/types'
 
 /**
@@ -213,6 +214,9 @@ export interface KeystrokeSettings {
 }
 
 export interface Project {
+  /** Shown before the recording starts and after it ends. */
+  intro: TitleCard
+  outro: TitleCard
   /** Timed text drawn over the composition; empty until transcribed. */
   captions: Caption[]
   captionStyle: CaptionStyle

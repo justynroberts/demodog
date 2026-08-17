@@ -50,7 +50,7 @@ interface Props {
   onProfileId: (id: string) => void
 }
 
-type Tab = 'style' | 'zoom' | 'cursor' | 'camera' | 'text'
+type Tab = 'style' | 'zoom' | 'cursor' | 'camera' | 'text' | 'titles'
 
 export default function Inspector(props: Props): ReactNode {
   const { project, onChange } = props
@@ -67,7 +67,7 @@ export default function Inspector(props: Props): ReactNode {
   return (
     <aside className="inspector">
       <div className="insp-tabs" role="tablist">
-        {(['style', 'zoom', 'cursor', 'camera', 'text'] as Tab[]).map((id) => (
+        {(['style', 'zoom', 'cursor', 'camera', 'text', 'titles'] as Tab[]).map((id) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
             {id}
           </button>
@@ -91,6 +91,7 @@ export default function Inspector(props: Props): ReactNode {
         {tab === 'cursor' && <CursorTab project={project} patch={patch} />}
         {tab === 'camera' && <CameraTab {...props} patch={patch} />}
         {tab === 'text' && <CaptionsTab {...props} set={set} patch={patch} />}
+        {tab === 'titles' && <TitlesTab project={project} patch={patch} />}
       </div>
     </aside>
   )
@@ -1310,6 +1311,130 @@ function CaptionsTab({
           format={(v) => (v === 0 ? 'Cut' : `${v.toFixed(2)}s`)}
         />
       </Group>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Intro and outro cards.
+ *
+ * They are time either side of the recording rather than separate clips, so the
+ * only things to decide are how long, what it says, and what it looks like.
+ */
+function TitlesTab({ project, patch }: { project: Project; patch: Patcher }): ReactNode {
+  const card = (which: 'intro' | 'outro'): ReactNode => {
+    const value = project[which]
+    const set = (changes: Partial<typeof value>): void => patch(which, changes)
+    return (
+      <Group title={which === 'intro' ? 'Intro' : 'Outro'}>
+        <Toggle
+          label={which === 'intro' ? 'Show before the recording' : 'Show after the recording'}
+          checked={value.enabled}
+          onChange={(v) => set({ enabled: v })}
+        />
+        {value.enabled && (
+          <>
+            <span className="label">Title</span>
+            <input
+              className="text-input"
+              value={value.title}
+              placeholder={which === 'intro' ? 'What this shows' : 'Thanks for watching'}
+              onChange={(e) => set({ title: e.target.value })}
+            />
+            <span className="label">Subtitle</span>
+            <input
+              className="text-input"
+              value={value.subtitle}
+              placeholder={which === 'intro' ? 'Your name, or the date' : 'Where to find you'}
+              onChange={(e) => set({ subtitle: e.target.value })}
+            />
+            <Slider
+              label="Holds for"
+              min={0.5}
+              max={8}
+              step={0.1}
+              value={value.seconds}
+              onChange={(v) => set({ seconds: v })}
+              format={(v) => `${v.toFixed(1)}s`}
+            />
+            <Slider
+              label="Title size"
+              min={28}
+              max={160}
+              step={2}
+              value={value.titleSize}
+              onChange={(v) => set({ titleSize: v })}
+              format={(v) => `${Math.round(v)}pt`}
+            />
+            <div className="row-between">
+              <span className="label">Text</span>
+              <input
+                type="color"
+                value={value.color}
+                onChange={(e) => set({ color: e.target.value })}
+              />
+            </div>
+            <div className="row-between">
+              <span className="label">Background</span>
+              <input
+                type="color"
+                value={value.background}
+                onChange={(e) => set({ background: e.target.value })}
+              />
+            </div>
+            <Slider
+              label="Fade"
+              min={0}
+              max={1.5}
+              step={0.05}
+              value={value.fade}
+              onChange={(v) => set({ fade: v })}
+              format={(v) => (v === 0 ? 'Cut' : `${v.toFixed(2)}s`)}
+            />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                className="btn small"
+                onClick={() => {
+                  void api.pickImage().then((src) => {
+                    if (src) set({ imageSrc: src })
+                  })
+                }}
+              >
+                {value.imageSrc ? 'Change logo…' : 'Add a logo…'}
+              </button>
+              {value.imageSrc && (
+                <button className="btn small ghost" onClick={() => set({ imageSrc: null })}>
+                  Remove
+                </button>
+              )}
+            </div>
+            {value.imageSrc && (
+              <Slider
+                label="Logo height"
+                min={60}
+                max={420}
+                step={5}
+                value={value.imageHeight}
+                onChange={(v) => set({ imageHeight: v })}
+                format={(v) => `${Math.round(v)}px`}
+              />
+            )}
+          </>
+        )}
+      </Group>
+    )
+  }
+
+  return (
+    <>
+      <p className="hint">
+        Cards are extra time either side of the recording, not separate clips — so they scrub,
+        preview and export exactly like the rest of it.
+      </p>
+      {card('intro')}
+      {card('outro')}
     </>
   )
 }

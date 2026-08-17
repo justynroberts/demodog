@@ -6,7 +6,12 @@ is where finished work waits.
 
 ## Unreleased
 
-_Nothing yet._
+- **Intro and outro cards.** A title, a subtitle and an optional logo, held for
+  as long as you like before the recording starts and after it ends. They are
+  extra time either side of the take rather than separate clips, so they scrub,
+  preview, fade and export exactly like everything else — no second encode, no
+  stitching, and no intro whose colour or frame rate is subtly not the
+  recording's. They travel with a profile, so every take can open the same way.
 
 ## 1.0.3 — 2026-08-17
 

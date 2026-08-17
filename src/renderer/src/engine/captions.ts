@@ -249,7 +249,9 @@ export function captionsFromCues(
     // has its own moment to occupy.
     const readable = Math.max(cue.end, cue.start + MIN_CAPTION_SECONDS)
     const bridged = gap > 0 && gap < 0.35 ? next.start : cue.end
-    const end = next ? Math.min(Math.max(bridged, readable), next.start) : Math.max(bridged, readable)
+    const end = next
+      ? Math.min(Math.max(bridged, readable), next.start)
+      : Math.max(bridged, readable)
 
     return {
       id: `cue-${index}-${Math.round(cue.start * 1000)}`,

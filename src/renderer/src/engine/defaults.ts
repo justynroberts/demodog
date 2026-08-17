@@ -1,5 +1,6 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { DEFAULT_CAPTION_STYLE } from './captions'
+import { DEFAULT_INTRO, DEFAULT_OUTRO } from './titles'
 import type { Background, Project } from './types'
 
 export const BACKGROUND_PRESETS: { id: string; name: string; background: Background }[] = [
@@ -115,6 +116,8 @@ export function defaultProject(
       smoothing: 0.16
     },
     segments: [],
+    intro: { ...DEFAULT_INTRO },
+    outro: { ...DEFAULT_OUTRO },
     captions: [],
     captionStyle: { ...DEFAULT_CAPTION_STYLE },
     cursor: {
@@ -320,7 +323,9 @@ const LOOK_KEYS = [
   'fade',
   'audio',
   'output',
-  'captionStyle'
+  'captionStyle',
+  'intro',
+  'outro'
 ] as const
 
 export function rememberLook(project: Project): void {

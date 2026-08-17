@@ -83,6 +83,11 @@ export default function Editor({
   const timeRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
   const lastBenchLog = useRef(0)
+  /** Wall clock while a title card is showing and the video is not running. */
+  const cardClock = useRef(0)
+
+  const leadIn = project.intro.enabled ? project.intro.seconds : 0
+  const leadOut = project.outro.enabled ? project.outro.seconds : 0
 
   const composition = useMemo(
     () => new Composition(recording, { ...project, segments }),
@@ -143,18 +148,20 @@ export default function Editor({
 
   const seek = useCallback(
     (t: number) => {
-      const clamped = Math.min(Math.max(t, 0), recording.duration)
+      const clamped = Math.min(Math.max(t, -leadIn), recording.duration + leadOut)
       timeRef.current = clamped
       setTime(clamped)
       const screen = screenRef.current
-      if (screen) screen.currentTime = clamped
+      // The element cannot go before its own start, so during the intro it
+      // simply waits on the first frame. Nothing of it is visible anyway.
+      if (screen) screen.currentTime = Math.max(0, Math.min(clamped, recording.duration))
       const camera = cameraRef.current
       if (camera) {
         const ct = clamped - recording.cameraOffset - cameraSync
         if (ct >= 0) camera.currentTime = ct
       }
     },
-    [recording, cameraSync]
+    [recording, cameraSync, leadIn, leadOut]
   )
 
   const togglePlay = useCallback(() => {
@@ -165,13 +172,14 @@ export default function Editor({
       cameraRef.current?.pause()
       setPlaying(false)
     } else {
-      if (timeRef.current >= trim.end - 0.02) seek(trim.start)
+      if (timeRef.current >= trim.end + leadOut - 0.02) seek(trim.start - leadIn)
+      cardClock.current = performance.now()
       void screen.play()
       // The camera is started by the draw loop rather than here: its track
       // begins slightly after the screen's, so at t=0 it is not due yet.
       setPlaying(true)
     }
-  }, [playing, seek, trim, recording, cameraSync])
+  }, [playing, seek, trim, recording, cameraSync, leadIn, leadOut])
 
   /**
    * How far into the camera track it is possible to seek.
@@ -242,12 +250,34 @@ export default function Editor({
       if (!ctx) return
 
       if (playing) {
+        // While a card is showing the recording is paused, so the clock has to
+        // come from elsewhere: real time, advanced by hand.
+        if (timeRef.current < trim.start || timeRef.current >= trim.end) {
+          const now = performance.now()
+          const step = Math.min(0.25, (now - cardClock.current) / 1000)
+          cardClock.current = now
+          const next = timeRef.current + step
+          timeRef.current = next
+          setTime(next)
+          if (next >= trim.start && next < trim.end) {
+            screen.currentTime = next
+            void screen.play().catch(() => undefined)
+          } else if (next >= trim.end + leadOut) {
+            setPlaying(false)
+          }
+          composition.range = trim
+          composition.render(ctx, timeRef.current, { screen: null, camera: null })
+          return
+        }
+        cardClock.current = performance.now()
         timeRef.current = screen.currentTime
         setTime(screen.currentTime)
         if (screen.currentTime >= trim.end - 0.01) {
           screen.pause()
           cameraRef.current?.pause()
-          setPlaying(false)
+          // The outro is part of the piece, so playback continues into it.
+          if (leadOut <= 0) setPlaying(false)
+          else cardClock.current = performance.now()
         }
         // The camera track starts after the screen track, so it has to be
         // started when its own timeline begins — not when playback does.
@@ -325,7 +355,7 @@ export default function Editor({
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
-  }, [composition, playing, trim.end, recording, cameraSync, exporting])
+  }, [composition, playing, trim, recording, cameraSync, exporting, leadIn, leadOut])
 
   // Preview volume follows the mixer. Element volume is 0..1 while the gains
   // go to 2, so boosts above unity only apply to the export, which mixes
