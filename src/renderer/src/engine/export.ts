@@ -167,9 +167,12 @@ export async function exportMP4(options: ExportOptions): Promise<ExportResult> {
     }
 
     const total = performance.now() - startedAt
+    // The shot count is in here because its absence is invisible: an export
+    // with no zoom segments renders perfectly, quickly, and wrong.
     console.log(
       `[export] ${frameCount} frames in ${(total / 1000).toFixed(1)}s ` +
         `(${(frameCount / (total / 1000)).toFixed(1)} fps) — ` +
+        `shots ${composition.project.segments.length}, ` +
         Object.entries(spent)
           .map(([k, v]) => `${k} ${(v / 1000).toFixed(1)}s`)
           .join(', ')

@@ -84,23 +84,19 @@ const work = await mkdtemp(join(tmpdir(), 'demodog-verify-'))
 const output = join(work, 'export.mp4')
 
 try {
-  const { code, out } = await run(
-    'npx',
-    ['electron', '.'],
-    {
-      timeout: 300_000,
-      env: {
-        ...process.env,
-        DEMODOG_BENCH: FIXTURE,
-        DEMODOG_BENCH_OUT: output,
-        DEMODOG_BENCH_SECONDS: String(SECONDS),
-        // No zoom, cursor or PiP: with those on, the picture changes every
-        // frame regardless of whether the recording underneath it does, and
-        // this check passes on a completely frozen export.
-        DEMODOG_BENCH_PLAIN: '1'
-      }
+  const { code, out } = await run('npx', ['electron', '.'], {
+    timeout: 300_000,
+    env: {
+      ...process.env,
+      DEMODOG_BENCH: FIXTURE,
+      DEMODOG_BENCH_OUT: output,
+      DEMODOG_BENCH_SECONDS: String(SECONDS),
+      // No zoom, cursor or PiP: with those on, the picture changes every
+      // frame regardless of whether the recording underneath it does, and
+      // this check passes on a completely frozen export.
+      DEMODOG_BENCH_PLAIN: '1'
     }
-  )
+  })
 
   check(code !== 'timeout', 'export finishes', 'the exporter hung — it never wrote a file')
   check(existsSync(output), 'a file is written', out.split('\n').slice(-6).join('\n      '))
@@ -112,8 +108,12 @@ try {
     check(size > 200_000, `file is a plausible size (${(size / 1024).toFixed(0)} KB)`)
 
     await run('ffmpeg', [
-      '-v', 'error', '-i', output,
-      '-vf', `fps=${SAMPLES / SECONDS}`,
+      '-v',
+      'error',
+      '-i',
+      output,
+      '-vf',
+      `fps=${SAMPLES / SECONDS}`,
       join(work, 'f%02d.png')
     ])
     const frames = (await readdir(work)).filter((f) => f.endsWith('.png')).sort()
@@ -121,7 +121,11 @@ try {
 
     const digests = new Set()
     for (const frame of frames) {
-      digests.add(createHash('md5').update(await readFile(join(work, frame))).digest('hex'))
+      digests.add(
+        createHash('md5')
+          .update(await readFile(join(work, frame)))
+          .digest('hex')
+      )
     }
     // The whole point: one distinct frame across the sample means the export is
     // a still image with audio over it.
@@ -133,6 +137,25 @@ try {
         : 'some frames repeat, so the reader is not advancing cleanly'
     )
   }
+  // A second pass with the overlays left on, purely to confirm the zoom shots
+  // reach the exporter. They live in their own state, and an export that
+  // silently rendered with an empty shot list looked completely normal — every
+  // frame present, every frame different, just flat.
+  const zoomRun = await run('npx', ['electron', '.'], {
+    timeout: 300_000,
+    env: {
+      ...process.env,
+      DEMODOG_BENCH: FIXTURE,
+      DEMODOG_BENCH_OUT: join(work, 'zoom.mp4'),
+      DEMODOG_BENCH_SECONDS: String(SECONDS)
+    }
+  })
+  const shots = zoomRun.out.match(/\[export\][^\n]*shots (\d+)/)
+  check(
+    shots !== null && Number(shots[1]) > 0,
+    `the export renders with zoom shots (${shots ? shots[1] : 'none reported'})`,
+    'the exporter was handed an empty shot list, so the result has no zoom'
+  )
 } finally {
   await rm(work, { recursive: true, force: true })
 }

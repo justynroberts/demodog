@@ -49,6 +49,11 @@ export default function Editor({
     }
   })
   const [segments, setSegments] = useState<ZoomSegment[]>([])
+  // Read at call time, not closure time. The headless export runs from a timer
+  // set when the editor mounted, which is before auto-zoom has produced
+  // anything — so the shots it captured were the empty list.
+  const segmentsRef = useRef<ZoomSegment[]>([])
+  segmentsRef.current = segments
   const [time, setTime] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
@@ -351,7 +356,13 @@ export default function Editor({
       frame: { ...project.frame, fitMode: choice.fitMode }
     }
     setProject(project2)
-    composition.project = project2
+    // `segments` explicitly, and this is the whole reason exports had no zoom:
+    // the shots live in their own state, and the composition is built from
+    // `{ ...project, segments }`. Assigning a project spread from `project`
+    // alone therefore replaced the live shot list with the empty one that
+    // `defaultProject` starts with — wiping every zoom a moment before the
+    // export read it, while the preview it was compared against kept its own.
+    composition.project = { ...project2, segments: segmentsRef.current }
     composition.rebuildLayout()
 
     screenRef.current?.pause()
