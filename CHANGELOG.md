@@ -6,7 +6,11 @@ is where finished work waits.
 
 ## Unreleased
 
-_Nothing yet._
+- The export dialog appeared behind the timeline, hiding the Export button. It
+  was a fixed overlay, which is not enough: any ancestor with a transform
+  contains it, and the editor has several. Every modal is now portalled into the
+  document body. The dialog's buttons are also pinned to the bottom of the card,
+  since one taller than the window put them below the fold.
 
 ## 1.0.1 — 2026-08-17
 

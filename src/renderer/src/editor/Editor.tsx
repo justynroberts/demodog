@@ -1,5 +1,6 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { Composition } from '../engine/composition'
 import { generateSegments } from '../engine/autozoom'
@@ -525,31 +526,33 @@ export default function Editor({
           />
         )}
 
-        {exporting && (
-          <div className="progress-wrap">
-            <div className="progress-card">
-              <strong style={{ fontSize: 18 }}>Exporting</strong>
-              <div className="progress-bar">
-                <div style={{ width: `${Math.round(exporting.fraction * 100)}%` }} />
+        {exporting &&
+          createPortal(
+            <div className="progress-wrap">
+              <div className="progress-card">
+                <strong style={{ fontSize: 18 }}>Exporting</strong>
+                <div className="progress-bar">
+                  <div style={{ width: `${Math.round(exporting.fraction * 100)}%` }} />
+                </div>
+                <div className="export-progress-meta mono">
+                  <span>{exporting.stage}</span>
+                  <span>
+                    {exporting.remaining === null
+                      ? 'estimating…'
+                      : `${formatDuration(exporting.remaining)} left`}
+                  </span>
+                </div>
+                <button
+                  className="btn"
+                  style={{ marginTop: 14 }}
+                  onClick={() => abortRef.current?.abort()}
+                >
+                  Cancel
+                </button>
               </div>
-              <div className="export-progress-meta mono">
-                <span>{exporting.stage}</span>
-                <span>
-                  {exporting.remaining === null
-                    ? 'estimating…'
-                    : `${formatDuration(exporting.remaining)} left`}
-                </span>
-              </div>
-              <button
-                className="btn"
-                style={{ marginTop: 14 }}
-                onClick={() => abortRef.current?.abort()}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
+            </div>,
+            document.body
+          )}
       </div>
 
       <div className="timeline">

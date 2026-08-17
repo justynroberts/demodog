@@ -1,5 +1,6 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { EXPORT_TARGETS, OUTPUT_PRESETS } from '../engine/defaults'
 import { Segmented } from '../ui/controls'
@@ -131,7 +132,9 @@ export default function ExportDialog({
   const sizeValue = `${choice.width}x${choice.height}`
   const known = OUTPUT_PRESETS.some((p) => `${p.width}x${p.height}` === sizeValue)
 
-  return (
+  // Into <body>: a fixed overlay is still contained by any ancestor carrying a
+  // transform, and the editor has several.
+  return createPortal(
     <div className="progress-wrap" onClick={onCancel}>
       <div className="export-card" onClick={(e) => e.stopPropagation()}>
         <h2>Export</h2>
@@ -247,7 +250,7 @@ export default function ExportDialog({
           )}
         </button>
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+        <div className="export-actions">
           <button
             className="btn violet"
             style={{ flex: 1, justifyContent: 'center' }}
@@ -260,6 +263,7 @@ export default function ExportDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
