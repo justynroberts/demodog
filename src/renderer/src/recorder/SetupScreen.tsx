@@ -206,16 +206,70 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
     }
   }
 
-  // Apply the starred preset once, and only once everything it refers to has
-  // actually loaded.
+  /** How the setup was left last time, so a second take starts where the first did. */
+  const LAST_USED = 'demodog-last-capture'
+
+  // Restore the previous setup, falling back to the starred preset on a machine
+  // that has never recorded. Last used wins because it is the more recent
+  // statement of intent: applying a preset makes it the last used, so nothing
+  // is lost by preferring it.
   useEffect(() => {
     if (appliedDefault.current) return
-    if (!sources || !devicesReady || presets.length === 0) return
-    const preferred = presets.find((p) => p.isDefault)
+    if (!sources || !devicesReady) return
+
+    let remembered: CapturePreset | null = null
+    try {
+      const stored = localStorage.getItem(LAST_USED)
+      if (stored) remembered = JSON.parse(stored) as CapturePreset
+    } catch {
+      remembered = null
+    }
+
+    const preferred = remembered ?? presets.find((p) => p.isDefault) ?? null
     if (!preferred) return
     appliedDefault.current = true
     applyPreset(preferred)
+    // A remembered setup is not a saved preset, so it must not look like one.
+    if (remembered) {
+      setPresetId('')
+      setPresetName('')
+    }
   }, [sources, devicesReady, presets, cameras, mics])
+
+  // Remembered whenever anything changes, rather than only on record, so a take
+  // that is set up and then abandoned still leaves the settings behind.
+  useEffect(() => {
+    if (!appliedDefault.current || !selected) return
+    const display = sources?.displays.find((d) => d.id === selected.id)
+    const window = sources?.windows.find((w) => w.id === selected.id)
+    const snapshot: CapturePreset = {
+      id: 'last-used',
+      name: 'Last used',
+      isDefault: false,
+      source: {
+        kind: selected.kind,
+        id: selected.id,
+        label:
+          selected.kind === 'display' ? (display?.name ?? 'Display') : (window?.title ?? 'Window'),
+        app: selected.kind === 'window' ? window?.app : undefined
+      },
+      camera: cameraId
+        ? { deviceId: cameraId, label: cameras.find((d) => d.deviceId === cameraId)?.label ?? '' }
+        : null,
+      mic: micId
+        ? { deviceId: micId, label: mics.find((d) => d.deviceId === micId)?.label ?? '' }
+        : null,
+      fps,
+      systemAudio,
+      keystrokes,
+      countdown
+    }
+    try {
+      localStorage.setItem(LAST_USED, JSON.stringify(snapshot))
+    } catch {
+      // Not being able to remember is not worth interrupting a recording over.
+    }
+  }, [selected, cameraId, micId, fps, systemAudio, keystrokes, countdown, sources, cameras, mics])
 
   const currentPreset = presets.find((p) => p.id === presetId) ?? null
 

@@ -119,7 +119,8 @@ enum Transcriber {
             do {
                 let clip = try await extract(asset: asset, start: clipped, seconds: span)
                 defer { try? FileManager.default.removeItem(at: clip) }
-                let cues = try recogniseInChild(url: clip, locale: locale, shift: clipped)
+                let cues = try recogniseInChild(
+                    url: clip, locale: locale, shift: clipped, context: lastText)
                 // Windows overlap so a sentence crossing a boundary is heard
                 // whole, which means the same words can arrive twice. Captions
                 // have to be a sequence, not a pile: anything already covered is
@@ -189,10 +190,14 @@ enum Transcriber {
     ///
     /// The cost is one short-lived child per fifteen seconds of audio, which is
     /// nothing beside the recognition it performs.
-    private static func recogniseInChild(url: URL, locale: String, shift: Double) throws -> [Cue] {
+    private static func recogniseInChild(
+        url: URL, locale: String, shift: Double, context: String
+    ) throws -> [Cue] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
-        process.arguments = ["transcribe-window", "--audio", url.path, "--locale", locale]
+        var arguments = ["transcribe-window", "--audio", url.path, "--locale", locale]
+        if !context.isEmpty { arguments += ["--context", context] }
+        process.arguments = arguments
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
@@ -220,7 +225,7 @@ enum Transcriber {
     }
 
     /// The child half: recognise one clip and print its cues, timed from zero.
-    static func runWindow(audioPath: String, locale: String) async {
+    static func runWindow(audioPath: String, locale: String, context: String) async {
         let url = URL(fileURLWithPath: audioPath)
         guard await requestAuthorization() == .authorized,
             let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)),
@@ -229,7 +234,9 @@ enum Transcriber {
             exit(4)
         }
         do {
-            for cue in try await recognise(locale: locale, url: url, shift: 0) {
+            for cue in try await recognise(
+                locale: locale, url: url, shift: 0, context: context)
+            {
                 emit([
                     "event": "cue", "start": cue.start, "end": cue.end, "text": cue.text,
                     "confidence": cue.confidence,
@@ -295,55 +302,97 @@ enum Transcriber {
     /// The recogniser takes a URL, not a buffer, so each window has to exist as
     /// a file. m4a because it is what the export session produces without
     /// re-encoding surprises.
-    private static func extract(asset: AVURLAsset, start: Double, seconds: Double) async throws -> URL {
+    private static func extract(asset: AVURLAsset, start: Double, seconds: Double) async throws
+        -> URL
+    {
         let out = FileManager.default.temporaryDirectory
             .appendingPathComponent("demodog-\(UUID().uuidString).m4a")
+        let pcm = FileManager.default.temporaryDirectory
+            .appendingPathComponent("demodog-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: pcm) }
 
-        // Copied into a composition at time zero rather than exported with a
-        // timeRange. Exporting a range leaves the clip carrying an edit list
-        // that says it begins part-way through the original, and the recogniser
-        // returns a single empty segment for such a file — no error, just
-        // nothing, which is why only the very first window of a take ever
-        // produced captions. A composition has no such history: the clip starts
-        // at zero because that is genuinely where its audio starts.
-        let composition = AVMutableComposition()
-        guard
-            let track = composition.addMutableTrack(
-                withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-        else {
-            throw NSError(
-                domain: "demodog", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "cannot create an audio track"])
-        }
-        let sources = try await asset.loadTracks(withMediaType: .audio)
-        guard let source = sources.first else {
+        guard let source = try await asset.loadTracks(withMediaType: .audio).first else {
             throw NSError(
                 domain: "demodog", code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "the file has no audio"])
         }
-        try track.insertTimeRange(
-            CMTimeRange(
-                start: CMTime(seconds: start, preferredTimescale: 600),
-                duration: CMTime(seconds: seconds, preferredTimescale: 600)),
-            of: source, at: .zero)
 
+        // 16 kHz mono AAC. Both halves of that are measured rather than
+        // assumed, and the second one is genuinely strange: handed the very same
+        // audio as uncompressed PCM the recogniser hears "Lead pick the time",
+        // and as AAC it hears "Leeds, pick the time" and punctuates it better.
+        // Repeated runs of either are identical, so it is the format and not
+        // noise. A reader and a writer rather than an export session, because an
+        // export session cannot change the sample rate.
+        let reader = try AVAssetReader(asset: asset)
+        reader.timeRange = CMTimeRange(
+            start: CMTime(seconds: start, preferredTimescale: 600),
+            duration: CMTime(seconds: seconds, preferredTimescale: 600))
+        let readerSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 16000,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false,
+        ]
+        let readerOutput = AVAssetReaderTrackOutput(track: source, outputSettings: readerSettings)
+        reader.add(readerOutput)
+
+        let writer = try AVAssetWriter(outputURL: pcm, fileType: .wav)
+        let writerInput = AVAssetWriterInput(mediaType: .audio, outputSettings: readerSettings)
+        writerInput.expectsMediaDataInRealTime = false
+        writer.add(writerInput)
+
+        guard reader.startReading(), writer.startWriting() else {
+            throw writer.error ?? reader.error
+                ?? NSError(
+                    domain: "demodog", code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "cannot read the audio"])
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        let queue = DispatchQueue(label: "com.fintonlabs.demodog.transcribe")
+        await withCheckedContinuation { continuation in
+            writerInput.requestMediaDataWhenReady(on: queue) {
+                while writerInput.isReadyForMoreMediaData {
+                    guard let buffer = readerOutput.copyNextSampleBuffer() else {
+                        writerInput.markAsFinished()
+                        writer.finishWriting { continuation.resume() }
+                        return
+                    }
+                    writerInput.append(buffer)
+                }
+            }
+        }
+
+        guard writer.status == .completed else {
+            throw writer.error
+                ?? NSError(
+                    domain: "demodog", code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "audio export failed"])
+        }
+
+        // Encoded rather than left as PCM, because the recogniser hears the two
+        // differently. AVAssetWriter refuses to encode AAC here at all, so the
+        // encoding is done by an export session over the resampled file.
         guard
             let session = AVAssetExportSession(
-                asset: composition, presetName: AVAssetExportPresetAppleM4A)
+                asset: AVURLAsset(url: pcm), presetName: AVAssetExportPresetAppleM4A)
         else {
             throw NSError(
                 domain: "demodog", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "cannot export audio"])
+                userInfo: [NSLocalizedDescriptionKey: "cannot encode the window"])
         }
         session.outputURL = out
         session.outputFileType = .m4a
-
         await session.export()
         guard session.status == .completed else {
             throw session.error
                 ?? NSError(
                     domain: "demodog", code: 2,
-                    userInfo: [NSLocalizedDescriptionKey: "audio export failed"])
+                    userInfo: [NSLocalizedDescriptionKey: "audio encode failed"])
         }
         return out
     }
@@ -357,7 +406,7 @@ enum Transcriber {
     /// Each clip transcribes perfectly when handed to a fresh instance, which
     /// is what makes the reuse the culprit rather than the audio.
     private static func recognise(
-        locale: String, url: URL, shift: Double
+        locale: String, url: URL, shift: Double, context: String = ""
     ) async throws -> [Cue] {
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)) else {
             throw NSError(
@@ -370,6 +419,9 @@ enum Transcriber {
         if #available(macOS 13.0, *) {
             request.addsPunctuation = true
         }
+        // Narration over a screen recording is dictation, not a search query or
+        // a short command, and saying so changes which language model is used.
+        request.taskHint = .dictation
 
         // The task is held and explicitly finished. Letting it fall out of
         // scope leaves the previous recognition apparently still open, and the

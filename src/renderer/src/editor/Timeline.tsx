@@ -181,7 +181,12 @@ export default function Timeline(props: Props): ReactNode {
               width: Math.max(14, toX(segment.end) - toX(segment.start)),
               background: segment.auto ? 'var(--violet)' : 'var(--lime)'
             }}
-            onPointerDown={(e) => beginDrag(e, segment, 'move')}
+            onPointerDown={(e) => {
+              // Move the playhead to where the click landed as well as
+              // selecting: judging a shot means seeing the frame it is on.
+              onSeek(toTime(e.clientX))
+              beginDrag(e, segment, 'move')
+            }}
           >
             <span
               className="zl"
@@ -211,12 +216,13 @@ export default function Timeline(props: Props): ReactNode {
                 className={`caption-block${selectedCaption === caption.id ? ' selected' : ''}`}
                 style={{ left, width }}
                 title={caption.text}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={() => {
+                onPointerDown={(e) => {
+                  // Seek to where the click landed rather than to the start of
+                  // the line: within a long caption, the interesting frame is
+                  // usually the one under the pointer.
+                  e.stopPropagation()
+                  onSeek(toTime(e.clientX))
                   onSelectCaption(caption.id)
-                  // Jump to the line being edited; correcting words against the
-                  // wrong frame is guesswork.
-                  onSeek(caption.start + 0.01)
                 }}
               >
                 <span style={{ paddingLeft: inset }}>{caption.text}</span>

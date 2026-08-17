@@ -624,6 +624,7 @@ export default function Editor({
         onChange={setProject}
         segments={segments}
         onSegmentsChange={setSegments}
+        time={time}
         selectedCaption={selectedCaption}
         onSelectCaption={setSelectedCaption}
         selected={selected}

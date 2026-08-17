@@ -64,7 +64,12 @@ case "transcribe-window":
     guard let audio = args.string("audio") else {
         fail("--audio <file> is required")
     }
-    Task { await Transcriber.runWindow(audioPath: audio, locale: args.string("locale") ?? "en-GB") }
+    Task {
+        await Transcriber.runWindow(
+            audioPath: audio,
+            locale: args.string("locale") ?? "en-GB",
+            context: args.string("context") ?? "")
+    }
     RunLoop.main.run()
 
 case "record":

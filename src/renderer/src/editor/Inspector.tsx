@@ -40,6 +40,8 @@ interface Props {
   recording: Recording
   cameraSync: number
   onCameraSync: (v: number) => void
+  /** Where the playhead is, so a new line lands where it is being watched. */
+  time: number
   /** The caption clicked on the timeline, if any. */
   selectedCaption: string | null
   onSelectCaption: (id: string | null) => void
@@ -990,6 +992,7 @@ function CaptionsTab({
   recording,
   set,
   patch,
+  time,
   selectedCaption,
   onSelectCaption
 }: Props & { set: Setter; patch: Patcher }): ReactNode {
@@ -1027,6 +1030,21 @@ function CaptionsTab({
 
   const current = captions.find((caption) => caption.id === selectedCaption) ?? null
 
+  /** A new line at the playhead, ready to type into. */
+  const addLine = (): void => {
+    const start = Math.max(0, Math.min(time, recording.duration - 0.5))
+    // Stops where the next line begins, so a new caption never overlaps one
+    // that is already there.
+    const next = captions.find((caption) => caption.start > start)
+    const end = Math.min(next ? next.start : start + 2.5, recording.duration)
+    const line: Caption = { id: `manual-${Math.round(start * 1000)}`, start, end, text: 'New line' }
+    set(
+      'captions',
+      [...captions, line].sort((a, b) => a.start - b.start)
+    )
+    onSelectCaption(line.id)
+  }
+
   return (
     <>
       <Group title="Transcript">
@@ -1036,16 +1054,24 @@ function CaptionsTab({
               Transcribes the narration on this Mac. Nothing is uploaded, and the first run for a
               language may pause while macOS fetches its speech model.
             </p>
-            <button className="btn primary" disabled={busy} onClick={() => void transcribe()}>
-              {busy ? `Transcribing… ${Math.round(progress * 100)}%` : 'Transcribe narration'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn primary" disabled={busy} onClick={() => void transcribe()}>
+                {busy ? `Transcribing… ${Math.round(progress * 100)}%` : 'Transcribe narration'}
+              </button>
+              <button className="btn" onClick={addLine}>
+                Add a line
+              </button>
+            </div>
           </>
         ) : (
           <>
             <span className="label">
               {captions.length} lines · click one on the timeline to edit it
             </span>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn small primary" onClick={addLine}>
+                Add a line
+              </button>
               <button className="btn small" disabled={busy} onClick={() => void transcribe()}>
                 {busy ? `${Math.round(progress * 100)}%` : 'Redo'}
               </button>
