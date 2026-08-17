@@ -8,6 +8,21 @@ is where finished work waits.
 
 _Nothing yet._
 
+## 1.0.3 — 2026-08-17
+
+- **Moving the camera sync offset stopped playback permanently.** Seeking past a
+  track's duration clamps silently, so the position asked for was never reached
+  and the loop asked again every frame — a seek per frame, which stops the
+  element playing at all. Reachable at the end of any take, since the camera
+  track is shorter than the screen track; the offset just made it immediate.
+- **The app has a menu.** There wasn't one, and on macOS the standard editing
+  shortcuts come from the Edit menu — so there was no Cmd-C or Cmd-V in the
+  caption editor or the preset name field. It also adds Check for Updates,
+  About (which shows the running version), and shortcuts to both update logs.
+- **Settings carry into the next take.** The recorder already remembered its
+  setup; the editor now remembers the look too, so New recording no longer
+  resets the background, padding, zoom feel and caption styling.
+
 ## 1.0.2 — 2026-08-17
 
 - **Transcription was losing words.** Windows are now short clips overlapped
