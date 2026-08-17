@@ -772,61 +772,28 @@ input[type='checkbox']:checked::after {
   color: var(--text);
 }
 
-/* Name and explanation, for anyone who does not already know the glyph.
-   Spanning the rail rather than centred on its icon: a tooltip centred over a
-   32px tab is wider than the space either side of it, so it was cut off by the
-   panel edge and started mid-word. Full width always fits, and reads better. */
-.insp-tip {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 8px;
-  right: 8px;
-  z-index: 41;
-  padding: 10px 12px;
+/* The tab row's caption: what is open, or what is under the pointer. */
+.insp-caption {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  text-align: left;
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: var(--t-xs);
-  font-weight: 500;
-  line-height: 1.5;
-  color: var(--muted);
-  background: var(--surface);
-  border: var(--border);
-  box-shadow: var(--shadow-hard-sm);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateY(-4px);
-  transition:
-    opacity 0.14s ease,
-    transform 0.14s var(--snap),
-    visibility 0.14s;
+  gap: 2px;
+  padding: 10px 14px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  /* Fixed, so the panel below does not jump as the wording changes length. */
+  min-height: 58px;
 }
 
-.insp-tip strong {
-  font-size: var(--t-sm);
-  font-weight: 800;
-  color: var(--text);
-}
-
-.insp-tabs button:hover .insp-tip,
-.insp-tabs button:focus-visible .insp-tip {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-}
-
-/* Which tab is open, said plainly under the row. */
-.insp-current {
-  display: block;
-  padding: 9px 14px 4px;
+.insp-caption strong {
   font-size: var(--t-xs);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  color: var(--text);
+}
+
+.insp-caption span {
+  font-size: var(--t-xs);
+  line-height: 1.45;
   color: var(--muted);
 }
 

@@ -52,7 +52,6 @@ interface Props {
 
 type Tab = 'style' | 'zoom' | 'cursor' | 'camera' | 'text' | 'titles'
 
-
 /**
  * The inspector's tabs.
  *
@@ -128,6 +127,8 @@ const TABS: { id: Tab; name: string; hint: string; icon: ReactNode }[] = [
 export default function Inspector(props: Props): ReactNode {
   const { project, onChange } = props
   const [tab, setTab] = useState<Tab>('style')
+  /** Whichever tab the pointer is over, so the caption can preview it. */
+  const [hovered, setHovered] = useState<Tab | null>(null)
 
   // Shallow-merge helpers keep the call sites readable while preserving the
   // immutable update React needs to see.
@@ -137,6 +138,8 @@ export default function Inspector(props: Props): ReactNode {
   const patch = <K extends keyof Project>(key: K, value: Partial<Project[K]>): void =>
     onChange({ ...project, [key]: { ...(project[key] as object), ...value } as Project[K] })
 
+  const described = TABS.find((t) => t.id === (hovered ?? tab)) ?? TABS[0]
+
   return (
     <aside className="inspector">
       <div className="insp-tabs" role="tablist">
@@ -145,21 +148,29 @@ export default function Inspector(props: Props): ReactNode {
             key={id}
             role="tab"
             aria-selected={tab === id}
-            aria-label={name}
+            aria-label={`${name} — ${hint}`}
             onClick={() => setTab(id)}
+            onPointerEnter={() => setHovered(id)}
+            onPointerLeave={() => setHovered(null)}
+            onFocus={() => setHovered(id)}
+            onBlur={() => setHovered(null)}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">{icon}</svg>
-            <span className="insp-tip" role="tooltip">
-              <strong>{name}</strong>
-              {hint}
-            </span>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              {icon}
+            </svg>
           </button>
         ))}
       </div>
-      {/* Named underneath as well as on hover. Six icons with no labels is a
-          memory test, and the one you are looking at should not require
-          pointing at it to find out what it is. */}
-      <span className="insp-current">{TABS.find((t) => t.id === tab)?.name}</span>
+
+      {/* One caption line rather than a floating tooltip. A box hovering over
+          the panel covered the controls underneath it, had to be kept inside
+          the rail, and needed its own stacking order — three problems a line
+          that is always there does not have. It names the open tab, and
+          previews whichever one is under the pointer. */}
+      <div className="insp-caption">
+        <strong>{described.name}</strong>
+        <span>{described.hint}</span>
+      </div>
 
       <div className="insp-body">
         {tab === 'style' && (
