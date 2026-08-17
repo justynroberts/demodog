@@ -89,9 +89,10 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
         type: 'info',
         message: `DemoDog ${info.version} is ready to install`,
         detail:
-          'The update has already been downloaded. DemoDog will restart to ' +
-          'finish installing it.\n\nAnything you have recorded is saved and ' +
-          'will still be there afterwards.',
+          'DemoDog will close, swap itself for the new version, and reopen. ' +
+          'It stays closed for about ten seconds in the middle — that gap is ' +
+          'the installer working, not a crash.\n\nAnything you have recorded ' +
+          'is saved and will still be there afterwards.',
         buttons: ['Restart now', 'Later', "What's new"],
         defaultId: 0,
         cancelId: 1
@@ -118,6 +119,9 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
           }
           // If the app is still here a moment later, the install did not take
           // and saying so beats a button that silently did nothing.
+          // Long enough to be a real failure. Installing genuinely takes
+          // around ten seconds, and warning inside that window would call a
+          // working update broken.
           setTimeout(() => {
             note('still running after quitAndInstall')
             void dialog.showMessageBox(window, {
@@ -129,7 +133,7 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
                 'from the releases page will always work.',
               buttons: ['OK']
             })
-          }, 4000)
+          }, 25000)
         } else if (result.response === 2) {
           void shell.openExternal(
             `https://github.com/justynroberts/demodog/releases/tag/v${info.version}`
