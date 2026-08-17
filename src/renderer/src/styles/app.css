@@ -2081,6 +2081,29 @@ dialog.info a {
    After an export
    -------------------------------------------------------------------------- */
 
+/* Its own layer rather than .progress-wrap, which is absolute inside the stage
+   and so is painted over by the timeline below it — the panel appeared behind
+   the very controls it was offering. Fixed to the window, above everything. */
+.exported-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.66);
+  animation: fade-in 0.18s ease both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .exported-card {
   width: 460px;
   max-width: calc(100% - 48px);

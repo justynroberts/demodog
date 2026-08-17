@@ -44,7 +44,7 @@ export default function ExportedPanel({
   }
 
   return (
-    <div className="progress-wrap" onClick={onClose}>
+    <div className="exported-layer" onClick={onClose}>
       <div className="exported-card snap" onClick={(e) => e.stopPropagation()}>
         <span className="label">Exported</span>
         <h2>{name}</h2>

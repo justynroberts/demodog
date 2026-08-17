@@ -16,9 +16,17 @@ import Speech
 /// nothing said in it. Windowing removes the question: each one is short, and
 /// segment times are shifted back into the timeline the caller knows about.
 enum Transcriber {
-    /// Long enough that sentences are rarely cut, short enough to stay well
-    /// inside anything the recogniser might impose.
-    static let windowSeconds: Double = 45
+    /// Measured, not assumed.
+    ///
+    /// On-device recognition does not truncate a long clip so much as give up
+    /// on it, returning a single empty segment marked final with no error
+    /// raised. The length it tolerates depends on the audio: the same take
+    /// transcribes completely in eight second pieces at every offset, and
+    /// returns nothing at all when the second half is handed over as one
+    /// sixteen second piece. Clean synthetic speech survives far longer, which
+    /// is exactly why a fixture-based test missed this and a real recording
+    /// found it immediately.
+    static let windowSeconds: Double = 8
 
     /// Carried across a window boundary so a sentence split across two windows
     /// is heard whole by the later one. Cues are assigned to the window their
@@ -85,6 +93,8 @@ enum Transcriber {
 
         var offset: Double = 0
         var produced = 0
+        /// Where the last emitted line ended, so windows cannot overlap.
+        var lastEnd: Double = 0
         while offset < duration {
             let length = min(windowSeconds, duration - offset)
             let clipped = max(0, offset - (offset > 0 ? overlapSeconds : 0))
@@ -93,12 +103,17 @@ enum Transcriber {
             do {
                 let clip = try await extract(asset: asset, start: clipped, seconds: span)
                 defer { try? FileManager.default.removeItem(at: clip) }
-                let cues = try await recognise(recognizer: recognizer, url: clip, shift: clipped)
-                // The overlap exists so a sentence crossing a boundary is heard
-                // whole, not so it is transcribed twice. Each cue belongs to the
-                // window its middle falls in, which assigns every one exactly
-                // once without needing to compare text.
-                for cue in cues where offset == 0 || (cue.start + cue.end) / 2 >= offset {
+                let cues = try recogniseInChild(url: clip, locale: locale, shift: clipped)
+                // Windows overlap so a sentence crossing a boundary is heard
+                // whole, which means the same words can arrive twice. Captions
+                // have to be a sequence, not a pile: anything already covered is
+                // dropped, and anything that merely starts too early is pulled
+                // forward to where the last line ended.
+                for var cue in cues {
+                    if cue.end <= lastEnd + 0.1 { continue }
+                    if cue.start < lastEnd { cue.start = lastEnd }
+                    guard cue.end > cue.start else { continue }
+                    lastEnd = cue.end
                     produced += 1
                     emit([
                         "event": "cue",
@@ -126,6 +141,71 @@ enum Transcriber {
         exit(0)
     }
 
+    /// Recognises one window, in a process of its own.
+    ///
+    /// Only the first file recognition in a process returns anything. Every
+    /// window after it comes back with a single empty segment, marked final,
+    /// with no error raised — and the very same clip transcribes correctly when
+    /// it is the first thing a fresh process is asked to do. A new recogniser
+    /// per window, explicitly finishing the previous task, and waiting between
+    /// them all failed to change that, so the boundary being respected here is
+    /// the process itself.
+    ///
+    /// The cost is one short-lived child per fifteen seconds of audio, which is
+    /// nothing beside the recognition it performs.
+    private static func recogniseInChild(url: URL, locale: String, shift: Double) throws -> [Cue] {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+        process.arguments = ["transcribe-window", "--audio", url.path, "--locale", locale]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        var cues: [Cue] = []
+        for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
+            guard
+                let payload = try? JSONSerialization.jsonObject(with: Data(line.utf8))
+                    as? [String: Any],
+                payload["event"] as? String == "cue",
+                let start = payload["start"] as? Double,
+                let end = payload["end"] as? Double,
+                let text = payload["text"] as? String
+            else { continue }
+            cues.append(
+                Cue(
+                    start: shift + start, end: shift + end, text: text,
+                    confidence: payload["confidence"] as? Double ?? 0))
+        }
+        return cues
+    }
+
+    /// The child half: recognise one clip and print its cues, timed from zero.
+    static func runWindow(audioPath: String, locale: String) async {
+        let url = URL(fileURLWithPath: audioPath)
+        guard await requestAuthorization() == .authorized,
+            let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)),
+            recognizer.isAvailable
+        else {
+            exit(4)
+        }
+        do {
+            for cue in try await recognise(locale: locale, url: url, shift: 0) {
+                emit([
+                    "event": "cue", "start": cue.start, "end": cue.end, "text": cue.text,
+                    "confidence": cue.confidence,
+                ])
+            }
+        } catch {
+            // Silence and failure look the same to the parent, which is correct:
+            // either way this window contributed nothing.
+        }
+        exit(0)
+    }
+
     // ------------------------------------------------------------------
 
     private static func requestAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
@@ -143,9 +223,37 @@ enum Transcriber {
         let out = FileManager.default.temporaryDirectory
             .appendingPathComponent("demodog-\(UUID().uuidString).m4a")
 
+        // Copied into a composition at time zero rather than exported with a
+        // timeRange. Exporting a range leaves the clip carrying an edit list
+        // that says it begins part-way through the original, and the recogniser
+        // returns a single empty segment for such a file — no error, just
+        // nothing, which is why only the very first window of a take ever
+        // produced captions. A composition has no such history: the clip starts
+        // at zero because that is genuinely where its audio starts.
+        let composition = AVMutableComposition()
+        guard
+            let track = composition.addMutableTrack(
+                withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+        else {
+            throw NSError(
+                domain: "demodog", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "cannot create an audio track"])
+        }
+        let sources = try await asset.loadTracks(withMediaType: .audio)
+        guard let source = sources.first else {
+            throw NSError(
+                domain: "demodog", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "the file has no audio"])
+        }
+        try track.insertTimeRange(
+            CMTimeRange(
+                start: CMTime(seconds: start, preferredTimescale: 600),
+                duration: CMTime(seconds: seconds, preferredTimescale: 600)),
+            of: source, at: .zero)
+
         guard
             let session = AVAssetExportSession(
-                asset: asset, presetName: AVAssetExportPresetAppleM4A)
+                asset: composition, presetName: AVAssetExportPresetAppleM4A)
         else {
             throw NSError(
                 domain: "demodog", code: 1,
@@ -153,9 +261,6 @@ enum Transcriber {
         }
         session.outputURL = out
         session.outputFileType = .m4a
-        session.timeRange = CMTimeRange(
-            start: CMTime(seconds: start, preferredTimescale: 600),
-            duration: CMTime(seconds: seconds, preferredTimescale: 600))
 
         await session.export()
         guard session.status == .completed else {
@@ -168,9 +273,21 @@ enum Transcriber {
     }
 
     /// Recognises one window and groups its words into readable cues.
+    ///
+    /// A recogniser per window, deliberately. Reusing one across windows looks
+    /// natural and fails silently: the first window transcribes, and every one
+    /// after it returns a final result with an empty transcription — no error,
+    /// no warning, just a take that stops having captions fifteen seconds in.
+    /// Each clip transcribes perfectly when handed to a fresh instance, which
+    /// is what makes the reuse the culprit rather than the audio.
     private static func recognise(
-        recognizer: SFSpeechRecognizer, url: URL, shift: Double
+        locale: String, url: URL, shift: Double
     ) async throws -> [Cue] {
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)) else {
+            throw NSError(
+                domain: "demodog", code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "no recogniser for \(locale)"])
+        }
         let request = SFSpeechURLRecognitionRequest(url: url)
         request.requiresOnDeviceRecognition = true
         request.shouldReportPartialResults = false
@@ -178,10 +295,16 @@ enum Transcriber {
             request.addsPunctuation = true
         }
 
+        // The task is held and explicitly finished. Letting it fall out of
+        // scope leaves the previous recognition apparently still open, and the
+        // next window then returns an empty final result with no error — the
+        // symptom being a transcript that stops dead at the first window
+        // boundary while every clip transcribes fine on its own.
+        var task: SFSpeechRecognitionTask?
         let result: SFSpeechRecognitionResult = try await withCheckedThrowingContinuation {
             continuation in
             var resumed = false
-            recognizer.recognitionTask(with: request) { result, error in
+            task = recognizer.recognitionTask(with: request) { result, error in
                 guard !resumed else { return }
                 if let error {
                     resumed = true
@@ -192,6 +315,8 @@ enum Transcriber {
                 }
             }
         }
+        task?.finish()
+        task = nil
 
         return group(segments: result.bestTranscription.segments, shift: shift)
     }
@@ -214,12 +339,20 @@ enum Transcriber {
 
         func cue(_ words: [SFTranscriptionSegment]) -> Cue? {
             guard let first = words.first, let last = words.last else { return nil }
+            // A window with nothing in it comes back as a single empty segment
+            // rather than no segments, and that became a caption of no text
+            // sitting at zero — which reads as a transcript that ran and found
+            // one blank line, rather than one that heard nothing.
+            let joined = words.map(\.substring).joined(separator: " ")
+            guard !joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return nil
+            }
             let confidence =
                 words.reduce(0.0) { $0 + Double($1.confidence) } / Double(words.count)
             return Cue(
                 start: shift + first.timestamp,
                 end: shift + last.timestamp + last.duration,
-                text: words.map(\.substring).joined(separator: " "),
+                text: joined,
                 confidence: confidence)
         }
 

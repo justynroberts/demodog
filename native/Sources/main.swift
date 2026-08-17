@@ -59,6 +59,14 @@ case "transcribe":
     Task { await Transcriber.run(audioPath: audio, locale: args.string("locale") ?? "en-GB") }
     RunLoop.main.run()
 
+case "transcribe-window":
+    // The child of `transcribe`: one clip, one process, times from zero.
+    guard let audio = args.string("audio") else {
+        fail("--audio <file> is required")
+    }
+    Task { await Transcriber.runWindow(audioPath: audio, locale: args.string("locale") ?? "en-GB") }
+    RunLoop.main.run()
+
 case "record":
     guard let outputDir = args.string("out") else {
         fail("--out <dir> is required")
