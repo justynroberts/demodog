@@ -1,6 +1,7 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api } from '../api'
+import Tour, { TOUR_STEPS, markTourSeen, tourSeen } from './Tour'
 import { MadeByFintonLabs, Segmented, Toggle } from '../ui/controls'
 import type { CapturePreset, Permissions, Sources } from '../../../shared/types'
 
@@ -28,6 +29,20 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
   const requested = useRef(false)
   const [tab, setTab] = useState<SourceTab>('display')
   const [optionTab, setOptionTab] = useState<OptionTab>('camera')
+  // Shown once, and only when there is something to show it against — running
+  // it over the permission notice would explain settings the user cannot reach.
+  const [tourStep, setTourStep] = useState<number | null>(null)
+
+  const showTourStep = (next: number): void => {
+    setTourStep(next)
+    const step = TOUR_STEPS[next]
+    if (step) setOptionTab(step.tab)
+  }
+
+  const endTour = (): void => {
+    markTourSeen()
+    setTourStep(null)
+  }
   const [selected, setSelected] = useState<Selection | null>(null)
   const [filter, setFilter] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -83,6 +98,9 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
       }
       const list = await api.listSources()
       setSources(list)
+      // Only once the picker is actually usable: a tour of settings the user
+      // cannot reach yet is just another thing in the way.
+      if (!tourSeen()) setTourStep(0)
       setError(null)
       // Thumbnails are best-effort; the picker still works without them.
       void api
@@ -343,26 +361,30 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
 
   if (permissions && !permissions.screenRecording) {
     return (
-      <div className="setup" style={{ gridTemplateColumns: '1fr' }}>
-        <div className="setup-main">
-          <div className="notice snap">
-            <strong>Screen Recording permission is required.</strong>
-            <p style={{ margin: '8px 0 12px' }}>
-              macOS must grant DemoDog access before it can capture anything. Switch{' '}
-              <strong>DemoDog</strong> on under Screen &amp; System Audio Recording, then reopen
-              DemoDog — macOS only reads the new setting when an app starts.
-            </p>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn primary" onClick={() => api.openPrivacySettings('screen')}>
-                Open System Settings
-              </button>
-              <button className="btn" onClick={() => void api.relaunch()}>
-                Quit and reopen
-              </button>
-              <button className="btn" onClick={() => void refresh()}>
-                Re-check
-              </button>
-            </div>
+      <div className="permission-stage">
+        <div className="permission-card snap">
+          <div className="permission-mark" aria-hidden="true">
+            <span />
+          </div>
+          <h2>Screen Recording is off</h2>
+          <p>
+            macOS has to let DemoDog see the screen before it can record anything. Switch{' '}
+            <strong>DemoDog</strong> on under Screen &amp; System Audio Recording.
+          </p>
+          <p className="permission-note">
+            macOS only reads the setting when an app starts, so DemoDog has to be reopened
+            afterwards.
+          </p>
+          <div className="permission-actions">
+            <button className="btn primary" onClick={() => api.openPrivacySettings('screen')}>
+              Open System Settings
+            </button>
+            <button className="btn" onClick={() => void api.relaunch()}>
+              Quit and reopen
+            </button>
+            <button className="btn ghost" onClick={() => void refresh()}>
+              Re-check
+            </button>
           </div>
         </div>
       </div>
@@ -513,7 +535,7 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
           </div>
         </div>
 
-        <div className="card options-card">
+        <div className={`card options-card${tourStep !== null ? ' tour-focus' : ''}`}>
           <div className="opt-tabs" role="tablist">
             {(['camera', 'audio', 'capture'] as OptionTab[]).map((id) => (
               <button
@@ -548,6 +570,27 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
                     on automatically in the editor.
                   </p>
                 )}
+                {/* Blur is macOS's to apply, not DemoDog's: it happens at the
+                    camera, before any app sees a frame, so it is baked into the
+                    recording rather than added at render time. */}
+                <div className="effects-note">
+                  <span className="label">Background blur</span>
+                  <p className="hint">
+                    macOS blurs it for you. With DemoDog recording, open{' '}
+                    <strong>Control Centre</strong> in the menu bar → <strong>Video Effects</strong>{' '}
+                    → <strong>Portrait</strong>.
+                  </p>
+                  <button
+                    className="btn ghost small"
+                    onClick={() =>
+                      void api.openExternal(
+                        'https://support.apple.com/guide/mac-help/use-video-effects-mchlf6d98f4e/mac'
+                      )
+                    }
+                  >
+                    How this works ↗
+                  </button>
+                </div>
               </>
             )}
 
@@ -636,6 +679,8 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
           {starting ? 'Starting…' : 'Start recording'}
         </button>
       </aside>
+
+      {tourStep !== null && <Tour step={tourStep} onStep={showTourStep} onClose={endTour} />}
     </div>
   )
 }

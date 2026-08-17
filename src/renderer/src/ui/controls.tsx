@@ -91,13 +91,17 @@ export function Group({ title, children }: { title: string; children: ReactNode 
 export function ThemeToggle(): ReactNode {
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() => {
     const stored = localStorage.getItem('demodog-theme')
-    return stored === 'light' || stored === 'dark' ? stored : 'system'
+    if (stored === 'light' || stored === 'dark') return stored
+    // Light is the default rather than the system setting; following the
+    // system would put half of all first runs in a dark shell, which flatters
+    // every recording shown inside it.
+    return stored === 'system' ? 'system' : 'light'
   })
 
   useEffect(() => {
     if (theme === 'system') {
       document.documentElement.removeAttribute('data-theme')
-      localStorage.removeItem('demodog-theme')
+      localStorage.setItem('demodog-theme', 'system')
     } else {
       document.documentElement.setAttribute('data-theme', theme)
       localStorage.setItem('demodog-theme', theme)

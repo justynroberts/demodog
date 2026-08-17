@@ -26,7 +26,7 @@ export default function Splash(): ReactNode {
           <img className="splash-logo" src="./logo.png" alt="" onError={() => setHasLogo(false)} />
         )}
         <h1 className="splash-name">DemoDog</h1>
-        <p className="splash-tag">Screen recording that edits itself</p>
+        <p className="splash-tag">Polish your demo until it&rsquo;s best in show</p>
 
         <div className="splash-rule" />
 

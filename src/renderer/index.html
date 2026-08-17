@@ -13,12 +13,18 @@
     />
     <script>
       // Applied before first paint so the window never flashes the wrong theme.
+      // Light unless asked otherwise: the editor is judged against the picture
+      // it is showing, and a dark shell makes every recording look brighter and
+      // more contrasty than it really is.
       try {
         const stored = localStorage.getItem('demodog-theme')
-        if (stored === 'light' || stored === 'dark') {
-          document.documentElement.setAttribute('data-theme', stored)
-        }
-      } catch {}
+        document.documentElement.setAttribute(
+          'data-theme',
+          stored === 'dark' || stored === 'light' ? stored : 'light'
+        )
+      } catch {
+        document.documentElement.setAttribute('data-theme', 'light')
+      }
     </script>
   </head>
   <body>

@@ -200,6 +200,11 @@ select {
   gap: 8px;
   padding: 9px 14px;
   background: var(--surface);
+  /* Explicit, not inherited. A button sets its own background, so inheriting
+     its text colour means any container that tints its text — a lime panel,
+     a dark stage — hands the button a colour chosen for a different surface.
+     That is where the black-on-black text came from. */
+  color: var(--text);
   border: var(--border);
   border-radius: 0;
   box-shadow: var(--shadow-hard-sm);
@@ -245,6 +250,12 @@ select {
   box-shadow: none;
   border-color: transparent;
   background: transparent;
+  color: var(--muted);
+}
+
+.btn.small {
+  padding: 6px 10px;
+  font-size: var(--t-xs);
 }
 
 .btn.ghost:hover {
@@ -1334,12 +1345,19 @@ dialog.info a {
   font-size: 10px;
   font-weight: 600;
   background: var(--surface-3);
+  color: var(--text);
   border: 1.5px solid var(--line);
   border-radius: 2px;
 }
 
+/* Inverted rather than lightened. The badge sat on --surface and inherited
+   --lime-ink from the selected tab, which is near-black in both themes — fine
+   over a light surface, invisible over a dark one. Pairing the two lime tokens
+   keeps the contrast identical whichever theme is on. */
 .source-tabs button[aria-selected='true'] .count {
-  background: var(--surface);
+  background: var(--lime-ink);
+  color: var(--lime);
+  border-color: var(--lime-ink);
 }
 
 .text-input.inline {
@@ -1755,4 +1773,212 @@ dialog.info a {
   overflow: hidden;
   text-overflow: ellipsis;
   direction: rtl;
+}
+
+/* --------------------------------------------------------------------------
+   Permission notice
+
+   A card rather than a banner. The full-width bar read as a transient warning
+   strip above a working screen, when in fact it is the whole screen: nothing
+   else can happen until it is dealt with.
+   -------------------------------------------------------------------------- */
+
+.permission-stage {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 40px 24px;
+}
+
+.permission-card {
+  width: 420px;
+  max-width: 100%;
+  /* Square-ish rather than exactly square: forcing 1:1 either clips the text
+     or leaves a lake of empty card under it as the copy changes. */
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  text-align: center;
+  background: var(--surface);
+  border: var(--border);
+  box-shadow: var(--shadow-hard);
+}
+
+.permission-card h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  font-variation-settings: 'wght' 700, 'wdth' 90;
+  color: var(--text);
+}
+
+.permission-card p {
+  margin: 0;
+  font-size: var(--t-sm);
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.permission-card strong {
+  color: var(--text);
+}
+
+.permission-note {
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.permission-mark {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 6px;
+  border: var(--border);
+  background: var(--danger);
+  box-shadow: var(--shadow-hard-sm);
+  animation: permission-pulse 2.4s var(--snap) 1;
+}
+
+.permission-mark span {
+  width: 8px;
+  height: 30px;
+  background: #fff;
+  box-shadow: 0 14px 0 #fff;
+}
+
+@keyframes permission-pulse {
+  0% {
+    transform: scale(0.7) rotate(-8deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.06) rotate(2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+}
+
+.permission-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.permission-actions .btn {
+  justify-content: center;
+}
+
+/* --------------------------------------------------------------------------
+   First-run tour
+   -------------------------------------------------------------------------- */
+
+.tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: end center;
+  padding: 0 0 56px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent 45%, rgba(0, 0, 0, 0.32));
+}
+
+.tour-card {
+  pointer-events: auto;
+  width: 460px;
+  max-width: calc(100% - 48px);
+  padding: 20px;
+  background: var(--surface);
+  border: var(--border);
+  box-shadow: var(--shadow-hard);
+  animation: tour-rise 0.36s var(--snap) both;
+}
+
+@keyframes tour-rise {
+  from {
+    transform: translateY(18px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.tour-count {
+  font-size: var(--t-xs);
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+
+.tour-card h3 {
+  margin: 6px 0 8px;
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-variation-settings: 'wght' 700, 'wdth' 90;
+  color: var(--text);
+}
+
+.tour-card p {
+  margin: 0;
+  font-size: var(--t-sm);
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.tour-dots {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0 12px;
+}
+
+.tour-dots span {
+  width: 22px;
+  height: 4px;
+  background: var(--line-soft);
+  transition: background 0.2s ease;
+}
+
+.tour-dots span.on {
+  background: var(--violet);
+}
+
+.tour-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The panel being described, lifted out of the dimmed background. */
+.options-card.tour-focus {
+  position: relative;
+  z-index: 61;
+  outline: 3px solid var(--violet);
+  outline-offset: 3px;
+}
+
+/* --------------------------------------------------------------------------
+   Camera effects note
+   -------------------------------------------------------------------------- */
+
+.effects-note {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.effects-note .hint {
+  margin: 0;
 }

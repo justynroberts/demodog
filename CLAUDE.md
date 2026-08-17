@@ -228,6 +228,15 @@ DEMODOG_BENCH_SECONDS=4 npx electron .
 Driving the real UI to time an export is unreliable — synthetic clicks and
 keystrokes land in whatever app happens to be frontmost.
 
+## Releasing
+
+`RELEASING.md` is the full path from a clean tree to a downloadable,
+self-updating build, including the parts that are not obvious: the dmg needs its
+own signature and its own notarisation ticket, `latest-mac.yml` has to be
+re-hashed after stapling because stapling rewrites the file it describes, and
+macOS applies updates from the zip rather than the dmg. Read it before cutting a
+release rather than working it out again.
+
 ## Style
 
 Follows the `house-style` skill. The archetype and axis picks are recorded in

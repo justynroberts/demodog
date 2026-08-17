@@ -4,7 +4,9 @@
 
 # DemoDog
 
-**A screen recorder for macOS that edits itself.**
+**Polish your demo until it's best in show.**
+
+A screen recorder for macOS that edits itself.
 
 Record, and it comes back with the zooms already placed, the cursor smoothed,
 and your camera in the corner.
