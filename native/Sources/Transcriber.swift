@@ -16,7 +16,7 @@ import Speech
 /// nothing said in it. Windowing removes the question: each one is short, and
 /// segment times are shifted back into the timeline the caller knows about.
 enum Transcriber {
-    /// Measured, not assumed.
+    /// Measured, not assumed — and then swept against real recordings.
     ///
     /// On-device recognition does not truncate a long clip so much as give up
     /// on it, returning a single empty segment marked final with no error
@@ -26,12 +26,24 @@ enum Transcriber {
     /// sixteen second piece. Clean synthetic speech survives far longer, which
     /// is exactly why a fixture-based test missed this and a real recording
     /// found it immediately.
-    static let windowSeconds: Double = 8
+    static let windowSeconds: Double = 6
 
     /// Carried across a window boundary so a sentence split across two windows
     /// is heard whole by the later one. Cues are assigned to the window their
     /// midpoint falls in, so the extra second never produces a duplicate.
-    static let overlapSeconds: Double = 1.0
+    /// Generous, because the recogniser loses the opening of a clip.
+    ///
+    /// Swept over two real takes: 8s windows with a 1s overlap left 12.5s of
+    /// speech uncaptioned, and the gaps landed immediately after every window
+    /// boundary. 6 and 2 leaves 4.5s. Longer windows are worse in both
+    /// directions — 10s loses whole windows to the recogniser giving up.
+    ///
+    /// With a one second overlap the gaps in a transcript landed immediately
+    /// after every window boundary — the first second or two of each piece was
+    /// simply not heard. The overlap has to be longer than whatever that
+    /// warm-up costs, so the words lost at one window's start are still inside
+    /// the previous window's tail.
+    static let overlapSeconds: Double = 2.0
 
     struct Cue {
         var start: Double
@@ -95,6 +107,10 @@ enum Transcriber {
         var produced = 0
         /// Where the last emitted line ended, so windows cannot overlap.
         var lastEnd: Double = 0
+        /// And what it said, so the next window does not repeat its ending.
+        var lastText = ""
+        /// Held back one line, so a trimmed stub can rejoin what it came from.
+        var pending: Cue?
         while offset < duration {
             let length = min(windowSeconds, duration - offset)
             let clipped = max(0, offset - (offset > 0 ? overlapSeconds : 0))
@@ -113,15 +129,31 @@ enum Transcriber {
                     if cue.end <= lastEnd + 0.1 { continue }
                     if cue.start < lastEnd { cue.start = lastEnd }
                     guard cue.end > cue.start else { continue }
+                    // The overlap is heard by both windows, so the second one
+                    // opens by repeating how the first ended. Dropping the whole
+                    // line loses what follows the repeat; keeping it reads as a
+                    // stutter. Only the repeated words go.
+                    cue.text = withoutRepeat(of: lastText, in: cue.text)
+                    guard !cue.text.isEmpty else { continue }
+                    lastText = cue.text
                     lastEnd = cue.end
-                    produced += 1
-                    emit([
-                        "event": "cue",
-                        "start": cue.start,
-                        "end": cue.end,
-                        "text": cue.text,
-                        "confidence": cue.confidence,
-                    ])
+
+                    // One line is held back rather than emitted immediately.
+                    // Trimming a repeat can leave a couple of words — "good."
+                    // on its own — which belongs to the line before it rather
+                    // than on screen by itself.
+                    if var previous = pending {
+                        let stub = cue.text.split(separator: " ").count <= 2
+                        if stub && cue.start - previous.end < 0.4 {
+                            previous.text += " " + cue.text
+                            previous.end = cue.end
+                            pending = previous
+                            continue
+                        }
+                        produced += 1
+                        emitCue(previous)
+                    }
+                    pending = cue
                 }
             } catch {
                 // A window that fails is a gap, not a failure: the rest of the
@@ -137,6 +169,10 @@ enum Transcriber {
             emit(["event": "progress", "seconds": min(offset, duration), "of": duration])
         }
 
+        if let last = pending {
+            produced += 1
+            emitCue(last)
+        }
         emit(["event": "done", "cues": produced])
         exit(0)
     }
@@ -204,6 +240,46 @@ enum Transcriber {
             // either way this window contributed nothing.
         }
         exit(0)
+    }
+
+    private static func emitCue(_ cue: Cue) {
+        emit([
+            "event": "cue",
+            "start": cue.start,
+            "end": cue.end,
+            "text": cue.text,
+            "confidence": cue.confidence,
+        ])
+    }
+
+    /// Strips a leading phrase that merely repeats how the previous line ended.
+    ///
+    /// Compared on words with case and punctuation removed, because the
+    /// recogniser rarely renders the same phrase identically twice — "he looks
+    /// pretty" and "He looks pretty good" come from the same words heard in two
+    /// windows. Two words is the shortest run worth trusting; a single repeated
+    /// word is usually just English.
+    static func withoutRepeat(of previous: String, in text: String) -> String {
+        func normalise(_ word: Substring) -> String {
+            word.lowercased().trimmingCharacters(in: .punctuationCharacters)
+        }
+        let previousWords = previous.split(separator: " ")
+        let words = text.split(separator: " ")
+        guard previousWords.count >= 2, words.count >= 2 else { return text }
+
+        let limit = min(12, min(previousWords.count, words.count))
+        var best = 0
+        for run in stride(from: limit, through: 2, by: -1) {
+            let tail = previousWords.suffix(run).map(normalise)
+            let head = words.prefix(run).map(normalise)
+            if tail == head {
+                best = run
+                break
+            }
+        }
+        guard best > 0 else { return text }
+        let kept = words.dropFirst(best).joined(separator: " ")
+        return kept.trimmingCharacters(in: .whitespaces)
     }
 
     // ------------------------------------------------------------------

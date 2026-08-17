@@ -1,5 +1,6 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { toChapters, toSRT } from '../engine/subtitles'
 import type { Caption } from '../engine/captions'
@@ -43,7 +44,11 @@ export default function ExportedPanel({
     setHandedOff(true)
   }
 
-  return (
+  // Rendered into <body> rather than in place. `position: fixed` is contained
+  // by any ancestor carrying a transform, and the editor has several — so the
+  // panel stayed inside the stage and the timeline went on painting over it,
+  // which is the whole complaint. A portal has no ancestors to be trapped by.
+  return createPortal(
     <div className="exported-layer" onClick={onClose}>
       <div className="exported-card snap" onClick={(e) => e.stopPropagation()}>
         <span className="label">Exported</span>
@@ -105,6 +110,7 @@ export default function ExportedPanel({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
