@@ -57,6 +57,7 @@ export default function Editor({
   const [time, setTime] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
+  const [selectedCaption, setSelectedCaption] = useState<string | null>(null)
   const [cameraSync, setCameraSync] = useState(0)
   const [trim, setTrim] = useState<{ start: number; end: number }>({
     start: 0,
@@ -583,6 +584,9 @@ export default function Editor({
         <Timeline
           recording={recording}
           segments={segments}
+          captions={project.captions}
+          selectedCaption={selectedCaption}
+          onSelectCaption={setSelectedCaption}
           selected={selected}
           time={time}
           trim={trim}
@@ -597,6 +601,8 @@ export default function Editor({
         onChange={setProject}
         segments={segments}
         onSegmentsChange={setSegments}
+        selectedCaption={selectedCaption}
+        onSelectCaption={setSelectedCaption}
         selected={selected}
         onSelect={setSelected}
         recording={recording}

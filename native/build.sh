@@ -22,6 +22,7 @@ SOURCES=(
   "$HERE/Sources/Sources.swift"
   "$HERE/Sources/InputTracker.swift"
   "$HERE/Sources/CaptureSession.swift"
+  "$HERE/Sources/Transcriber.swift"
   "$HERE/Sources/main.swift"
 )
 
@@ -35,6 +36,7 @@ build_one() {
     -framework AppKit \
     -framework CoreMedia \
     -framework CoreGraphics \
+    -framework Speech \
     -o "$2" \
     "${SOURCES[@]}"
 }

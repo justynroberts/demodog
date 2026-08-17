@@ -4,6 +4,7 @@
 //
 //   demodog-recorder list
 //   demodog-recorder permissions [--request]
+//   demodog-recorder transcribe --audio <file> [--locale en-GB]
 //   demodog-recorder record --out <dir> [--display <id> | --window <id>]
 //                             [--fps 60] [--cursor 0] [--audio 1] [--keys 0]
 //                             [--max-width 3840]
@@ -47,6 +48,16 @@ case "list":
 case "permissions":
     startWatchdog(seconds: 8, label: "permissions")
     Permissions.check(requesting: args.bool("request", default: false))
+
+case "transcribe":
+    guard let audio = args.string("audio") else {
+        fail("--audio <file> is required")
+    }
+    // No watchdog. Recognition is genuinely slow the first time a locale is
+    // used, because macOS downloads the on-device model before it can start,
+    // and killing it halfway leaves the user with nothing and no explanation.
+    Task { await Transcriber.run(audioPath: audio, locale: args.string("locale") ?? "en-GB") }
+    RunLoop.main.run()
 
 case "record":
     guard let outputDir = args.string("out") else {

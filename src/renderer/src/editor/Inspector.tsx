@@ -3,6 +3,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { api } from '../api'
 import { BACKGROUND_PRESETS, OUTPUT_PRESETS, mergeSettings } from '../engine/defaults'
 import { Group, Segmented, Slider, Toggle } from '../ui/controls'
+import { CAPTION_FONTS, captionsFromCues } from '../engine/captions'
+import type { Caption } from '../engine/captions'
 import type { CursorSettings, Project, Recording, ZoomSegment } from '../engine/types'
 import type { Profile } from '../../../shared/types'
 
@@ -16,7 +18,10 @@ const PROFILE_KEYS = [
   'keystrokes',
   'fade',
   'audio',
-  'output'
+  'output',
+  // The look of the captions travels with a profile; the captions themselves
+  // belong to one recording and never do.
+  'captionStyle'
 ] as const
 
 function extractProfileSettings(project: Project): Record<string, unknown> {
@@ -35,12 +40,15 @@ interface Props {
   recording: Recording
   cameraSync: number
   onCameraSync: (v: number) => void
+  /** The caption clicked on the timeline, if any. */
+  selectedCaption: string | null
+  onSelectCaption: (id: string | null) => void
   /** Which look profile is currently applied, owned by the editor. */
   profileId: string
   onProfileId: (id: string) => void
 }
 
-type Tab = 'style' | 'zoom' | 'cursor' | 'camera'
+type Tab = 'style' | 'zoom' | 'cursor' | 'camera' | 'text'
 
 export default function Inspector(props: Props): ReactNode {
   const { project, onChange } = props
@@ -57,7 +65,7 @@ export default function Inspector(props: Props): ReactNode {
   return (
     <aside className="inspector">
       <div className="insp-tabs" role="tablist">
-        {(['style', 'zoom', 'cursor', 'camera'] as Tab[]).map((id) => (
+        {(['style', 'zoom', 'cursor', 'camera', 'text'] as Tab[]).map((id) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
             {id}
           </button>
@@ -80,6 +88,7 @@ export default function Inspector(props: Props): ReactNode {
         {tab === 'zoom' && <ZoomTab {...props} patch={patch} />}
         {tab === 'cursor' && <CursorTab project={project} patch={patch} />}
         {tab === 'camera' && <CameraTab {...props} patch={patch} />}
+        {tab === 'text' && <CaptionsTab {...props} set={set} patch={patch} />}
       </div>
     </aside>
   )
@@ -964,4 +973,309 @@ function CameraTab({
 function swatchCSS(colors: string[], angle: number): string {
   if (colors.length === 1) return colors[0]
   return `linear-gradient(${angle + 90}deg, ${colors.join(', ')})`
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Transcription and caption styling.
+ *
+ * The transcript is the recording's, not a separate asset: cues become
+ * captions, and captions are just timed text the composition draws. Editing one
+ * is editing the project, so a corrected word survives an export without
+ * re-transcribing anything.
+ */
+function CaptionsTab({
+  project,
+  recording,
+  set,
+  patch,
+  selectedCaption,
+  onSelectCaption
+}: Props & { set: Setter; patch: Patcher }): ReactNode {
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const style = project.captionStyle
+  const captions = project.captions
+
+  useEffect(() => api.onTranscribeProgress(setProgress), [])
+
+  const transcribe = async (): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    setProgress(0)
+    try {
+      const cues = await api.transcribe(recording.dir, navigator.language || 'en-GB')
+      if (cues.length === 0) {
+        setError('No speech was found in this recording.')
+      } else {
+        set('captions', captionsFromCues(cues))
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const updateCaption = (id: string, changes: Partial<Caption>): void =>
+    set(
+      'captions',
+      captions.map((caption) => (caption.id === id ? { ...caption, ...changes } : caption))
+    )
+
+  const current = captions.find((caption) => caption.id === selectedCaption) ?? null
+
+  return (
+    <>
+      <Group title="Transcript">
+        {captions.length === 0 ? (
+          <>
+            <p className="hint">
+              Transcribes the narration on this Mac. Nothing is uploaded, and the first run for a
+              language may pause while macOS fetches its speech model.
+            </p>
+            <button className="btn primary" disabled={busy} onClick={() => void transcribe()}>
+              {busy ? `Transcribing… ${Math.round(progress * 100)}%` : 'Transcribe narration'}
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="label">
+              {captions.length} lines · click one on the timeline to edit it
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn small" disabled={busy} onClick={() => void transcribe()}>
+                {busy ? `${Math.round(progress * 100)}%` : 'Redo'}
+              </button>
+              <button
+                className="btn small"
+                onClick={() => {
+                  set('captions', [])
+                  onSelectCaption(null)
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          </>
+        )}
+        {error && (
+          <p className="hint" style={{ color: 'var(--danger)' }}>
+            {error}
+          </p>
+        )}
+      </Group>
+
+      {current && (
+        <Group title="Selected line">
+          <textarea
+            className="caption-text"
+            value={current.text}
+            rows={3}
+            onChange={(e) => updateCaption(current.id, { text: e.target.value })}
+          />
+          <span className="label">
+            {current.start.toFixed(2)}s → {current.end.toFixed(2)}s
+          </span>
+          <Slider
+            label="Starts"
+            min={0}
+            max={Math.max(0.1, current.end - 0.15)}
+            step={0.05}
+            value={current.start}
+            onChange={(v) => updateCaption(current.id, { start: v })}
+            format={(v) => `${v.toFixed(2)}s`}
+          />
+          <Slider
+            label="Ends"
+            min={current.start + 0.15}
+            max={recording.duration}
+            step={0.05}
+            value={current.end}
+            onChange={(v) => updateCaption(current.id, { end: v })}
+            format={(v) => `${v.toFixed(2)}s`}
+          />
+          <button
+            className="btn small"
+            onClick={() => {
+              set(
+                'captions',
+                captions.filter((caption) => caption.id !== current.id)
+              )
+              onSelectCaption(null)
+            }}
+          >
+            Delete line
+          </button>
+        </Group>
+      )}
+
+      <Group title="Type">
+        <Toggle
+          label="Show captions"
+          checked={style.enabled}
+          onChange={(v) => patch('captionStyle', { enabled: v })}
+        />
+        <span className="label">Font</span>
+        <select
+          value={style.fontFamily}
+          onChange={(e) => patch('captionStyle', { fontFamily: e.target.value })}
+        >
+          {CAPTION_FONTS.map((font) => (
+            <option key={font} value={font}>
+              {font}
+            </option>
+          ))}
+        </select>
+        <Slider
+          label="Size"
+          min={18}
+          max={110}
+          step={1}
+          value={style.fontSize}
+          onChange={(v) => patch('captionStyle', { fontSize: v })}
+          format={(v) => `${Math.round(v)}pt`}
+        />
+        <Slider
+          label="Weight"
+          min={300}
+          max={800}
+          step={100}
+          value={style.weight}
+          onChange={(v) => patch('captionStyle', { weight: v })}
+          format={(v) => String(Math.round(v))}
+        />
+        <div className="row-between">
+          <span className="label">Colour</span>
+          <input
+            type="color"
+            value={style.color}
+            onChange={(e) => patch('captionStyle', { color: e.target.value })}
+          />
+        </div>
+        <Toggle
+          label="Upper case"
+          checked={style.uppercase}
+          onChange={(v) => patch('captionStyle', { uppercase: v })}
+        />
+      </Group>
+
+      <Group title="Position">
+        <span className="label">Align</span>
+        <Segmented
+          value={style.align}
+          options={[
+            { value: 'left', label: 'Left' },
+            { value: 'center', label: 'Centre' },
+            { value: 'right', label: 'Right' }
+          ]}
+          onChange={(v) => patch('captionStyle', { align: v as 'left' | 'center' | 'right' })}
+        />
+        <Slider
+          label="Across"
+          min={0.05}
+          max={0.95}
+          step={0.01}
+          value={style.x}
+          onChange={(v) => patch('captionStyle', { x: v })}
+          format={(v) => `${Math.round(v * 100)}%`}
+        />
+        <Slider
+          label="Down"
+          min={0.1}
+          max={0.97}
+          step={0.01}
+          value={style.y}
+          onChange={(v) => patch('captionStyle', { y: v })}
+          format={(v) => `${Math.round(v * 100)}%`}
+        />
+        <Slider
+          label="Line width"
+          min={0.3}
+          max={0.98}
+          step={0.02}
+          value={style.maxWidth}
+          onChange={(v) => patch('captionStyle', { maxWidth: v })}
+          format={(v) => `${Math.round(v * 100)}%`}
+        />
+        <Slider
+          label="Line spacing"
+          min={1}
+          max={1.8}
+          step={0.02}
+          value={style.lineHeight}
+          onChange={(v) => patch('captionStyle', { lineHeight: v })}
+          format={(v) => v.toFixed(2)}
+        />
+      </Group>
+
+      <Group title="Legibility">
+        <Slider
+          label="Outline"
+          min={0}
+          max={16}
+          step={0.5}
+          value={style.outlineWidth}
+          onChange={(v) => patch('captionStyle', { outlineWidth: v })}
+          format={(v) => (v === 0 ? 'None' : `${v}px`)}
+        />
+        <div className="row-between">
+          <span className="label">Outline colour</span>
+          <input
+            type="color"
+            value={style.outlineColor}
+            onChange={(e) => patch('captionStyle', { outlineColor: e.target.value })}
+          />
+        </div>
+        <Slider
+          label="Shadow"
+          min={0}
+          max={48}
+          step={1}
+          value={style.shadowBlur}
+          onChange={(v) => patch('captionStyle', { shadowBlur: v })}
+          format={(v) => (v === 0 ? 'None' : `${Math.round(v)}px`)}
+        />
+        <Slider
+          label="Shadow drop"
+          min={0}
+          max={16}
+          step={1}
+          value={style.shadowOffset}
+          onChange={(v) => patch('captionStyle', { shadowOffset: v })}
+          format={(v) => `${Math.round(v)}px`}
+        />
+        <Slider
+          label="Backing plate"
+          min={0}
+          max={1}
+          step={0.05}
+          value={style.boxOpacity}
+          onChange={(v) => patch('captionStyle', { boxOpacity: v })}
+          format={(v) => (v === 0 ? 'Off' : `${Math.round(v * 100)}%`)}
+        />
+        {style.boxOpacity > 0 && (
+          <div className="row-between">
+            <span className="label">Plate colour</span>
+            <input
+              type="color"
+              value={style.boxColor}
+              onChange={(e) => patch('captionStyle', { boxColor: e.target.value })}
+            />
+          </div>
+        )}
+        <Slider
+          label="Fade"
+          min={0}
+          max={0.5}
+          step={0.02}
+          value={style.fade}
+          onChange={(v) => patch('captionStyle', { fade: v })}
+          format={(v) => (v === 0 ? 'Cut' : `${v.toFixed(2)}s`)}
+        />
+      </Group>
+    </>
+  )
 }

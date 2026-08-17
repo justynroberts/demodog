@@ -104,7 +104,8 @@
               ]
             }
           }
-        ]
+        ],
+        "NSSpeechRecognitionUsageDescription": "DemoDog transcribes the narration in your recordings on this Mac, to caption them."
       },
       "icon": "resources/icon.icns",
       "identity": "Justyn Roberts (2H574B6N62)",

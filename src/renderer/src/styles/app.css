@@ -1982,3 +1982,84 @@ dialog.info a {
 .effects-note .hint {
   margin: 0;
 }
+
+/* --------------------------------------------------------------------------
+   Captions
+   -------------------------------------------------------------------------- */
+
+.track.captions {
+  height: 34px;
+}
+
+.caption-block {
+  position: absolute;
+  top: 6px;
+  height: 22px;
+  padding: 0 7px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  text-align: left;
+  background: var(--surface-3);
+  color: var(--text);
+  border: 2px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    transform 0.09s var(--snap);
+}
+
+.caption-block span {
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.caption-block:hover {
+  background: var(--surface);
+  transform: translateY(-1px);
+}
+
+.caption-block.selected {
+  background: var(--violet);
+  color: var(--violet-ink);
+  border-color: var(--violet);
+}
+
+.caption-text {
+  width: 100%;
+  padding: 8px;
+  font-family: inherit;
+  font-size: var(--t-sm);
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--surface);
+  border: var(--border);
+  border-radius: 0;
+  resize: vertical;
+}
+
+.caption-text:focus {
+  outline: 2px solid var(--violet);
+  outline-offset: 1px;
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.row-between input[type='color'] {
+  width: 40px;
+  height: 26px;
+  padding: 0;
+  background: none;
+  border: var(--border);
+  cursor: pointer;
+}

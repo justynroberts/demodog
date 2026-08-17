@@ -144,3 +144,12 @@ export interface RecordingResult {
   /** Present when the take includes a camera recording. */
   camera?: CameraTrack | null
 }
+
+/** One line of transcribed narration, timed against the recording. */
+export interface Cue {
+  start: number
+  end: number
+  text: string
+  /** 0–1 from the recogniser; low values are worth flagging for a read-through. */
+  confidence: number
+}

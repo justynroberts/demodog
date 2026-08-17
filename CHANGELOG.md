@@ -6,7 +6,17 @@ is where finished work waits.
 
 ## Unreleased
 
-_Nothing yet._
+- **Transcription and captions.** Narration is transcribed on this Mac — on
+  device, never uploaded — and becomes timed text drawn over the recording. The
+  lines appear on the timeline; clicking one selects it, jumps the playhead to
+  it, and opens it for editing, so a misheard word is fixed in place rather than
+  by re-transcribing.
+- Captions are styled per project: font, size, weight, colour, upper case,
+  position and alignment, line width and spacing, outline, shadow, a backing
+  plate for busy footage, and a fade at each end. The style travels with a
+  profile; the transcript belongs to its own recording.
+- Building and shipping are now separate. `npm run dist` builds and stops;
+  `npm run release -- <version>` is the only thing that publishes.
 
 ## 0.9.1 — 2026-08-17
 

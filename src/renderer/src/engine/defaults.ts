@@ -1,4 +1,5 @@
 // MIT License - Copyright (c) fintonlabs.com
+import { DEFAULT_CAPTION_STYLE } from './captions'
 import type { Background, Project } from './types'
 
 export const BACKGROUND_PRESETS: { id: string; name: string; background: Background }[] = [
@@ -114,6 +115,8 @@ export function defaultProject(
       smoothing: 0.16
     },
     segments: [],
+    captions: [],
+    captionStyle: { ...DEFAULT_CAPTION_STYLE },
     cursor: {
       visible: true,
       style: 'dark',

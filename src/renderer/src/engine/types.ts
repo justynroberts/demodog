@@ -1,4 +1,5 @@
 // MIT License - Copyright (c) fintonlabs.com
+import type { Caption, CaptionStyle } from './captions'
 import type { CaptureMeta, RawEvent } from '../../../shared/types'
 
 /**
@@ -212,6 +213,10 @@ export interface KeystrokeSettings {
 }
 
 export interface Project {
+  /** Timed text drawn over the composition; empty until transcribed. */
+  captions: Caption[]
+  captionStyle: CaptionStyle
+
   output: { width: number; height: number; fps: number }
   background: Background
   frame: FrameStyle

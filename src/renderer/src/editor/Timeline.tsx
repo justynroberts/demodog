@@ -1,6 +1,7 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Recording, ZoomSegment } from '../engine/types'
+import type { Caption } from '../engine/captions'
 
 interface Props {
   recording: Recording
@@ -11,6 +12,9 @@ interface Props {
   onSeek: (t: number) => void
   onSelect: (id: string | null) => void
   onChange: (segments: ZoomSegment[]) => void
+  captions: Caption[]
+  selectedCaption: string | null
+  onSelectCaption: (id: string | null) => void
 }
 
 type DragMode = 'move' | 'start' | 'end'
@@ -22,6 +26,7 @@ type DragMode = 'move' | 'start' | 'end'
  */
 export default function Timeline(props: Props): ReactNode {
   const { recording, segments, selected, time, trim, onSeek, onSelect, onChange } = props
+  const { captions, selectedCaption, onSelectCaption } = props
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(1000)
   const duration = Math.max(recording.duration, 0.001)
@@ -186,6 +191,33 @@ export default function Timeline(props: Props): ReactNode {
           </div>
         ))}
       </div>
+
+      {captions.length > 0 && (
+        <div className="track captions" onPointerDown={scrub}>
+          <span className="track-label">Text</span>
+          {captions.map((caption) => {
+            const left = toX(caption.start)
+            const width = Math.max(6, toX(caption.end) - left)
+            return (
+              <button
+                key={caption.id}
+                className={`caption-block${selectedCaption === caption.id ? ' selected' : ''}`}
+                style={{ left, width }}
+                title={caption.text}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => {
+                  onSelectCaption(caption.id)
+                  // Jump to the line being edited; correcting words against the
+                  // wrong frame is guesswork.
+                  onSeek(caption.start + 0.01)
+                }}
+              >
+                <span>{caption.text}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       <div className="track" onPointerDown={scrub}>
         <span className="track-label">Input</span>

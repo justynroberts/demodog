@@ -10,7 +10,8 @@ import type {
   RawEvent,
   RecordOptions,
   RecordingResult,
-  Sources
+  Sources,
+  Cue
 } from '../shared/types'
 
 /**
@@ -254,5 +255,88 @@ export class RecorderProcess {
       screenPath: join(this.dir, 'screen.mp4'),
       duration: meta.duration
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Transcription
+// ---------------------------------------------------------------------------
+
+/**
+ * Transcribes a take's narration, reporting progress as it goes.
+ *
+ * Deliberately not `runOnceShared`: this is minutes of work, not a query, and
+ * it carries no watchdog. The first run for a locale waits on macOS to fetch an
+ * on-device model, and killing it halfway leaves nothing to show for the wait.
+ */
+export function transcribe(
+  audioPath: string,
+  locale: string,
+  onProgress: (fraction: number) => void
+): Promise<Cue[]> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(helperPath(), ['transcribe', '--audio', audioPath, '--locale', locale])
+    const cues: Cue[] = []
+    let buffered = ''
+    let failure: Error | null = null
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      buffered += chunk.toString()
+      const lines = buffered.split('\n')
+      buffered = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.trim()) continue
+        let message: Record<string, unknown>
+        try {
+          message = JSON.parse(line)
+        } catch {
+          continue
+        }
+        if (message.event === 'cue') {
+          cues.push({
+            start: Number(message.start),
+            end: Number(message.end),
+            text: String(message.text),
+            confidence: Number(message.confidence)
+          })
+        } else if (message.event === 'progress') {
+          const of = Number(message.of)
+          if (of > 0) onProgress(Math.min(1, Number(message.seconds) / of))
+        } else if (message.event === 'error') {
+          failure = new Error(
+            describeTranscribeError(String(message.code), String(message.message))
+          )
+        }
+      }
+    })
+
+    child.on('error', reject)
+    child.on('close', () => {
+      if (failure) reject(failure)
+      else resolve(cues)
+    })
+  })
+}
+
+/** Turns a helper error code into something worth showing a person. */
+function describeTranscribeError(code: string, message: string): string {
+  switch (code) {
+    case 'denied':
+      return (
+        'macOS has not granted DemoDog permission to recognise speech. ' +
+        'Enable DemoDog under Privacy & Security → Speech Recognition.'
+      )
+    case 'no-on-device':
+      return (
+        'This Mac has no on-device speech model for that language. ' +
+        'Add the language under System Settings → General → Language & Region, ' +
+        'then try again. Transcription never uploads your recording.'
+      )
+    case 'missing':
+      return 'That take has no audio to transcribe.'
+    case 'empty':
+      return 'The audio in that take is empty.'
+    default:
+      return message
   }
 }

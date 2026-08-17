@@ -1,5 +1,6 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { CameraSolver } from './camera'
+import { drawCaption } from './captions'
 import { CursorTrack } from './cursorTrack'
 import { drawClickRing, drawCursor, resolveShape } from './cursorArt'
 import { generateSegments } from './autozoom'
@@ -203,6 +204,11 @@ export class Composition {
 
     this.drawPip(ctx, sources, cursorOut)
     this.drawKeystrokes(ctx, t)
+
+    // Over everything the recording contains, but under the fade — a caption
+    // that stayed bright while the picture faded out would be the last thing
+    // left on screen.
+    drawCaption(ctx, t, this.project.captions, this.project.captionStyle, output)
 
     // Last, so it covers everything: background, frame, cursor and camera.
     const fade = fadeAlphaAt(t, this.range, this.project.fade)

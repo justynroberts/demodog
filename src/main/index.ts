@@ -22,7 +22,8 @@ import {
   listSources,
   checkPermissions,
   openPrivacySettings,
-  reapStrayHelpers
+  reapStrayHelpers,
+  transcribe
 } from './recorder'
 import type {
   RecordOptions,
@@ -482,6 +483,23 @@ ipcMain.handle('sources:thumbnails', async () => {
 ipcMain.handle('permissions:check', () => checkPermissions(false))
 ipcMain.handle('permissions:request', () => checkPermissions(true))
 ipcMain.handle('permissions:open', (_e, kind) => openPrivacySettings(kind))
+
+/**
+ * Transcribes a take. The narration is in the camera track, because the mic and
+ * camera share one recorder; system audio is in the screen track and is the
+ * fallback when nobody spoke into a microphone.
+ */
+ipcMain.handle('transcribe:run', async (event, dir: string, locale: string) => {
+  const spoken = ['camera.mp4', 'camera.webm', 'screen.mp4']
+    .map((name) => join(dir, name))
+    .find((candidate) => existsSync(candidate))
+  if (!spoken) throw new Error('That take has no audio to transcribe.')
+
+  allowMediaPath(dir)
+  return transcribe(spoken, locale, (fraction) => {
+    event.sender.send('transcribe:progress', fraction)
+  })
+})
 
 // macOS reads an app's screen-recording grant when it starts, so a permission
 // granted while DemoDog is running does not take effect until it restarts.
