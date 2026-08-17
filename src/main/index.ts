@@ -17,6 +17,7 @@ import { dirname, join, resolve as resolvePath, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { setupUpdates } from './updater'
 import { installMenu } from './menu'
+import { clearQuarantine } from './quarantine'
 import { mkdir, writeFile, readFile } from 'node:fs/promises'
 import { createWriteStream, existsSync, WriteStream } from 'node:fs'
 import {
@@ -406,6 +407,10 @@ app.whenReady().then(() => {
 
   if (!process.env['DEMODOG_BENCH']) createSplashWindow()
   createStudioWindow()
+
+  // Before anything tries to update: a quarantined bundle cannot launch the
+  // installer, and the failure is invisible from inside the app.
+  clearQuarantine()
 
   installMenu(() => studioWindow)
 
