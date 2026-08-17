@@ -124,15 +124,30 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
           // working update broken.
           setTimeout(() => {
             note('still running after quitAndInstall')
-            void dialog.showMessageBox(window, {
-              type: 'warning',
-              message: 'The update could not be installed',
-              detail:
-                'DemoDog is still running, so the update did not take effect. ' +
-                `Details are in ${logPath}. Downloading the new version manually ` +
-                'from the releases page will always work.',
-              buttons: ['OK']
-            })
+            void dialog
+              .showMessageBox(window, {
+                type: 'warning',
+                message: 'The update could not be installed',
+                detail:
+                  `DemoDog is still running ${info.version} rather than restarting, so ` +
+                  'the update did not take effect.\n\nDownloading it by hand always ' +
+                  'works, and takes about a minute.',
+                // A way out, not a diagnosis. Telling someone to read a log file
+                // is telling them to give up politely; the point of this dialog
+                // is that they end up on the new version either way.
+                buttons: ['Download it manually', 'Show me the log', 'Not now'],
+                defaultId: 0,
+                cancelId: 2
+              })
+              .then((choice) => {
+                if (choice.response === 0) {
+                  void shell.openExternal(
+                    'https://github.com/justynroberts/demodog/releases/latest'
+                  )
+                } else if (choice.response === 1) {
+                  shell.showItemInFolder(logPath)
+                }
+              })
           }, 25000)
         } else if (result.response === 2) {
           void shell.openExternal(
