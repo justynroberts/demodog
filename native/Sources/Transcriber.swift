@@ -26,7 +26,7 @@ enum Transcriber {
     /// sixteen second piece. Clean synthetic speech survives far longer, which
     /// is exactly why a fixture-based test missed this and a real recording
     /// found it immediately.
-    static let windowSeconds: Double = 6
+    static let windowSeconds: Double = 2
 
     /// Carried across a window boundary so a sentence split across two windows
     /// is heard whole by the later one. Cues are assigned to the window their
@@ -43,7 +43,7 @@ enum Transcriber {
     /// simply not heard. The overlap has to be longer than whatever that
     /// warm-up costs, so the words lost at one window's start are still inside
     /// the previous window's tail.
-    static let overlapSeconds: Double = 2.0
+    static let overlapSeconds: Double = 4.0
 
     struct Cue {
         var start: Double
@@ -144,9 +144,16 @@ enum Transcriber {
                     // on its own — which belongs to the line before it rather
                     // than on screen by itself.
                     if var previous = pending {
-                        let stub = cue.text.split(separator: " ").count <= 2
-                        if stub && cue.start - previous.end < 0.4 {
-                            previous.text += " " + cue.text
+                        // Overlapping windows arrive as pieces of a sentence:
+                        // each one opens with a repeat of the last, the repeat
+                        // is trimmed, and what remains is a fragment. Contiguous
+                        // pieces are put back together up to a readable length,
+                        // which is what stops dense overlap from turning a
+                        // sentence into a stack of four-word captions.
+                        let combined = previous.text + " " + cue.text
+                        let contiguous = cue.start - previous.end < 0.45
+                        if contiguous && combined.count <= 90 {
+                            previous.text = combined
                             previous.end = cue.end
                             pending = previous
                             continue
@@ -274,19 +281,32 @@ enum Transcriber {
         let words = text.split(separator: " ")
         guard previousWords.count >= 2, words.count >= 2 else { return text }
 
-        let limit = min(12, min(previousWords.count, words.count))
-        var best = 0
-        for run in stride(from: limit, through: 2, by: -1) {
-            let tail = previousWords.suffix(run).map(normalise)
-            let head = words.prefix(run).map(normalise)
-            if tail == head {
-                best = run
-                break
+        // Compared loosely, because the recogniser does not render the same
+        // audio the same way twice. "I'll pick the time when I'm gonna do that"
+        // and "...do this" are one sentence heard in two windows, and an exact
+        // comparison treats them as two and prints both. A quarter of the words
+        // may differ before a run stops counting as the same words again.
+        // The repeat does not always begin at the first word — the recogniser
+        // often prefixes a stray one, and "Delete, I'll pick the time..."
+        // repeats a sentence starting from its second word. A few leading words
+        // are allowed before the match, and go with it when it is found.
+        var cut = 0
+        outer: for skip in 0...min(3, max(0, words.count - 2)) {
+            let available = min(previousWords.count, words.count - skip)
+            guard available >= 2 else { continue }
+            for run in stride(from: min(14, available), through: 2, by: -1) {
+                let tail = previousWords.suffix(run).map(normalise)
+                let head = words[skip..<(skip + run)].map(normalise)
+                let differences = zip(tail, head).reduce(0) { $0 + ($1.0 == $1.1 ? 0 : 1) }
+                if differences <= max(0, run / 4) {
+                    cut = skip + run
+                    break outer
+                }
             }
         }
-        guard best > 0 else { return text }
-        let kept = words.dropFirst(best).joined(separator: " ")
-        return kept.trimmingCharacters(in: .whitespaces)
+        guard cut > 0 else { return text }
+        return words.dropFirst(cut).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
     }
 
     // ------------------------------------------------------------------
