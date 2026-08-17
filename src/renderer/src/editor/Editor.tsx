@@ -157,6 +157,16 @@ export default function Editor({
     }
   }, [playing, seek, trim, recording, cameraSync])
 
+  /**
+   * How far into the camera track it is possible to seek.
+   *
+   * Unknown until the metadata loads, and asking for a position beyond it is
+   * not an error — it is silently clamped, which is worse, because the caller
+   * cannot tell the difference between arriving and being refused.
+   */
+  const cameraLimit = (camera: HTMLVideoElement): number =>
+    Number.isFinite(camera.duration) && camera.duration > 0 ? camera.duration : Infinity
+
   /** Current target level for the camera element. */
   const cameraVolume = useCallback(
     () => Math.min(1, Math.max(0, project.audio.micGain)),
@@ -229,8 +239,15 @@ export default function Editor({
         const camera = cameraRef.current
         if (camera) {
           const want = screen.currentTime - recording.cameraOffset - cameraSync
-          if (want < 0) {
-            // Not due yet; hold it at its first frame.
+          // Past the end counts as "not due" just as much as before the start.
+          // Seeking beyond a track's duration silently clamps, so the position
+          // asked for is never reached, the error never closes, and the loop
+          // asks again on every frame — a seek per frame, which stops the
+          // element playing at all. The camera track is shorter than the screen
+          // track, so this was reachable at the end of any take; nudging the
+          // sync offset just made it immediate.
+          if (want < 0 || want >= cameraLimit(camera)) {
+            // Not due; hold it where it is.
             if (!camera.paused) fadeOutAndPause(camera)
           } else if (camera.paused) {
             camera.currentTime = want
@@ -274,8 +291,8 @@ export default function Editor({
       // until the playhead was dragged back.
       if (!playing && camera) {
         const want = timeRef.current - recording.cameraOffset - cameraSync
-        if (want >= 0 && Math.abs(camera.currentTime - want) > 0.05) {
-          camera.currentTime = want
+        if (want >= 0 && want < cameraLimit(camera)) {
+          if (Math.abs(camera.currentTime - want) > 0.05) camera.currentTime = want
         }
       }
 
