@@ -6,6 +6,21 @@ is where finished work waits.
 
 ## Unreleased
 
+_Nothing yet._
+
+## 1.0.2 — 2026-08-17
+
+- **Transcription was losing words.** Windows are now short clips overlapped
+  heavily — six seconds every two — so every moment of audio is heard three
+  times and never only at a clip's opening, which is the part the recogniser
+  does not hear. Across three real takes, uncaptioned speech falls from 3.5s to
+  1.0s. Four minutes of audio takes 71 seconds rather than 26.
+- Hearing everything three times means saying it three times, so repeats are
+  trimmed loosely (a quarter of the words may differ), may start a few words in,
+  and are compared against the line being assembled rather than the fragment
+  that arrived last.
+- A brief caption is held on screen long enough to read — a word timed to its
+  own sound can last a fifth of a second, which reads as a fault.
 - The export dialog appeared behind the timeline, hiding the Export button. It
   was a fixed overlay, which is not enough: any ancestor with a transform
   contains it, and the editor has several. Every modal is now portalled into the
