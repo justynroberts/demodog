@@ -8,6 +8,19 @@ is where finished work waits.
 
 _Nothing yet._
 
+## 1.0.5 — 2026-08-17
+
+- **Updates could not install on any copy downloaded through a browser.** macOS
+  marks a download as quarantined, the flag is inherited by everything nested in
+  the bundle, and ShipIt — the program Squirrel launches to swap the app — is
+  refused because of it. Silently: the app quits as asked, nothing installs,
+  nothing reopens, and no installer log is written because the installer never
+  runs. Notarisation does not prevent it. DemoDog now clears the flag from its
+  own bundle at startup.
+- **Intro and outro cards**: a title, a subtitle and an optional logo either
+  side of the recording, as extra time rather than separate clips, so they
+  scrub, preview, fade and export like everything else.
+
 ## 1.0.4 — 2026-08-17
 
 Updating explains itself, and can no longer be mistaken for failing.
