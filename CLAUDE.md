@@ -230,6 +230,12 @@ keystrokes land in whatever app happens to be frontmost.
 
 ## Releasing
 
+**This is production software that updates itself.** Never build a release, tag,
+or publish unless asked to in that message. The updater reads the latest GitHub
+release, so commits and pushes to `main` are inert — only `npm run release --
+<version>` makes anything visible. `npm run dist` builds locally and publishes
+nothing. Finished work waits in `CHANGELOG.md` under *Unreleased*.
+
 `RELEASING.md` is the full path from a clean tree to a downloadable,
 self-updating build, including the parts that are not obvious: the dmg needs its
 own signature and its own notarisation ticket, `latest-mac.yml` has to be

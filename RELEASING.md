@@ -28,12 +28,38 @@ until the Apple Developer Program License Agreement is accepted at
 developer.apple.com/account — by the **Account Holder**, not an Admin. The 403 is
 about the account, never about the app.
 
+## Nothing ships by accident
+
+DemoDog updates itself from the latest GitHub **release**, so that — not `main`,
+not a tag on its own — is what reaches people. Commit and push as often as you
+like; none of it is visible until a release exists.
+
+- `npm run dist` builds, signs, notarises and staples **locally**. It carries
+  `--publish never`, because electron-builder will otherwise publish on its own
+  when a provider is configured, the commit is tagged and a token is in the
+  environment.
+- `npm run release -- <version>` is the only thing that publishes.
+
+Finished work waits in `CHANGELOG.md` under **Unreleased** until then.
+
 ## Release
+
+```bash
+npm run release -- 1.0.0 --dry-run   # build and verify, publish nothing
+npm run release -- 1.0.0             # the real thing
+```
+
+The script refuses rather than guesses: a dirty tree, a version that already has
+a tag, a failing check, a manifest that disagrees with its artifacts, or a disk
+image Gatekeeper will not accept all stop it before anything becomes visible.
+Release notes come from `release/NOTES.md` if it exists.
+
+Doing it by hand, which is what the script automates:
 
 ```bash
 npm run typecheck            # both tsconfig projects
 npm run verify               # engine checks, then a real export of the fixture
-npm version 0.9.0 --no-git-tag-version
+npm version 1.0.0 --no-git-tag-version
 npm run dist                 # universal, signed, notarised, stapled
 ```
 
