@@ -8,6 +8,25 @@ is where finished work waits.
 
 _Nothing yet._
 
+## 1.0.1 — 2026-08-17
+
+- Captions were early by the camera offset. The narration is in the camera
+  recording, which starts after the screen track, so times taken from it landed
+  ahead of the editor's clock by a small constant amount — enough to read as
+  text that is not quite in time.
+- The updater logs to `~/Library/Logs/DemoDog/updater.log`, destroys windows
+  before installing, and says so plainly if the app is still running four
+  seconds after being told to restart. Anything holding a window open left the
+  installer waiting for a quit that never came, which presented as a Restart
+  button that did nothing.
+- A transcription helper that dies now reports its exit status and output
+  instead of returning an empty transcript, since "heard nothing" and "died
+  trying" looked identical from the outside.
+- Recognition accuracy: windows are resampled to 16 kHz mono and re-encoded
+  before recognition, which measurably changes what the recogniser hears.
+- Clicking anywhere on the timeline moves the playhead, lines can be added by
+  hand, and the capture setup is remembered between takes.
+
 ## 1.0.0 — 2026-08-17
 
 - **Transcription and captions.** Narration is transcribed on this Mac — on
