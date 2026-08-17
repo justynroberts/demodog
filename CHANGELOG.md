@@ -6,7 +6,21 @@ is where finished work waits.
 
 ## Unreleased
 
-_Nothing yet._
+- **Frame a zoom by dragging on the preview.** Draw a box around what should
+  fill the frame and the shot is made from it — magnification worked out from
+  the box rather than typed in as a number. With a shot selected it reframes
+  that one; with nothing selected it makes a new one at the playhead.
+- The selected shot now has its own controls: start, end, magnification and the
+  two eases, with **Start here** and **End here** to pin either edge to the
+  playhead.
+- **Clicking the timeline could not move the playhead.** The preview was never
+  seekable at all — the media protocol returned whole files with a 200, and a
+  video given that concludes it cannot seek. Playing forwards worked, which is
+  why it looked like a timeline fault.
+- Scrubbing works anywhere on the timeline, including the gaps between lanes.
+- Inspector tabs are icons with a caption line naming the open one, since six
+  words never fitted the rail.
+- A title card next to the recording no longer fades through black twice.
 
 ## 1.0.6 — 2026-08-17
 

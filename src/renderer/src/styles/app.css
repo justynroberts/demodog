@@ -2217,3 +2217,9 @@ dialog.info a {
   background: var(--surface);
   box-shadow: 0 -10px 12px -8px rgb(0 0 0 / 0.28);
 }
+
+/* While a zoom area is being chosen, the preview is a target rather than a
+   picture — say so with the pointer before the drag starts. */
+.stage canvas.picking {
+  cursor: crosshair;
+}

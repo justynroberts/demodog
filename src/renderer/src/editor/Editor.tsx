@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { Composition } from '../engine/composition'
+import { baseViewport } from '../engine/camera'
 import { generateSegments } from '../engine/autozoom'
 import { defaultProject, mergeSettings, rememberLook, rememberedLook } from '../engine/defaults'
 import { exportMP4 } from '../engine/export'
@@ -60,6 +61,9 @@ export default function Editor({
   const [playing, setPlaying] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [selectedCaption, setSelectedCaption] = useState<string | null>(null)
+  /** Armed by the inspector: the next drag on the preview chooses a zoom area. */
+  const [picking, setPicking] = useState(false)
+  const pickRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const [exported, setExported] = useState<{ path: string; captions: number } | null>(null)
   const [cameraSync, setCameraSync] = useState(0)
   const [trim, setTrim] = useState<{ start: number; end: number }>({
@@ -200,6 +204,97 @@ export default function Editor({
    */
   const cameraLimit = (camera: HTMLVideoElement): number =>
     Number.isFinite(camera.duration) && camera.duration > 0 ? camera.duration : Infinity
+
+  /**
+   * Turns a drag on the preview into a zoom shot framed on what was dragged.
+   *
+   * The preview may itself be zoomed at this moment, so a point on screen is
+   * not a point in the recording: it is read back through the viewport the
+   * camera is using at this instant, which is the same mapping the compositor
+   * used to draw it.
+   */
+  const beginPick = (event: React.PointerEvent<HTMLCanvasElement>): void => {
+    if (!picking || event.button !== 0) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    event.preventDefault()
+
+    const toCanvas = (clientX: number, clientY: number): { x: number; y: number } => {
+      const box = canvas.getBoundingClientRect()
+      return {
+        x: ((clientX - box.left) / box.width) * project.output.width,
+        y: ((clientY - box.top) / box.height) * project.output.height
+      }
+    }
+
+    const from = toCanvas(event.clientX, event.clientY)
+    pickRef.current = { x0: from.x, y0: from.y, x1: from.x, y1: from.y }
+
+    const move = (e: PointerEvent): void => {
+      const to = toCanvas(e.clientX, e.clientY)
+      if (pickRef.current) pickRef.current = { ...pickRef.current, x1: to.x, y1: to.y }
+    }
+
+    const up = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      const box = pickRef.current
+      pickRef.current = null
+      setPicking(false)
+      if (!box) return
+
+      const w = Math.abs(box.x1 - box.x0)
+      const h = Math.abs(box.y1 - box.y0)
+      // A click rather than a drag; nothing was chosen.
+      if (w < 24 || h < 24) return
+
+      const cam = composition.camera.at(timeRef.current)
+      const content = composition.content
+      const toSource = (x: number, y: number): { x: number; y: number } => ({
+        x: cam.viewport.x + ((x - content.x) / content.w) * cam.viewport.w,
+        y: cam.viewport.y + ((y - content.y) / content.h) * cam.viewport.h
+      })
+      const a = toSource(Math.min(box.x0, box.x1), Math.min(box.y0, box.y1))
+      const b = toSource(Math.max(box.x0, box.x1), Math.max(box.y0, box.y1))
+
+      const base = baseViewport(recording.source, content.w / content.h)
+      // Whichever side needs the least magnification, so everything chosen
+      // stays in frame rather than being cropped to fit.
+      const scale = Math.min(base.w / Math.max(1, b.x - a.x), base.h / Math.max(1, b.y - a.y))
+      const clamped = Math.min(6, Math.max(1.05, scale))
+      const centre = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+
+      if (selected) {
+        setSegments((current) =>
+          current.map((seg) =>
+            seg.id === selected
+              ? { ...seg, x: centre.x, y: centre.y, scale: clamped, auto: false }
+              : seg
+          )
+        )
+        return
+      }
+      // Nothing selected: the drag makes a shot at the playhead.
+      const at = timeRef.current
+      const segment: ZoomSegment = {
+        id: `manual-${Date.now()}`,
+        start: Math.max(0, at - 0.3),
+        end: Math.min(recording.duration, at + 2.2),
+        easeIn: 0.7,
+        easeOut: 0.8,
+        scale: clamped,
+        x: centre.x,
+        y: centre.y,
+        auto: false,
+        follow: 0.4
+      }
+      setSegments((current) => [...current, segment].sort((a2, b2) => a2.start - b2.start))
+      setSelected(segment.id)
+    }
+
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
 
   /** Current target level for the camera element. */
   const cameraVolume = useCallback(
@@ -366,6 +461,29 @@ export default function Editor({
             ? { width: camera.videoWidth, height: camera.videoHeight }
             : undefined
       })
+
+      // The area being chosen, drawn over the frame it is being chosen from.
+      const marquee = pickRef.current
+      if (marquee) {
+        const x = Math.min(marquee.x0, marquee.x1)
+        const y = Math.min(marquee.y0, marquee.y1)
+        const w = Math.abs(marquee.x1 - marquee.x0)
+        const h = Math.abs(marquee.y1 - marquee.y0)
+        ctx.save()
+        // Dimmed around the selection rather than over it and cut back out:
+        // clearing a region does not restore what was underneath, it erases it.
+        const W = project.output.width
+        const H = project.output.height
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.42)'
+        ctx.fillRect(0, 0, W, y)
+        ctx.fillRect(0, y + h, W, H - (y + h))
+        ctx.fillRect(0, y, x, h)
+        ctx.fillRect(x + w, y, W - (x + w), h)
+        ctx.strokeStyle = '#7c63ff'
+        ctx.lineWidth = Math.max(2, project.output.width / 480)
+        ctx.strokeRect(x, y, w, h)
+        ctx.restore()
+      }
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
@@ -559,7 +677,13 @@ export default function Editor({
   return (
     <div className="editor">
       <div className="stage">
-        <canvas ref={canvasRef} width={project.output.width} height={project.output.height} />
+        <canvas
+          ref={canvasRef}
+          className={picking ? 'picking' : undefined}
+          width={project.output.width}
+          height={project.output.height}
+          onPointerDown={beginPick}
+        />
 
         <div className="stage-badge">
           <span className="chip mono">
@@ -707,6 +831,8 @@ export default function Editor({
         time={time}
         selectedCaption={selectedCaption}
         onSelectCaption={setSelectedCaption}
+        picking={picking}
+        onPick={() => setPicking((on) => !on)}
         selected={selected}
         onSelect={setSelected}
         recording={recording}

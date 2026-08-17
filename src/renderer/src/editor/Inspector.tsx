@@ -42,6 +42,9 @@ interface Props {
   onCameraSync: (v: number) => void
   /** Where the playhead is, so a new line lands where it is being watched. */
   time: number
+  /** True while a drag on the preview will choose a zoom area. */
+  picking: boolean
+  onPick: () => void
   /** The caption clicked on the timeline, if any. */
   selectedCaption: string | null
   onSelectCaption: (id: string | null) => void
@@ -531,7 +534,10 @@ function ZoomTab({
   onSegmentsChange,
   selected,
   onSelect,
-  recording
+  recording,
+  picking,
+  onPick,
+  time
 }: Props & { patch: Patcher }): ReactNode {
   const { zoom } = project
   const active = segments.find((s) => s.id === selected) ?? null
@@ -565,6 +571,94 @@ function ZoomTab({
 
   return (
     <>
+      {/* The shot being edited comes first: it is what the timeline selection
+          refers to, and hunting for it under the automatic settings makes the
+          two feel unrelated when one overrides the other. */}
+      {active ? (
+        <Group title={active.auto ? 'Selected shot (automatic)' : 'Selected shot'}>
+          <button
+            className={picking ? 'btn violet' : 'btn'}
+            onClick={onPick}
+            style={{ justifyContent: 'center' }}
+          >
+            {picking ? 'Now drag on the preview…' : 'Choose the area on the preview'}
+          </button>
+          <p className="hint">
+            Drag a box around what should fill the frame. The zoom is worked out from the box, so
+            you are choosing what to look at rather than a number.
+          </p>
+
+          <Slider
+            label="Starts"
+            min={0}
+            max={Math.max(0.1, active.end - 0.2)}
+            step={0.05}
+            value={active.start}
+            onChange={(v) => updateSelected({ start: v })}
+            format={(v) => `${v.toFixed(2)}s`}
+          />
+          <Slider
+            label="Ends"
+            min={active.start + 0.2}
+            max={recording.duration}
+            step={0.05}
+            value={active.end}
+            onChange={(v) => updateSelected({ end: v })}
+            format={(v) => `${v.toFixed(2)}s`}
+          />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn small" onClick={() => updateSelected({ start: time })}>
+              Start here
+            </button>
+            <button className="btn small" onClick={() => updateSelected({ end: time })}>
+              End here
+            </button>
+          </div>
+
+          <Slider
+            label="Magnification"
+            min={1.05}
+            max={6}
+            step={0.05}
+            value={active.scale}
+            onChange={(v) => updateSelected({ scale: v })}
+            format={(v) => `${v.toFixed(2)}×`}
+          />
+          <Slider
+            label="Ease in"
+            min={0}
+            max={2}
+            step={0.05}
+            value={active.easeIn}
+            onChange={(v) => updateSelected({ easeIn: v })}
+            format={(v) => `${v.toFixed(2)}s`}
+          />
+          <Slider
+            label="Ease out"
+            min={0}
+            max={2}
+            step={0.05}
+            value={active.easeOut}
+            onChange={(v) => updateSelected({ easeOut: v })}
+            format={(v) => `${v.toFixed(2)}s`}
+          />
+          <button
+            className="btn small"
+            onClick={() => {
+              onSegmentsChange(segments.filter((seg) => seg.id !== active.id))
+              onSelect(null)
+            }}
+          >
+            Delete this shot
+          </button>
+        </Group>
+      ) : (
+        <p className="hint">
+          Click a shot on the zoom lane to edit it, or double-click the lane to add one. A shot can
+          also be framed by dragging a box on the preview.
+        </p>
+      )}
+
       {zoom.enabled && autoCount === 0 && (
         <div className="notice" style={{ borderLeftColor: 'var(--violet)' }}>
           <strong>No automatic zooms in this take.</strong>
