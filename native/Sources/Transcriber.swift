@@ -136,7 +136,6 @@ enum Transcriber {
                     // stutter. Only the repeated words go.
                     cue.text = withoutRepeat(of: lastText, in: cue.text)
                     guard !cue.text.isEmpty else { continue }
-                    lastText = cue.text
                     lastEnd = cue.end
 
                     // One line is held back rather than emitted immediately.
@@ -156,12 +155,19 @@ enum Transcriber {
                             previous.text = combined
                             previous.end = cue.end
                             pending = previous
+                            // Compared against the assembled line, not the
+                            // fragment that arrived last. A repeat that skips a
+                            // fragment — the same phrase two pieces later —
+                            // otherwise sails past a comparison that can only
+                            // see one piece back.
+                            lastText = previous.text
                             continue
                         }
                         produced += 1
                         emitCue(previous)
                     }
                     pending = cue
+                    lastText = cue.text
                 }
             } catch {
                 // A window that fails is a gap, not a failure: the rest of the
