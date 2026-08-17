@@ -77,6 +77,13 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
   autoUpdater.on('update-downloaded', (info) => {
     if (busy) return
     busy = true
+    // Brought forward first. The dialog is attached to the window, so if the
+    // app is behind something else it is invisible — and an update that has
+    // downloaded and is waiting on an answer nobody can see is indistinguishable
+    // from an update that failed. That is exactly how this was reported.
+    if (window.isMinimized()) window.restore()
+    window.show()
+    window.focus()
     void dialog
       .showMessageBox(window, {
         type: 'info',
