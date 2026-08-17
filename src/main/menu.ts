@@ -11,6 +11,12 @@ import { checkForUpdatesNow } from './updater'
  * copied into or out of. And a machine whose automatic update is not working
  * had no way to ask for one, or even to find out which version it was running.
  */
+/**
+ * Squirrel names its cache after the bundle identifier, not the app name, and
+ * the two are not the same here. Must match `build.appId` in package.json.
+ */
+const BUNDLE_ID = 'com.fintonlabs.demodog'
+
 export function installMenu(window: () => BrowserWindow | null): void {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
@@ -62,12 +68,22 @@ export function installMenu(window: () => BrowserWindow | null): void {
       submenu: [
         {
           label: 'Releases and Downloads',
-          click: () =>
-            void shell.openExternal('https://github.com/justynroberts/demodog/releases')
+          click: () => void shell.openExternal('https://github.com/justynroberts/demodog/releases')
         },
         {
           label: 'Reveal Update Log',
           click: () => shell.showItemInFolder(`${app.getPath('logs')}/updater.log`)
+        },
+        {
+          // Squirrel's own log, which is the one that says where an update was
+          // actually installed to. Both are buried in a hidden folder that
+          // cannot be browsed to, so asking someone to find them by hand means
+          // walking them through Go to Folder every time.
+          label: 'Reveal Installer Log',
+          click: () =>
+            shell.showItemInFolder(
+              `${app.getPath('home')}/Library/Caches/${BUNDLE_ID}.ShipIt/ShipIt_stderr.log`
+            )
         }
       ]
     }
