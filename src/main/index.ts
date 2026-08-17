@@ -16,6 +16,7 @@ import {
 import { dirname, join, resolve as resolvePath, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { setupUpdates } from './updater'
+import { installMenu } from './menu'
 import { mkdir, writeFile, readFile } from 'node:fs/promises'
 import { createWriteStream, existsSync, WriteStream } from 'node:fs'
 import {
@@ -405,6 +406,8 @@ app.whenReady().then(() => {
 
   if (!process.env['DEMODOG_BENCH']) createSplashWindow()
   createStudioWindow()
+
+  installMenu(() => studioWindow)
 
   // Never while a take is in progress: an update dialog stealing focus would be
   // captured into the recording.
