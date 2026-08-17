@@ -50,8 +50,18 @@ autoUpdater.logger = {
 
 /** How long after launch to look, so it never competes with starting up. */
 const FIRST_CHECK_DELAY = 8_000
-/** And then daily, for a session left running for days. */
-const RECHECK_INTERVAL = 24 * 60 * 60 * 1000
+/**
+ * And then every couple of hours.
+ *
+ * It was daily, which sounds harmless and is not: a release published while the
+ * app is open goes unnoticed until tomorrow, so "it didn't update" is the
+ * expected behaviour rather than a fault. Two hours costs a request nobody
+ * notices and removes a whole day of staleness.
+ */
+const RECHECK_INTERVAL = 2 * 60 * 60 * 1000
+
+/** Never check more often than this, however many times focus changes. */
+const MIN_GAP = 20 * 60 * 1000
 
 let busy = false
 
@@ -132,13 +142,21 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
   autoUpdater.on('update-not-available', () => note('no update available'))
   autoUpdater.on('download-progress', (p) => note(`downloading ${Math.round(p.percent)}%`))
 
+  let lastCheck = 0
   const check = (): void => {
     if (isRecording()) return
+    const now = Date.now()
+    if (now - lastCheck < MIN_GAP) return
+    lastCheck = now
     autoUpdater.checkForUpdates().catch(() => undefined)
   }
 
   setTimeout(check, FIRST_CHECK_DELAY)
   setInterval(check, RECHECK_INTERVAL)
+  // Coming back to the app is the moment someone is most likely to be about to
+  // use it, and the cheapest opportunity to notice a release published while
+  // they were elsewhere. Rate limited, since focus changes constantly.
+  window.on('focus', check)
 }
 
 /** Menu-driven check, which does report when there is nothing to report. */
