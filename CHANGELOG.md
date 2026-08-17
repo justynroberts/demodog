@@ -20,6 +20,14 @@ is where finished work waits.
   position and alignment, line width and spacing, outline, shadow, a backing
   plate for busy footage, and a fade at each end. The style travels with a
   profile; the transcript belongs to its own recording.
+- **Publish to YouTube** after an export: the corrected captions are written
+  beside the video as an SRT file, the title and chapter marks go on the
+  clipboard, YouTube Studio opens and the file is revealed ready to drag. A
+  handoff rather than an upload, deliberately — uploading through YouTube's API
+  requires a verified app, and until one is verified every video it uploads is
+  locked to private with no appeal.
+- The camera's sync point is stamped when capture actually begins rather than
+  before the file is opened, removing a fixed lip-sync offset.
 - Building and shipping are now separate. `npm run dist` builds and stops;
   `npm run release -- <version>` is the only thing that publishes.
 

@@ -65,6 +65,9 @@ const api = {
 
   openCameraFile: (info: { startWallClock: number; mimeType: string }): Promise<string> =>
     ipcRenderer.invoke('camera:open', info),
+  /** The moment capture actually began, which `camera:open` cannot know. */
+  cameraStarted: (startWallClock: number): Promise<void> =>
+    ipcRenderer.invoke('camera:started', startWallClock),
   writeCameraChunk: (chunk: ArrayBuffer): void => ipcRenderer.send('camera:chunk', chunk),
 
   saveDialog: (options: {
@@ -75,6 +78,14 @@ const api = {
     ipcRenderer.invoke('file:write', path, data),
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
   reveal: (path: string): Promise<void> => ipcRenderer.invoke('shell:reveal', path),
+
+  /** Writes subtitles beside the video, copies the title, opens YouTube. */
+  publishToYouTube: (payload: {
+    videoPath: string
+    title: string
+    description: string
+    subtitles: string
+  }): Promise<string[]> => ipcRenderer.invoke('publish:youtube', payload),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:open-external', url),
 
   pickImage: (): Promise<string | null> => ipcRenderer.invoke('dialog:image'),

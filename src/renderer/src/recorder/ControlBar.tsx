@@ -98,9 +98,8 @@ export default function ControlBar(): ReactNode {
       ].find((type) => MediaRecorder.isTypeSupported(type))
       if (!mimeType) return
 
-      // Record the wall clock as close to the first sample as possible; the
-      // editor uses it to line the camera up against the screen track, and
-      // exposes a manual nudge for the residual error.
+      // A provisional sync point: the file has to exist before any chunk can be
+      // written, and opening it costs an IPC round trip and a file creation.
       await api.openCameraFile({ startWallClock: Date.now() / 1000, mimeType })
 
       const recorder = new MediaRecorder(stream, {
@@ -108,6 +107,11 @@ export default function ControlBar(): ReactNode {
         videoBitsPerSecond: 4_000_000,
         audioBitsPerSecond: 128_000
       })
+      // The real one. Everything between the provisional stamp and here — the
+      // round trip, the file, constructing the recorder — made the camera look
+      // earlier than it was, and that error is a fixed lip-sync offset across
+      // the whole take. `start` fires once capture is genuinely under way.
+      recorder.onstart = () => void api.cameraStarted(Date.now() / 1000)
       recorder.ondataavailable = async (event) => {
         if (event.data.size > 0) api.writeCameraChunk(await event.data.arrayBuffer())
       }

@@ -10,9 +10,10 @@ import {
   session,
   shell,
   screen,
+  clipboard,
   globalShortcut
 } from 'electron'
-import { join, resolve as resolvePath, sep } from 'node:path'
+import { dirname, join, resolve as resolvePath, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { setupUpdates } from './updater'
 import { mkdir, writeFile, readFile } from 'node:fs/promises'
@@ -103,6 +104,16 @@ function isMediaPathAllowed(target: string): boolean {
  * arbitrary file write. Membership is consumed on use.
  */
 const permittedWrites = new Set<string>()
+/**
+ * Folders the user picked a save location in.
+ *
+ * A sidecar — subtitles beside the video — is written after the export has
+ * already consumed its one-shot permission, and reopening a save dialog to
+ * place a file the user did not ask to be asked about is worse than useless.
+ * Kept separate from `permittedWrites` so it can only ever authorise a sidecar
+ * next to something already saved, never an arbitrary path.
+ */
+const permittedFolders = new Set<string>()
 
 function rendererURL(hash: string): string {
   const devServer = process.env['ELECTRON_RENDERER_URL']
@@ -608,6 +619,22 @@ ipcMain.handle('camera:open', async (_e, info: { startWallClock: number; mimeTyp
   return path
 })
 
+/**
+ * Corrects the camera's sync point once recording has actually begun.
+ *
+ * `camera:open` has to be stamped before the file exists, which puts an IPC
+ * round trip, a file creation and the construction of a MediaRecorder between
+ * the timestamp and the first frame it captures. Every one of those makes the
+ * camera look earlier than it really is, and the error shows up as lip sync
+ * being out by a fixed amount for the whole take. MediaRecorder's `start` event
+ * fires when capture is genuinely under way, which is far closer to the truth.
+ */
+ipcMain.handle('camera:started', async (_e, startWallClock: number) => {
+  if (!recorder || !cameraMeta) return
+  cameraMeta = { ...cameraMeta, startWallClock }
+  await writeFile(join(recorder.outputDir, 'camera.json'), JSON.stringify(cameraMeta, null, 2))
+})
+
 ipcMain.on('camera:chunk', (_e, chunk: ArrayBuffer) => {
   cameraStream?.write(Buffer.from(chunk))
 })
@@ -621,6 +648,9 @@ ipcMain.handle(
     })
     if (result.canceled || !result.filePath) return null
     permittedWrites.add(resolvePath(result.filePath))
+    // The chosen folder, so a subtitle file can be written next to the video
+    // later without reopening a dialog. Files only, and only in this folder.
+    permittedFolders.add(dirname(resolvePath(result.filePath)))
     return result.filePath
   }
 )
@@ -638,6 +668,47 @@ ipcMain.handle('file:write', async (_e, path: string, data: ArrayBuffer) => {
 
 ipcMain.handle('app:version', () => app.getVersion())
 ipcMain.handle('shell:reveal', (_e, path: string) => shell.showItemInFolder(path))
+
+/**
+ * Hands a finished export to YouTube.
+ *
+ * Deliberately a handoff rather than an upload. Uploading through the API needs
+ * a verified OAuth project, and until one is verified every video it uploads is
+ * locked to private with no appeal — a feature that appears to work and
+ * quietly ruins the result is worse than no feature. So: write the subtitles
+ * next to the video, put the title on the clipboard, open the upload page, and
+ * show the file in Finder ready to drag.
+ */
+ipcMain.handle(
+  'publish:youtube',
+  async (
+    _e,
+    payload: { videoPath: string; title: string; description: string; subtitles: string }
+  ) => {
+    const written: string[] = []
+
+    if (payload.subtitles.trim()) {
+      // Beside the video and named after it, which is what every uploader
+      // expects and what makes the pair obvious in Finder.
+      const srt = resolvePath(payload.videoPath.replace(/\.mp4$/i, '') + '.srt')
+      if (!permittedFolders.has(dirname(srt))) {
+        throw new Error('refusing to write outside a folder the user chose')
+      }
+      await writeFile(srt, payload.subtitles, 'utf8')
+      written.push(srt)
+    }
+
+    // The upload page cannot be pre-filled from a URL, so the title goes to the
+    // clipboard instead — one paste rather than retyping it.
+    clipboard.writeText(
+      payload.description.trim() ? `${payload.title}\n\n${payload.description}` : payload.title
+    )
+
+    await shell.openExternal('https://studio.youtube.com/channel/upload')
+    shell.showItemInFolder(payload.videoPath)
+    return written
+  }
+)
 ipcMain.handle('shell:open-external', (_e, url: string) => {
   // Anything but the web means handing an arbitrary scheme to the OS.
   let parsed: URL

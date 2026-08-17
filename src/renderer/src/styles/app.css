@@ -2076,3 +2076,53 @@ dialog.info a {
   border: var(--border);
   cursor: pointer;
 }
+
+/* --------------------------------------------------------------------------
+   After an export
+   -------------------------------------------------------------------------- */
+
+.exported-card {
+  width: 460px;
+  max-width: calc(100% - 48px);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 22px;
+  background: var(--surface);
+  border: var(--border);
+  box-shadow: var(--shadow-hard);
+  animation: tour-rise 0.32s var(--snap) both;
+}
+
+.exported-card h2 {
+  margin: 4px 0 10px;
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-variation-settings: 'wght' 700, 'wdth' 90;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.exported-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.exported-note {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.exported-steps {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: var(--t-sm);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.exported-steps strong {
+  color: var(--text);
+}

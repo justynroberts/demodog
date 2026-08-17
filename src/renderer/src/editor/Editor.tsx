@@ -11,6 +11,7 @@ import { fadeOutAndPause, isRamping, rampVolume } from './mediaFade'
 import { formatTime } from '../ui/controls'
 import Timeline from './Timeline'
 import Inspector from './Inspector'
+import ExportedPanel from './ExportedPanel'
 import ExportDialog, { formatDuration, rememberRate, type ExportChoice } from './ExportDialog'
 
 /** Names the export after the take it came from, rather than a bare timestamp. */
@@ -58,6 +59,7 @@ export default function Editor({
   const [playing, setPlaying] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [selectedCaption, setSelectedCaption] = useState<string | null>(null)
+  const [exported, setExported] = useState<{ path: string; captions: number } | null>(null)
   const [cameraSync, setCameraSync] = useState(0)
   const [trim, setTrim] = useState<{ start: number; end: number }>({
     start: 0,
@@ -243,10 +245,18 @@ export default function Editor({
             // exactly the clicking you hear — so only a large error is worth a
             // seek, and small ones are corrected by easing the rate.
             const drift = camera.currentTime - want
-            if (Math.abs(drift) > 0.5) {
+            const size = Math.abs(drift)
+            if (size > 0.35) {
+              // Far enough out that easing back would take longer than anyone
+              // will tolerate looking at it.
               camera.currentTime = want
               camera.playbackRate = 1
-            } else if (Math.abs(drift) > 0.04) {
+            } else if (size > 0.15) {
+              // A 3% nudge takes ten seconds to absorb 300ms, which is not a
+              // correction so much as a slow reveal of the error. 6% clears
+              // that in under three, and only runs while visibly out.
+              camera.playbackRate = drift > 0 ? 0.94 : 1.06
+            } else if (size > 0.04) {
               camera.playbackRate = drift > 0 ? 0.97 : 1.03
             } else {
               camera.playbackRate = 1
@@ -422,7 +432,10 @@ export default function Editor({
         }))
       if (path) {
         await api.writeFile(path, result.buffer)
-        await api.reveal(path)
+        // Offer what to do with it rather than revealing and walking away —
+        // the transcript makes uploading it materially better than dragging
+        // the file in by hand, and that is only worth saying at this moment.
+        setExported({ path, captions: project.captions.length })
       }
     } catch (error) {
       if (bench) {
@@ -595,6 +608,16 @@ export default function Editor({
           onChange={setSegments}
         />
       </div>
+
+      {exported && (
+        <ExportedPanel
+          path={exported.path}
+          captions={project.captions}
+          trim={trim}
+          hasCaptions={exported.captions > 0}
+          onClose={() => setExported(null)}
+        />
+      )}
 
       <Inspector
         project={project}
