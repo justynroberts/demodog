@@ -163,7 +163,11 @@ export default function Timeline(props: Props): ReactNode {
   }, [duration, toX])
 
   return (
-    <div className="track-stack" ref={ref}>
+    // Scrubbing belongs to the whole stack, not to each lane. The lanes have
+    // gaps between them and the stack has margins, and a click landing in one of
+    // those did nothing at all — which reads as the timeline ignoring you rather
+    // than as having missed a five pixel target.
+    <div className="track-stack" ref={ref} onPointerDown={scrub}>
       <div
         className="track zooms"
         onPointerDown={scrub}
@@ -184,6 +188,9 @@ export default function Timeline(props: Props): ReactNode {
             onPointerDown={(e) => {
               // Move the playhead to where the click landed as well as
               // selecting: judging a shot means seeing the frame it is on.
+              // Stopped here so the stack does not start a scrub drag as well
+              // and fight this one for the pointer.
+              e.stopPropagation()
               onSeek(toTime(e.clientX))
               beginDrag(e, segment, 'move')
             }}
@@ -194,8 +201,20 @@ export default function Timeline(props: Props): ReactNode {
             >
               {segment.scale.toFixed(1)}×
             </span>
-            <span className="handle l" onPointerDown={(e) => beginDrag(e, segment, 'start')} />
-            <span className="handle r" onPointerDown={(e) => beginDrag(e, segment, 'end')} />
+            <span
+              className="handle l"
+              onPointerDown={(e) => {
+                e.stopPropagation()
+                beginDrag(e, segment, 'start')
+              }}
+            />
+            <span
+              className="handle r"
+              onPointerDown={(e) => {
+                e.stopPropagation()
+                beginDrag(e, segment, 'end')
+              }}
+            />
           </div>
         ))}
       </div>
