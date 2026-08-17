@@ -1,5 +1,6 @@
 // MIT License - Copyright (c) fintonlabs.com
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, dialog, shell } from 'electron'
+import type { BrowserWindow } from 'electron'
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import electronUpdater from 'electron-updater'
@@ -105,14 +106,20 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
             // `isSilent` false so any installer failure is visible, and
             // `isForceRunAfter` true because the whole promise to the user was
             // that it comes back.
-            // Windows are closed first. `quitAndInstall` asks the app to quit,
-            // and anything that holds a window open — or a `close` handler that
-            // takes its time — leaves the installer waiting for a quit that
-            // never comes, which is a dialog that appears to do nothing.
-            for (const open of BrowserWindow.getAllWindows()) {
-              open.removeAllListeners('close')
-              open.destroy()
-            }
+            // Nothing is torn down first, deliberately.
+            //
+            // This used to destroy every window before calling quitAndInstall,
+            // added to fix a Restart button that "did nothing" — which turned
+            // out to be a dialog hidden behind the app window, an unrelated
+            // problem since fixed properly. What the teardown may have done
+            // instead is end the process before Squirrel's install had begun:
+            // on a machine where updates never installed, the log stops right
+            // after the handover, the app exits, and ShipIt is never launched
+            // at all — not refused, never attempted.
+            //
+            // quitAndInstall asks the app to quit by itself, which gives
+            // Squirrel the moment it needs. Failure is caught by the warning
+            // below rather than pre-empted by force.
             autoUpdater.quitAndInstall(false, true)
           } catch (error) {
             note(`quitAndInstall threw: ${String(error)}`)
