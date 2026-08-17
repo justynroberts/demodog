@@ -6,6 +6,10 @@ is where finished work waits.
 
 ## Unreleased
 
+_Nothing yet._
+
+## 1.0.0 — 2026-08-17
+
 - **Transcription and captions.** Narration is transcribed on this Mac — on
   device, never uploaded — and becomes timed text drawn over the recording. The
   lines appear on the timeline; clicking one selects it, jumps the playhead to

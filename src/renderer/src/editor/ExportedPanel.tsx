@@ -36,12 +36,20 @@ export default function ExportedPanel({
     .replace(/[_-]+/g, ' ')
     .trim()
 
+  const [failed, setFailed] = useState<string | null>(null)
+
   const publish = async (): Promise<void> => {
     const subtitles = hasCaptions ? toSRT(captions, trim.start, trim.end) : ''
     const description = hasCaptions ? toChapters(captions, trim.start, trim.end) : ''
-    const written = await api.publishToYouTube({ videoPath: path, title, description, subtitles })
-    setWrote(written)
-    setHandedOff(true)
+    try {
+      const written = await api.publishToYouTube({ videoPath: path, title, description, subtitles })
+      setWrote(written)
+      setHandedOff(true)
+    } catch (error) {
+      // Said out loud rather than swallowed: a button that does nothing and
+      // explains nothing is the worst of the options.
+      setFailed(error instanceof Error ? error.message : String(error))
+    }
   }
 
   // Rendered into <body> rather than in place. `position: fixed` is contained
@@ -74,6 +82,12 @@ export default function ExportedPanel({
                 Done
               </button>
             </div>
+
+            {failed && (
+              <p className="hint" style={{ color: 'var(--danger)', marginTop: 10 }}>
+                {failed}
+              </p>
+            )}
 
             <p className="hint exported-note">
               DemoDog hands the file to YouTube rather than uploading it. Uploading through

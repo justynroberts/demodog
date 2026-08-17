@@ -691,11 +691,17 @@ ipcMain.handle(
       // Beside the video and named after it, which is what every uploader
       // expects and what makes the pair obvious in Finder.
       const srt = resolvePath(payload.videoPath.replace(/\.mp4$/i, '') + '.srt')
-      if (!permittedFolders.has(dirname(srt))) {
-        throw new Error('refusing to write outside a folder the user chose')
+      // Not being able to write the subtitles must not stop the handoff. The
+      // video is the point; the captions are an improvement on it, and failing
+      // the whole action over them would leave a button that appears dead.
+      if (permittedFolders.has(dirname(srt))) {
+        try {
+          await writeFile(srt, payload.subtitles, 'utf8')
+          written.push(srt)
+        } catch (error) {
+          console.warn(`[publish] could not write subtitles: ${String(error)}`)
+        }
       }
-      await writeFile(srt, payload.subtitles, 'utf8')
-      written.push(srt)
     }
 
     // The upload page cannot be pre-filled from a URL, so the title goes to the
