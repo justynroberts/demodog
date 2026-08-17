@@ -507,9 +507,14 @@ ipcMain.handle('transcribe:run', async (event, dir: string, locale: string) => {
   if (!spoken) throw new Error('That take has no audio to transcribe.')
 
   allowMediaPath(dir)
-  return transcribe(spoken, locale, (fraction) => {
+  const cues = await transcribe(spoken, locale, (fraction) => {
     event.sender.send('transcribe:progress', fraction)
   })
+  // Which track the words came from decides what the times mean. Narration
+  // lives in the camera recording, which starts after the screen track, so its
+  // timestamps are ahead of the editor's timeline by exactly that much — the
+  // captions were landing early by the camera offset on every take.
+  return { cues, source: spoken.includes('camera.') ? 'camera' : 'screen' }
 })
 
 // macOS reads an app's screen-recording grant when it starts, so a permission

@@ -28,7 +28,10 @@ const api = {
   checkPermissions: (): Promise<Permissions> => ipcRenderer.invoke('permissions:check'),
   requestPermissions: (): Promise<Permissions> => ipcRenderer.invoke('permissions:request'),
   /** Transcribes a take's narration on this Mac. Never uploads anything. */
-  transcribe: (dir: string, locale: string): Promise<Cue[]> =>
+  transcribe: (
+    dir: string,
+    locale: string
+  ): Promise<{ cues: Cue[]; source: 'camera' | 'screen' }> =>
     ipcRenderer.invoke('transcribe:run', dir, locale),
   onTranscribeProgress: (handler: (fraction: number) => void): (() => void) => {
     const listener = (_e: unknown, fraction: number): void => handler(fraction)

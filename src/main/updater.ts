@@ -1,6 +1,7 @@
 // MIT License - Copyright (c) fintonlabs.com
-import { app, dialog, shell } from 'electron'
-import type { BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
+import { appendFileSync, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import electronUpdater from 'electron-updater'
 
 /**
@@ -17,6 +18,35 @@ import electronUpdater from 'electron-updater'
  */
 
 const { autoUpdater } = electronUpdater
+
+/**
+ * Updates fail where nobody can see them.
+ *
+ * A packaged app has no console, so an update that downloads and then refuses
+ * to install leaves the user with a dialog that does nothing and no way to say
+ * why. Everything the updater reports goes to a file next to the app's other
+ * logs, and `quitAndInstall` is bracketed so its own failure is recorded rather
+ * than lost.
+ */
+const logPath = join(app.getPath('logs'), 'updater.log')
+
+function note(message: string): void {
+  const line = `${new Date().toISOString()} ${message}\n`
+  try {
+    mkdirSync(app.getPath('logs'), { recursive: true })
+    appendFileSync(logPath, line)
+  } catch {
+    // Logging must never be the thing that breaks an update.
+  }
+  console.log(`[update] ${message}`)
+}
+
+autoUpdater.logger = {
+  info: (m: unknown) => note(`info  ${String(m)}`),
+  warn: (m: unknown) => note(`warn  ${String(m)}`),
+  error: (m: unknown) => note(`error ${String(m)}`),
+  debug: (m: unknown) => note(`debug ${String(m)}`)
+}
 
 /** How long after launch to look, so it never competes with starting up. */
 const FIRST_CHECK_DELAY = 8_000
@@ -52,7 +82,37 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
       .then((result) => {
         busy = false
         if (result.response === 0) {
-          autoUpdater.quitAndInstall()
+          note('user chose to restart; calling quitAndInstall')
+          try {
+            // `isSilent` false so any installer failure is visible, and
+            // `isForceRunAfter` true because the whole promise to the user was
+            // that it comes back.
+            // Windows are closed first. `quitAndInstall` asks the app to quit,
+            // and anything that holds a window open — or a `close` handler that
+            // takes its time — leaves the installer waiting for a quit that
+            // never comes, which is a dialog that appears to do nothing.
+            for (const open of BrowserWindow.getAllWindows()) {
+              open.removeAllListeners('close')
+              open.destroy()
+            }
+            autoUpdater.quitAndInstall(false, true)
+          } catch (error) {
+            note(`quitAndInstall threw: ${String(error)}`)
+          }
+          // If the app is still here a moment later, the install did not take
+          // and saying so beats a button that silently did nothing.
+          setTimeout(() => {
+            note('still running after quitAndInstall')
+            void dialog.showMessageBox(window, {
+              type: 'warning',
+              message: 'The update could not be installed',
+              detail:
+                'DemoDog is still running, so the update did not take effect. ' +
+                `Details are in ${logPath}. Downloading the new version manually ` +
+                'from the releases page will always work.',
+              buttons: ['OK']
+            })
+          }, 4000)
         } else if (result.response === 2) {
           void shell.openExternal(
             `https://github.com/justynroberts/demodog/releases/tag/v${info.version}`
@@ -65,8 +125,12 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
   // blocks GitHub, is not something to interrupt someone about. It is logged
   // so it can still be diagnosed.
   autoUpdater.on('error', (error) => {
-    console.warn(`[update] check failed: ${error.message}`)
+    note(`check failed: ${error.message}`)
   })
+
+  autoUpdater.on('update-available', (info) => note(`update available: ${info.version}`))
+  autoUpdater.on('update-not-available', () => note('no update available'))
+  autoUpdater.on('download-progress', (p) => note(`downloading ${Math.round(p.percent)}%`))
 
   const check = (): void => {
     if (isRecording()) return

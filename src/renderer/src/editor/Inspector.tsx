@@ -1009,11 +1009,19 @@ function CaptionsTab({
     setError(null)
     setProgress(0)
     try {
-      const cues = await api.transcribe(recording.dir, navigator.language || 'en-GB')
+      const { cues, source } = await api.transcribe(recording.dir, navigator.language || 'en-GB')
       if (cues.length === 0) {
         setError('No speech was found in this recording.')
       } else {
-        set('captions', captionsFromCues(cues))
+        // The camera track begins after the screen track, so words timed
+        // against it are early against the editor's clock by that difference.
+        const shift = source === 'camera' ? recording.cameraOffset : 0
+        set(
+          'captions',
+          captionsFromCues(
+            cues.map((cue) => ({ ...cue, start: cue.start + shift, end: cue.end + shift }))
+          )
+        )
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))

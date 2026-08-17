@@ -276,6 +276,13 @@ export function transcribe(
 ): Promise<Cue[]> {
   return new Promise((resolve, reject) => {
     const child = spawn(helperPath(), ['transcribe', '--audio', audioPath, '--locale', locale])
+    // Kept so a helper that dies can say why. Without it a crash in the helper
+    // surfaced as an empty result and no explanation at all.
+    let diagnostics = ''
+    child.stderr.on('data', (chunk: Buffer) => {
+      diagnostics += chunk.toString()
+      if (diagnostics.length > 4000) diagnostics = diagnostics.slice(-4000)
+    })
     const cues: Cue[] = []
     let buffered = ''
     let failure: Error | null = null
@@ -311,9 +318,22 @@ export function transcribe(
     })
 
     child.on('error', reject)
-    child.on('close', () => {
-      if (failure) reject(failure)
-      else resolve(cues)
+    child.on('close', (code, signal) => {
+      if (failure) {
+        reject(failure)
+      } else if (cues.length === 0 && (signal || (code !== 0 && code !== null))) {
+        // Distinguish "heard nothing" from "died trying", which look identical
+        // from the outside and need completely different responses.
+        console.error(`[transcribe] helper exited ${signal ?? code}: ${diagnostics.trim()}`)
+        reject(
+          new Error(
+            `Transcription stopped unexpectedly (${signal ?? `exit ${code}`}). ` +
+              (diagnostics.trim() || 'No further detail was reported.')
+          )
+        )
+      } else {
+        resolve(cues)
+      }
     })
   })
 }
