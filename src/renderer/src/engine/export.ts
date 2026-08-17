@@ -280,8 +280,13 @@ async function buildAudio(options: ExportOptions): Promise<MixedAudio | null> {
   const offline = new OfflineAudioContext(2, Math.ceil(total * sampleRate), sampleRate)
   const gains = options.composition.project.audio
 
-  // Match the visual fade, so a faded ending is silent rather than cut off.
-  const fade = options.composition.project.fade
+  // Match the visual fade, so a faded ending is silent rather than cut off —
+  // including the part where a title card replaces the fade rather than adding
+  // to it, or the sound would dip for a transition that is not happening.
+  const fade = {
+    in: project.intro.enabled ? 0 : options.composition.project.fade.in,
+    out: project.outro.enabled ? 0 : options.composition.project.fade.out
+  }
   const ramp = (gain: GainNode, level: number): void => {
     gain.gain.value = level
     if (fade.in > 0) {

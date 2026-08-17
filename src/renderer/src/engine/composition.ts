@@ -227,7 +227,16 @@ export class Composition {
     drawCaption(ctx, t, this.project.captions, this.project.captionStyle, output)
 
     // Last, so it covers everything: background, frame, cursor and camera.
-    const fade = fadeAlphaAt(t, this.range, this.project.fade)
+    //
+    // A card standing next to the recording already is the transition, so the
+    // recording does not fade at that edge as well. Doing both stacks two
+    // dissolves through black — the card dims away, and only then does the
+    // picture climb up out of nothing — which is a second of dead screen at
+    // each join and reads as the cards not working at all.
+    const fade = fadeAlphaAt(t, this.range, {
+      in: this.project.intro.enabled ? 0 : this.project.fade.in,
+      out: this.project.outro.enabled ? 0 : this.project.fade.out
+    })
     if (fade > 0.001) {
       ctx.fillStyle = `rgba(0, 0, 0, ${fade})`
       ctx.fillRect(0, 0, output.width, output.height)

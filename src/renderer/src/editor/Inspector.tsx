@@ -52,6 +52,79 @@ interface Props {
 
 type Tab = 'style' | 'zoom' | 'cursor' | 'camera' | 'text' | 'titles'
 
+
+/**
+ * The inspector's tabs.
+ *
+ * Six words did not fit the rail — they wrapped, squashed and abbreviated
+ * themselves into something harder to read than nothing. Icons fit, and carry
+ * the name and a line of explanation on hover for anyone who does not already
+ * know what a given glyph means here.
+ */
+const TABS: { id: Tab; name: string; hint: string; icon: ReactNode }[] = [
+  {
+    id: 'style',
+    name: 'Style',
+    hint: 'Background, padding, corners and shadow — how the recording is framed.',
+    icon: (
+      <>
+        <rect x="3" y="3" width="18" height="18" rx="3" />
+        <path d="M8 15l3-4 2.5 3L16 11l3 4" />
+      </>
+    )
+  },
+  {
+    id: 'zoom',
+    name: 'Zoom',
+    hint: 'How closely the camera follows what you did, and how often it moves.',
+    icon: (
+      <>
+        <circle cx="11" cy="11" r="6" />
+        <path d="M20 20l-4.5-4.5M9 11h4M11 9v4" />
+      </>
+    )
+  },
+  {
+    id: 'cursor',
+    name: 'Cursor',
+    hint: 'The pointer drawn back in: its size, style, smoothing and clicks.',
+    icon: <path d="M5 3l6 17 2.5-6.5L20 11z" />
+  },
+  {
+    id: 'camera',
+    name: 'Camera',
+    hint: 'Your picture-in-picture — shape, size, position and sync.',
+    icon: (
+      <>
+        <rect x="2" y="6" width="13" height="12" rx="2.5" />
+        <path d="M15 11l6-3.5v9L15 13z" />
+      </>
+    )
+  },
+  {
+    id: 'text',
+    name: 'Captions',
+    hint: 'Transcribe what you said, then edit the lines and style them.',
+    icon: (
+      <>
+        <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+        <path d="M7 11h4M7 14.5h8M14 11h3" />
+      </>
+    )
+  },
+  {
+    id: 'titles',
+    name: 'Titles',
+    hint: 'Intro and outro cards, shown before and after the recording.',
+    icon: (
+      <>
+        <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
+        <path d="M7 10h10M9.5 14h5" />
+      </>
+    )
+  }
+]
+
 export default function Inspector(props: Props): ReactNode {
   const { project, onChange } = props
   const [tab, setTab] = useState<Tab>('style')
@@ -67,12 +140,26 @@ export default function Inspector(props: Props): ReactNode {
   return (
     <aside className="inspector">
       <div className="insp-tabs" role="tablist">
-        {(['style', 'zoom', 'cursor', 'camera', 'text', 'titles'] as Tab[]).map((id) => (
-          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
-            {id}
+        {TABS.map(({ id, name, hint, icon }) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={tab === id}
+            aria-label={name}
+            onClick={() => setTab(id)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">{icon}</svg>
+            <span className="insp-tip" role="tooltip">
+              <strong>{name}</strong>
+              {hint}
+            </span>
           </button>
         ))}
       </div>
+      {/* Named underneath as well as on hover. Six icons with no labels is a
+          memory test, and the one you are looking at should not require
+          pointing at it to find out what it is. */}
+      <span className="insp-current">{TABS.find((t) => t.id === tab)?.name}</span>
 
       <div className="insp-body">
         {tab === 'style' && (

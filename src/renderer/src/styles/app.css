@@ -728,23 +728,106 @@ input[type='checkbox']:checked::after {
   display: flex;
   position: sticky;
   top: 0;
-  z-index: 3;
+  /* Above everything else in the rail. A child cannot paint higher than the
+     stacking context its parent creates, so the tooltip's own z-index counted
+     for nothing while this sat at 3 — it went behind the panels below it. */
+  z-index: 40;
   background: var(--surface);
   border-bottom: var(--border);
 }
 
 .insp-tabs button {
+  position: relative;
   flex: 1;
-  padding: 11px 4px;
+  display: grid;
+  place-items: center;
+  padding: 12px 4px;
   border: none;
   border-right: 2px solid var(--line);
   background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.insp-tabs svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The cursor arrow reads as a solid shape rather than an outline. */
+.insp-tabs button[aria-label='Cursor'] svg {
+  fill: currentColor;
+  stroke-width: 1.2;
+}
+
+.insp-tabs button:hover {
+  color: var(--text);
+}
+
+/* Name and explanation, for anyone who does not already know the glyph.
+   Spanning the rail rather than centred on its icon: a tooltip centred over a
+   32px tab is wider than the space either side of it, so it was cut off by the
+   panel edge and started mid-word. Full width always fits, and reads better. */
+.insp-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 8px;
+  right: 8px;
+  z-index: 41;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--t-xs);
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--surface);
+  border: var(--border);
+  box-shadow: var(--shadow-hard-sm);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s var(--snap),
+    visibility 0.14s;
+}
+
+.insp-tip strong {
+  font-size: var(--t-sm);
+  font-weight: 800;
+  color: var(--text);
+}
+
+.insp-tabs button:hover .insp-tip,
+.insp-tabs button:focus-visible .insp-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* Which tab is open, said plainly under the row. */
+.insp-current {
+  display: block;
+  padding: 9px 14px 4px;
   font-size: var(--t-xs);
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  cursor: pointer;
-  transition: background 0.12s ease;
+  color: var(--muted);
 }
 
 .insp-tabs button:last-child {
