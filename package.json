@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "fixture": "node scripts/make-fixture.mjs",
     "verify": "npm run verify:engine && npm run verify:export",
-    "dist": "DEMODOG_UNIVERSAL=1 npm run build && electron-builder --mac",
+    "dist": "DEMODOG_UNIVERSAL=1 npm run build && electron-builder --mac && node scripts/fix-update-metadata.mjs",
     "icon": "./scripts/make-icon.sh",
     "zoom-report": "mkdir -p node_modules/.cache && esbuild scripts/zoom-report.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/zoom-report.mjs --log-level=warning && node node_modules/.cache/zoom-report.mjs",
     "verify:engine": "mkdir -p node_modules/.cache && esbuild scripts/verify-engine.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/verify.mjs --log-level=warning && node node_modules/.cache/verify.mjs",
