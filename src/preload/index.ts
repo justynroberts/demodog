@@ -26,6 +26,8 @@ const api = {
   }> => ipcRenderer.invoke('sources:thumbnails'),
   checkPermissions: (): Promise<Permissions> => ipcRenderer.invoke('permissions:check'),
   requestPermissions: (): Promise<Permissions> => ipcRenderer.invoke('permissions:request'),
+  /** Restart, so macOS re-reads a permission granted while we were running. */
+  relaunch: (): Promise<void> => ipcRenderer.invoke('app:relaunch'),
   openPrivacySettings: (
     kind: 'screen' | 'accessibility' | 'camera' | 'microphone'
   ): Promise<void> => ipcRenderer.invoke('permissions:open', kind),

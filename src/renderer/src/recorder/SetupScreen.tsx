@@ -23,6 +23,9 @@ interface Selection {
 export default function SetupScreen({ onRecording }: { onRecording: () => void }): ReactNode {
   const [sources, setSources] = useState<Sources | null>(null)
   const [permissions, setPermissions] = useState<Permissions | null>(null)
+  // macOS shows the screen-recording prompt once and never again, so asking
+  // repeatedly achieves nothing except spawning helpers.
+  const requested = useRef(false)
   const [tab, setTab] = useState<SourceTab>('display')
   const [optionTab, setOptionTab] = useState<OptionTab>('camera')
   const [selected, setSelected] = useState<Selection | null>(null)
@@ -62,7 +65,17 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
 
   const refresh = async (): Promise<void> => {
     try {
-      const perms = await api.checkPermissions()
+      let perms = await api.checkPermissions()
+      // Asking is what puts DemoDog in the Screen Recording list. Only a
+      // *request* registers an app with the system; a preflight check just
+      // reports, silently, that it is not there. Without this the app told the
+      // user to grant permission in System Settings, where DemoDog did not
+      // appear at all and could not be switched on — a dead end with no way out
+      // of it from inside the app.
+      if (!perms.screenRecording && !requested.current) {
+        requested.current = true
+        perms = await api.requestPermissions()
+      }
       setPermissions(perms)
       if (!perms.screenRecording) {
         setSources(null)
@@ -335,12 +348,16 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
           <div className="notice snap">
             <strong>Screen Recording permission is required.</strong>
             <p style={{ margin: '8px 0 12px' }}>
-              macOS must grant DemoDog access before it can capture anything. Enable it, then come
-              back and press Re-check.
+              macOS must grant DemoDog access before it can capture anything. Switch{' '}
+              <strong>DemoDog</strong> on under Screen &amp; System Audio Recording, then reopen
+              DemoDog — macOS only reads the new setting when an app starts.
             </p>
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn primary" onClick={() => api.openPrivacySettings('screen')}>
                 Open System Settings
+              </button>
+              <button className="btn" onClick={() => void api.relaunch()}>
+                Quit and reopen
               </button>
               <button className="btn" onClick={() => void refresh()}>
                 Re-check

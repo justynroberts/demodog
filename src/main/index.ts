@@ -483,6 +483,14 @@ ipcMain.handle('permissions:check', () => checkPermissions(false))
 ipcMain.handle('permissions:request', () => checkPermissions(true))
 ipcMain.handle('permissions:open', (_e, kind) => openPrivacySettings(kind))
 
+// macOS reads an app's screen-recording grant when it starts, so a permission
+// granted while DemoDog is running does not take effect until it restarts.
+// Telling someone to quit and reopen is a poor substitute for doing it.
+ipcMain.handle('app:relaunch', () => {
+  app.relaunch()
+  app.exit(0)
+})
+
 ipcMain.handle(
   'recording:start',
   async (
