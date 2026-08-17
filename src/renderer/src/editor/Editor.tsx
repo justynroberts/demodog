@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { api } from '../api'
 import { Composition } from '../engine/composition'
 import { generateSegments } from '../engine/autozoom'
-import { defaultProject, mergeSettings } from '../engine/defaults'
+import { defaultProject, mergeSettings, rememberLook, rememberedLook } from '../engine/defaults'
 import { exportMP4 } from '../engine/export'
 import type { Project, Recording, ZoomSegment } from '../engine/types'
 import { fadeAlphaAt } from '../engine/composition'
@@ -93,6 +93,15 @@ export default function Editor({
   // touch anything, so every take opens looking the way they want.
   useEffect(() => {
     void api.listProfiles().then((profiles) => {
+      // How the last take was left wins over the starred profile, for the same
+      // reason it does in the recorder: applying a profile makes it the last
+      // look, so preferring the more recent one loses nothing — while the
+      // opposite throws away every adjustment made since.
+      const remembered = rememberedLook()
+      if (remembered) {
+        setProject((current) => mergeSettings(current, remembered))
+        return
+      }
       const preferred = profiles.find((p) => p.isDefault)
       if (!preferred) return
       setProject((current) => mergeSettings(current, preferred.settings))
@@ -100,6 +109,13 @@ export default function Editor({
       setProfileId(preferred.id)
     })
   }, [recording])
+
+  // Remembered on every change, so a look tuned and then abandoned is still
+  // there for the next take. The transcript and the shots are deliberately not
+  // included: those belong to one recording and nothing else.
+  useEffect(() => {
+    rememberLook(project)
+  }, [project])
 
   // Regenerate the automatic zooms whenever their settings change, keeping any
   // segment the user added or edited by hand.

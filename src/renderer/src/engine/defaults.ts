@@ -297,3 +297,47 @@ export const OUTPUT_PRESETS: { id: string; name: string; width: number; height: 
   { id: 'vertical', name: 'Vertical · 9:16', width: 1080, height: 1920 },
   { id: 'portrait', name: 'Portrait · 4:5', width: 1080, height: 1350 }
 ]
+
+/**
+ * The look of the last take: background, frame, zoom, cursor, camera, and the
+ * rest of what makes recordings from one person resemble each other.
+ *
+ * Kept apart from the saved profiles on purpose. A profile is a decision — a
+ * named look someone chose to keep. This is only the state the editor was left
+ * in, which is worth restoring but is nobody's deliberate choice, so it never
+ * appears in the profile list or overwrites one.
+ */
+const LOOK_KEY = 'demodog-last-look'
+
+/** Everything that describes a look, and nothing that belongs to one take. */
+const LOOK_KEYS = [
+  'background',
+  'frame',
+  'zoom',
+  'cursor',
+  'pip',
+  'keystrokes',
+  'fade',
+  'audio',
+  'output',
+  'captionStyle'
+] as const
+
+export function rememberLook(project: Project): void {
+  const look: Record<string, unknown> = {}
+  for (const key of LOOK_KEYS) look[key] = project[key]
+  try {
+    localStorage.setItem(LOOK_KEY, JSON.stringify(look))
+  } catch {
+    // Not remembering a look is not worth interrupting anyone over.
+  }
+}
+
+export function rememberedLook(): Record<string, unknown> | null {
+  try {
+    const stored = localStorage.getItem(LOOK_KEY)
+    return stored ? (JSON.parse(stored) as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
