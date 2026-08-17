@@ -93,6 +93,15 @@ export const CAPTION_FONTS = [
   'Spline Sans Mono'
 ]
 
+/**
+ * How briefly a caption may appear.
+ *
+ * The recogniser times a word to the sound of it, and a quick "View" lasts a
+ * fifth of a second — long enough to be a flicker and not long enough to read,
+ * which looks like a fault rather than like speech.
+ */
+const MIN_CAPTION_SECONDS = 0.9
+
 /** The cue showing at `t`, or null. */
 export function captionAt(captions: Caption[], t: number): Caption | null {
   for (const caption of captions) {
@@ -233,10 +242,19 @@ export function captionsFromCues(
   return sorted.map((cue, index) => {
     const next = sorted[index + 1]
     const gap = next ? next.start - cue.end : Infinity
+
+    // A word said quickly is still a word, and deleting it because it was brief
+    // would be throwing away speech that was correctly heard. It is held on
+    // screen long enough to read instead — but never into the next line, which
+    // has its own moment to occupy.
+    const readable = Math.max(cue.end, cue.start + MIN_CAPTION_SECONDS)
+    const bridged = gap > 0 && gap < 0.35 ? next.start : cue.end
+    const end = next ? Math.min(Math.max(bridged, readable), next.start) : Math.max(bridged, readable)
+
     return {
       id: `cue-${index}-${Math.round(cue.start * 1000)}`,
       start: cue.start,
-      end: gap > 0 && gap < 0.35 ? next.start : cue.end,
+      end,
       text: cue.text.trim(),
       confidence: cue.confidence
     }
