@@ -4,6 +4,17 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- **A recording now refuses rather than capturing the wrong window.** Windows
+  are identified by an id, and macOS reuses those ids. That was academic while
+  recording began moments after choosing; it is not now that there is a step in
+  between where the user is deliberately opening and closing things. If the id
+  no longer belongs to the application it belonged to when it was picked, the
+  take stops with a message naming what it found. A recording of the wrong
+  window has nothing in it to reveal the mistake — it simply contains the wrong
+  application.
+
 ## 1.4.0 — 2026-08-18
 
 - **Choosing a window now brings it to the front**, and there is a step between

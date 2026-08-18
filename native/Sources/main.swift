@@ -91,6 +91,7 @@ case "record":
         trackKeys: args.bool("keys", default: false),
         displayID: args.int("display").map { CGDirectDisplayID($0) },
         windowID: args.int("window").map { CGWindowID($0) },
+        expectApp: args.string("expect-app"),
         cropRect: nil,
         maxPixelWidth: args.int("max-width"),
         excludePids: (args.string("exclude-pids") ?? "")

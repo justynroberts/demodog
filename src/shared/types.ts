@@ -42,6 +42,8 @@ export interface Permissions {
 export interface RecordOptions {
   displayId?: number
   windowId?: number
+  /** The window's owning app when it was chosen, checked before recording. */
+  windowApp?: string
   fps: number
   systemAudio: boolean
   trackKeystrokes: boolean

@@ -21,6 +21,18 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
         var trackKeys: Bool
         var displayID: CGDirectDisplayID?
         var windowID: CGWindowID?
+        /**
+         * The application the chosen window belonged to when it was chosen.
+         *
+         * A window is identified by a CGWindowID, and those are reused. The gap
+         * between picking a window and recording it is now a deliberate step —
+         * the user is arranging their screen, closing and opening things — so
+         * an id can come to mean a different window entirely by the time
+         * recording starts. Recording the wrong window silently is worse than
+         * refusing, and there is nothing in the result to reveal it: the take
+         * simply contains the wrong application.
+         */
+        var expectApp: String?
         var cropRect: CGRect?
         var maxPixelWidth: Int?
         /// Windows owned by these processes are kept out of the capture. The
@@ -90,6 +102,16 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
             guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
                 fail("Window \(windowID) is no longer available")
             }
+            // The id still exists, but does it still mean what it meant? Names
+            // rather than ids, because the name is what the user chose from.
+            let owner = window.owningApplication?.applicationName ?? ""
+            if let expected = options.expectApp, !expected.isEmpty, owner != expected {
+                fail(
+                    "That window now belongs to \(owner.isEmpty ? "another app" : owner) rather "
+                        + "than \(expected) — it was probably closed. Pick it again."
+                )
+            }
+
             // A window's backing scale comes from whichever display it sits on.
             let scale = Self.scaleFactor(containing: window.frame)
             filter = SCContentFilter(desktopIndependentWindow: window)

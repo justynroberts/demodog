@@ -174,6 +174,9 @@ export class RecorderProcess {
     const args = ['record', '--out', this.dir, '--fps', String(options.fps)]
     if (options.displayId !== undefined) args.push('--display', String(options.displayId))
     if (options.windowId !== undefined) args.push('--window', String(options.windowId))
+    // The app the window belonged to when it was picked, so the helper can
+    // refuse if that id has since come to mean something else.
+    if (options.windowApp) args.push('--expect-app', options.windowApp)
     args.push('--audio', options.systemAudio ? '1' : '0')
     args.push('--keys', options.trackKeystrokes ? '1' : '0')
     args.push('--cursor', '0')

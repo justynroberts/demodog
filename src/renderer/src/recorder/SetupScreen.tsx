@@ -405,6 +405,12 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
       await api.startRecording({
         displayId: selected.kind === 'display' ? selected.id : undefined,
         windowId: selected.kind === 'window' ? selected.id : undefined,
+        // Checked by the helper before it records. Window ids are reused, and
+        // there is now a deliberate pause between picking one and recording it.
+        windowApp:
+          selected.kind === 'window'
+            ? sources?.windows.find((w) => w.id === selected.id)?.app
+            : undefined,
         fps,
         systemAudio,
         trackKeystrokes: keystrokes,
