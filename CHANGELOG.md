@@ -4,6 +4,18 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- **Playback still stopped at the end of the recording rather than the end of
+  the outro.** 1.3.0 fixed the wrong half of this. The playhead is read back off
+  the video element, which cannot report a time past the end of its own file —
+  so pausing at the trim left it a few milliseconds *below* the boundary it was
+  waiting to cross. The outro was never entered, and the `ended` event never
+  arrived either, because the element had been stopped before it got there. The
+  crossing is now explicit, and a file that runs out before the trim does — the
+  ordinary case, since the trim defaults to the recording's stated duration —
+  moves the piece on rather than waiting for a time that will never come.
+
 ## 1.3.0 — 2026-08-18
 
 - **The recording played underneath the intro card.** Pressing play started the

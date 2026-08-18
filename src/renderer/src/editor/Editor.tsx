@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
-import { ensureTitleImages, phaseAt, recordingRuns } from '../engine/titles'
+import { ensureTitleImages, phaseAt, recordingEnded, recordingRuns } from '../engine/titles'
 import { Composition } from '../engine/composition'
 import { baseViewport } from '../engine/camera'
 import { generateSegments } from '../engine/autozoom'
@@ -408,9 +408,18 @@ export default function Editor({
         // the position just asked for and dragged the playhead back to it.
         if (!screen.seeking) timeRef.current = screen.currentTime
         setTime(timeRef.current)
-        if (timeRef.current >= trim.end - 0.01) {
+        const finished = recordingEnded(timeRef.current, trim, screen.duration)
+        if (finished !== null) {
           screen.pause()
           cameraRef.current?.pause()
+          // Moved *to* the end rather than left near it. The playhead was being
+          // read back off the element, which cannot report a time past the end
+          // of its own file — so pausing here left it a few milliseconds short
+          // of the boundary it needed to cross, the outro was never entered,
+          // and `ended` never fired either because the element was stopped
+          // before it got there. Playback simply wedged on the last frame.
+          timeRef.current = finished
+          setTime(finished)
           // The outro is part of the piece, so playback continues into it.
           if (leadOut <= 0) setPlaying(false)
           else cardClock.current = performance.now()

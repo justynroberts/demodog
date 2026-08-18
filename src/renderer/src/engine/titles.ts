@@ -121,6 +121,38 @@ export function phaseAt(
   return 'ended'
 }
 
+/**
+ * The playhead position once the recording has run out, or null if it has not.
+ *
+ * Returns the end of the range rather than wherever the element's own clock
+ * stopped, and that is the entire point. The element cannot report a time past
+ * the end of its file, and the file ends at — or a few milliseconds before —
+ * the trim. So a loop that reads the playhead back off the element, notices it
+ * has arrived, and pauses, freezes the clock just *below* the boundary it is
+ * waiting to cross: the outro is never entered, `ended` never fires because the
+ * element was paused before it got there, and playback wedges at the last frame
+ * of the recording while still claiming to be playing.
+ *
+ * Crossing the boundary explicitly is what stops that.
+ */
+export function recordingEnded(
+  elementTime: number,
+  range: { start: number; end: number },
+  /** The video element's own duration, if known. NaN before metadata loads. */
+  elementDuration = Infinity,
+  epsilon = 0.01
+): number | null {
+  if (elementTime >= range.end - epsilon) return range.end
+  // The file ran out before the trim did — which is ordinary, since the trim
+  // defaults to the recording's stated duration and a container's real last
+  // frame often lands slightly before it. There is no more recording to play,
+  // so the piece moves on rather than waiting for a time that will never come.
+  if (Number.isFinite(elementDuration) && elementTime >= elementDuration - epsilon) {
+    return range.end
+  }
+  return null
+}
+
 /** The recording plays during its own part of the piece and nowhere else. */
 export function recordingRuns(phase: Phase): boolean {
   return phase === 'recording'
