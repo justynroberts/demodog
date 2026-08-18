@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Recording, ZoomSegment } from '../engine/types'
 import type { Caption } from '../engine/captions'
+import type { TitleCard } from '../engine/titles'
 
 interface Props {
   recording: Recording
@@ -15,6 +16,8 @@ interface Props {
   captions: Caption[]
   selectedCaption: string | null
   onSelectCaption: (id: string | null) => void
+  intro: TitleCard
+  outro: TitleCard
 }
 
 type DragMode = 'move' | 'start' | 'end'
@@ -29,10 +32,23 @@ const LABEL_WIDTH = 52
  */
 export default function Timeline(props: Props): ReactNode {
   const { recording, segments, selected, time, trim, onSeek, onSelect, onChange } = props
-  const { captions, selectedCaption, onSelectCaption } = props
+  const { captions, selectedCaption, onSelectCaption, intro, outro } = props
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(1000)
   const duration = Math.max(recording.duration, 0.001)
+
+  /**
+   * The timeline covers the whole composition, not just the recording.
+   *
+   * Title cards are extra time either side of the take — the intro runs from
+   * `-seconds` up to zero — so a timeline that started at zero could not
+   * represent them. Playback went through the intro correctly and the playhead
+   * sat pinned at the left edge throughout, which looked like a stuck playhead;
+   * and there was no way to scrub back into a card to see it at all.
+   */
+  const leadIn = intro.enabled ? intro.seconds : 0
+  const leadOut = outro.enabled ? outro.seconds : 0
+  const span = leadIn + duration + leadOut
 
   useEffect(() => {
     const element = ref.current
@@ -43,13 +59,19 @@ export default function Timeline(props: Props): ReactNode {
     return () => observer.disconnect()
   }, [])
 
-  const toX = useCallback((t: number) => (t / duration) * width, [duration, width])
+  const toX = useCallback((t: number) => ((t + leadIn) / span) * width, [leadIn, span, width])
   const toTime = useCallback(
     (clientX: number) => {
       const rect = ref.current?.getBoundingClientRect()
       if (!rect) return 0
-      return Math.min(Math.max(((clientX - rect.left) / rect.width) * duration, 0), duration)
+      const t = ((clientX - rect.left) / rect.width) * span - leadIn
+      return Math.min(Math.max(t, -leadIn), duration + leadOut)
     },
+    [span, leadIn, leadOut, duration]
+  )
+  /** Clamped into the recording itself, for anything that edits the take. */
+  const inTake = useCallback(
+    (t: number) => Math.min(Math.max(t, 0), duration),
     [duration]
   )
 
@@ -110,7 +132,9 @@ export default function Timeline(props: Props): ReactNode {
   }
 
   const addSegment = (event: React.MouseEvent): void => {
-    const t = toTime(event.clientX)
+    // A zoom belongs to the recording, so a double-click over a title card
+    // makes one at the nearest end of the take rather than at negative time.
+    const t = inTake(toTime(event.clientX))
     const cursor = recording.input.moves.length
       ? nearestPosition(recording, t)
       : { x: recording.source.width / 2, y: recording.source.height / 2 }
@@ -219,6 +243,30 @@ export default function Timeline(props: Props): ReactNode {
         ))}
       </div>
 
+      {(leadIn > 0 || leadOut > 0) && (
+        <div className="track cards" onPointerDown={scrub}>
+          <span className="track-label">Cards</span>
+          {leadIn > 0 && (
+            <div
+              className="card-block"
+              style={{ left: toX(-leadIn), width: toX(0) - toX(-leadIn) }}
+            >
+              <span style={{ paddingLeft: Math.max(0, LABEL_WIDTH + 4 - toX(-leadIn)) }}>
+                {intro.title || 'Intro'}
+              </span>
+            </div>
+          )}
+          {leadOut > 0 && (
+            <div
+              className="card-block"
+              style={{ left: toX(duration), width: toX(duration + leadOut) - toX(duration) }}
+            >
+              <span>{outro.title || 'Outro'}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {captions.length > 0 && (
         <div className="track captions" onPointerDown={scrub}>
           <span className="track-label">Text</span>
@@ -259,8 +307,13 @@ export default function Timeline(props: Props): ReactNode {
           <div
             style={{
               position: 'absolute',
-              inset: `0 auto 0 0`,
-              width: toX(trim.start),
+              top: 0,
+              bottom: 0,
+              // From the start of the recording, not the start of the lane —
+              // with an intro card those are no longer the same place, and
+              // dimming from the lane edge would mark the card as trimmed.
+              left: toX(0),
+              width: toX(trim.start) - toX(0),
               background: 'rgba(0,0,0,0.55)',
               pointerEvents: 'none'
             }}
@@ -273,7 +326,7 @@ export default function Timeline(props: Props): ReactNode {
               top: 0,
               bottom: 0,
               left: toX(trim.end),
-              right: 0,
+              width: toX(duration) - toX(trim.end),
               background: 'rgba(0,0,0,0.55)',
               pointerEvents: 'none'
             }}

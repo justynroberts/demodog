@@ -810,6 +810,8 @@ export default function Editor({
           onSeek={seek}
           onSelect={setSelected}
           onChange={setSegments}
+          intro={project.intro}
+          outro={project.outro}
         />
       </div>
 

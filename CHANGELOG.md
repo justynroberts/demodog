@@ -6,6 +6,16 @@ is where finished work waits.
 
 ## Unreleased
 
+- **Title cards are on the timeline.** They were playable but not scrubbable:
+  the timeline started at the beginning of the recording, and a card is time
+  *before* that, so the playhead sat pinned at the left edge for the whole intro
+  and there was no way to scrub back into a card to see it. The timeline now
+  covers the whole composition, with the cards shown as their own lane.
+- Typefaces are bundled in the app rather than fetched from Google on launch.
+  Offline — an aeroplane, a captive-portal conference wifi — the interface
+  silently fell back to the system font. It also means the app now makes no
+  third-party requests at all; the only thing it contacts is GitHub, to check
+  for a newer version.
 - Two doors led out of the app to the operating system and only one of them was
   locked. Opening a link from the page checked that it was a web address; a
   `window.open` did not, and handed whatever scheme it was given straight to

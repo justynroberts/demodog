@@ -2,6 +2,7 @@
 import { StrictMode } from 'react'
 import type React from 'react'
 import { createRoot } from 'react-dom/client'
+import './styles/fonts.css'
 import './styles/app.css'
 import StudioApp from './StudioApp'
 import ControlBar from './recorder/ControlBar'

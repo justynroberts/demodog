@@ -2061,6 +2061,38 @@ dialog.info a {
   height: 34px;
 }
 
+/* Title cards, shown as the time either side of the recording that they
+   actually are. The lane only exists when a card is enabled. */
+.track.cards {
+  height: 26px;
+}
+
+.card-block {
+  position: absolute;
+  top: 4px;
+  height: 18px;
+  padding: 0 7px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  background: var(--surface-3);
+  color: var(--muted);
+  /* Dashed, because a card is held time rather than recorded material — it
+     should not read as another clip sitting on the timeline. */
+  border: 2px dashed var(--line);
+  pointer-events: none;
+}
+
+.card-block span {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .caption-block {
   position: absolute;
   top: 6px;

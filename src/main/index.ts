@@ -462,8 +462,10 @@ app.whenReady().then(() => {
               "default-src 'self'",
               "script-src 'self'",
               // React and this app both set style attributes directly.
-              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-              "font-src 'self' https://fonts.gstatic.com",
+              // No font hosts: the typefaces are bundled, so the renderer has
+              // no reason to reach a third party at all.
+              "style-src 'self' 'unsafe-inline'",
+              "font-src 'self'",
               "img-src 'self' data: blob: rec:",
               "media-src 'self' blob: rec:",
               "connect-src 'self' data: blob: rec:",

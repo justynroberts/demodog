@@ -22,7 +22,7 @@ and your camera in the corner.
 
 ### 1. Install
 
-Download the latest **`DemoDog-<version>-arm64.dmg`** from
+Download the latest **`DemoDog-<version>-universal.dmg`** from
 [Releases](../../releases), open it, and drag DemoDog to Applications.
 
 The app is signed with an Apple Developer ID and notarised by Apple, so it opens
@@ -78,11 +78,20 @@ The editor opens as soon as you stop, already edited:
   style and shape are all changeable afterwards.
 - **Your camera** appears as a bubble that moves aside when the pointer nears it.
 
-Press <kbd>Space</kbd> to play, arrow keys to step a frame at a time.
+Click anywhere on the timeline to move the playhead. <kbd>Space</kbd> plays,
+the arrow keys step a frame at a time (hold <kbd>⇧</kbd> for a second),
+<kbd>Delete</kbd> removes the selected zoom.
+
+> **Tip — frame a shot by hand.** Press **Choose the area on the preview** in
+> the Zoom tab and drag a box around what should fill the frame. The
+> magnification is worked out from the box, so you never type a number. With a
+> shot selected it reframes that one; with nothing selected it makes a new one
+> at the playhead.
 
 ### 5. Make it yours
 
-The tabs on the right cover everything:
+The icons above the panel on the right cover everything — hover one and the
+line underneath says what it is:
 
 | Tab | What is in it |
 |---|---|
@@ -90,26 +99,56 @@ The tabs on the right cover everything:
 | **Zoom** | How often it zooms, how long shots hold, how much of the take is zoomed |
 | **Cursor** | Size, smoothing, style, shape, click effects, spotlight |
 | **Camera** | Bubble shape, position, size, framing, audio levels |
+| **Captions** | Transcribe the narration, edit the lines, and style them |
+| **Titles** | Intro and outro cards either side of the recording |
 
 > **Tip — save a look.** In **Style → Profile**, name your settings, press
 > **Save**, then **★**. Every new recording then opens with that look already
 > applied.
 
-### 6. Export
+### 6. Captions, without uploading anything
+
+In **Captions**, press **Transcribe**. The narration is recognised **on this
+Mac** — nothing is sent anywhere — and becomes timed lines on the timeline.
+Click a line to jump to it and edit the words in place, so a misheard name is
+fixed rather than re-transcribed.
+
+Font, size, weight, colour, position, alignment, outline, shadow, a backing
+plate and a fade at each end are all adjustable, and the styling travels with a
+profile.
+
+### 7. Intro and outro cards
+
+In **Titles**, give the recording an opening and a closing card — a title, a
+subtitle and an optional logo, held for as long as you like.
+
+They are extra time either side of the take rather than separate clips, so they
+scrub, preview, fade and export exactly like the recording. Turn one on and it
+appears on the timeline as its own lane.
+
+### 8. Export
 
 **Export MP4**, or <kbd>⌘</kbd><kbd>E</kbd>. Use **Set in** and **Set out**
-first if you only want part of the take.
+first if you only want part of the take. You choose the name and the folder
+before rendering starts.
 
-Export is currently slow — roughly 3 frames a second — because it steps the
-source video frame by frame. A 30 second recording takes a few minutes.
+A 26 second take exports in under eight seconds; most of that is the encoder
+finishing rather than anything DemoDog is doing.
+
+When it is done, **Publish → YouTube** writes the captions beside the video as
+an SRT file, puts the title and chapter marks on the clipboard, opens YouTube
+Studio and reveals the file ready to drag in. It is a handoff rather than an
+upload, deliberately: uploading through YouTube's API needs a verified app, and
+until one is verified every video it uploads is locked to private with no
+appeal.
 
 ---
 
 ## Common questions
 
-**Where are my recordings?** `~/Movies/DemoDog/take_<timestamp>/`. Each take is
-a folder holding the video, the input log and a little metadata. Reopen one with
-**Open take…**.
+**Where are my recordings?** `~/Movies/DemoDog/take_<timestamp>.demodog`. Each
+take is a package holding the video, the input log and a little metadata —
+double-click it to reopen, or use **Open take…**.
 
 **Why are there no zooms on my recording?** DemoDog zooms in on things you *do* —
 clicks, scrolling, switching apps. A take where you only moved the mouse has
@@ -125,6 +164,14 @@ driver or virtual audio device.
 
 **Does it record my keystrokes?** Only modifier combinations such as ⌘K, and
 only if you switch on the shortcut overlay. Plain typing is never recorded.
+
+**Is my narration sent anywhere to be transcribed?** No. Recognition runs on
+this Mac, offline, using the speech model macOS already ships. DemoDog makes no
+network requests at all except to check GitHub for a newer version.
+
+**The update said it restarted but I am still on the old version.** Fixed in
+1.0.6. Older copies need one manual update from
+[Releases](../../releases/latest); after that the automatic path works.
 
 ---
 

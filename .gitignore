@@ -15,3 +15,6 @@ bin/demodog-recorder
 resources/icon.icns
 resources/*.iconset/
 src/renderer/public/logo.png
+
+# Build info, regenerated on every typecheck
+tsconfig.*.tsbuildinfo

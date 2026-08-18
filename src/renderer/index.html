@@ -5,12 +5,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DemoDog</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,300..800&family=Spline+Sans+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Typefaces are bundled, not linked. A recorder is used on aeroplanes and
+         in conference rooms with captive wifi, and a linked stylesheet means the
+         whole interface silently falls back to the system font there. It also
+         removes the only third-party request the app was making. -->
     <script>
       // Applied before first paint so the window never flashes the wrong theme.
       // Light unless asked otherwise: the editor is judged against the picture
