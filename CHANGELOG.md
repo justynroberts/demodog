@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.3.1 — 2026-08-18
 
 - **Playback still stopped at the end of the recording rather than the end of
   the outro.** 1.3.0 fixed the wrong half of this. The playhead is read back off
