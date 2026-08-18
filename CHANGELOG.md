@@ -6,6 +6,14 @@ is where finished work waits.
 
 ## Unreleased
 
+- Two doors led out of the app to the operating system and only one of them was
+  locked. Opening a link from the page checked that it was a web address; a
+  `window.open` did not, and handed whatever scheme it was given straight to
+  macOS. Both now go through the same check.
+- Transcribing a take no longer grants the editor permission to stream files
+  from that folder. It never needed it — the audio is read outside the editor
+  and only text comes back — and it was the one place that boundary could be
+  widened without the user having picked anything.
 - **Frame a zoom by dragging on the preview.** Draw a box around what should
   fill the frame and the shot is made from it — magnification worked out from
   the box rather than typed in as a number. With a shot selected it reframes

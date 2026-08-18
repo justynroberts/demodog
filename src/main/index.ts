@@ -118,6 +118,33 @@ const permittedWrites = new Set<string>()
  */
 const permittedFolders = new Set<string>()
 
+/**
+ * The single door out to the OS.
+ *
+ * `shell.openExternal` will hand *any* scheme to macOS — `file:`, `smb:`,
+ * `x-apple-…`, anything a helper app has registered — and several of those do
+ * something on receipt rather than merely opening a window. So every route out
+ * of the app funnels through here and nothing but the web gets through.
+ *
+ * There were two routes and only one check: the IPC handler validated, and the
+ * window-open handler did not, which meant a `window.open` with any scheme at
+ * all went straight past it.
+ */
+function openExternally(url: string): { action: 'deny' } {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return { action: 'deny' }
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    console.warn(`[shell] refused to open ${parsed.protocol} URL`)
+    return { action: 'deny' }
+  }
+  void shell.openExternal(parsed.toString())
+  return { action: 'deny' }
+}
+
 function rendererURL(hash: string): string {
   const devServer = process.env['ELECTRON_RENDERER_URL']
   if (isDev && devServer) return `${devServer}#${hash}`
@@ -233,10 +260,7 @@ function createStudioWindow(): void {
     console.error('[renderer] gone', details)
   )
   studioWindow.on('closed', () => (studioWindow = null))
-  studioWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
-    return { action: 'deny' }
-  })
+  studioWindow.webContents.setWindowOpenHandler(({ url }) => openExternally(url))
   studioWindow.loadURL(rendererURL('/studio'))
 }
 
@@ -568,7 +592,12 @@ ipcMain.handle('transcribe:run', async (event, dir: string, locale: string) => {
     .find((candidate) => existsSync(candidate))
   if (!spoken) throw new Error('That take has no audio to transcribe.')
 
-  allowMediaPath(dir)
+  // Deliberately does *not* widen the `rec:` roots. Transcribing reads the
+  // audio here in the main process and returns text; the renderer never streams
+  // anything as a result of it. Allowing the directory was granting a read
+  // permission for a read that never happens — and the directory comes from the
+  // renderer, so it was the one place the media boundary could be pushed
+  // outwards without the user having chosen anything in a dialog.
   const cues = await transcribe(spoken, locale, (fraction) => {
     event.sender.send('transcribe:progress', fraction)
   })
@@ -783,18 +812,7 @@ ipcMain.handle(
   }
 )
 ipcMain.handle('shell:open-external', (_e, url: string) => {
-  // Anything but the web means handing an arbitrary scheme to the OS.
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    return
-  }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    console.warn(`[shell] refused to open ${parsed.protocol} URL`)
-    return
-  }
-  return shell.openExternal(parsed.toString())
+  openExternally(url)
 })
 
 /** Loads a take directory from disk into the shape the editor expects. */
