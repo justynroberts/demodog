@@ -591,6 +591,14 @@ export default function Editor({
     if (exporting) return
     setAskingExport(false)
 
+    // Counted here rather than on the dialog opening, so it measures exports
+    // people actually asked for rather than dialogs they thought better of.
+    void api.track('export_started', {
+      width: choice.width,
+      height: choice.height,
+      fps: choice.fps
+    })
+
     // A card's logo and background have to be decoded before the first frame
     // is drawn. The preview can afford to miss one and pick it up next frame;
     // the exporter draws each frame once, so a picture chosen a moment ago

@@ -93,6 +93,19 @@ const api = {
 
   pickImage: (): Promise<string | null> => ipcRenderer.invoke('dialog:image'),
 
+  /**
+   * A named event, with numeric parameters only.
+   *
+   * Nothing the user typed or chose goes through here — no paths, no titles,
+   * no caption text. The main process rejects anything that is not a finite
+   * number, so widening this by accident is not a one-line mistake.
+   */
+  track: (name: string, params?: Record<string, number>): Promise<void> =>
+    ipcRenderer.invoke('analytics:event', name, params),
+  analyticsEnabled: (): Promise<boolean> => ipcRenderer.invoke('analytics:enabled'),
+  setAnalyticsEnabled: (enabled: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('analytics:set-enabled', enabled),
+
   listPresets: (): Promise<CapturePreset[]> => ipcRenderer.invoke('presets:list'),
   savePreset: (preset: CapturePreset): Promise<CapturePreset[]> =>
     ipcRenderer.invoke('presets:save', preset),

@@ -29,6 +29,7 @@ export default function ExportedPanel({
 }): ReactNode {
   const [handedOff, setHandedOff] = useState(false)
   const [wrote, setWrote] = useState<string[]>([])
+  const [thanking, setThanking] = useState(false)
 
   const name = path.split('/').pop() ?? 'export.mp4'
   const title = name
@@ -123,8 +124,48 @@ export default function ExportedPanel({
             </div>
           </>
         )}
+
+        <div className="exported-thanks">
+          <button className="linkish" onClick={() => setThanking(true)}>
+            Thanks
+          </button>
+        </div>
+
+        {thanking && <KofiNote onClose={() => setThanking(false)} />}
       </div>
     </div>,
     document.body
+  )
+}
+
+/**
+ * The tip jar.
+ *
+ * Ko-fi publishes a drop-in widget script, which cannot be used here: the
+ * packaged renderer runs under `script-src 'self'` and loading a third-party
+ * script would mean opening that policy up for a button. The widget only ever
+ * renders a link to the same page, so this is that link, styled to match Ko-fi
+ * and opened in the real browser — where someone is already signed in and can
+ * actually see what they are paying.
+ */
+function KofiNote({ onClose }: { onClose: () => void }): ReactNode {
+  return (
+    <div className="kofi-note" onClick={(e) => e.stopPropagation()}>
+      <p>
+        If DemoDog was useful, consider buying me a strong americano. It is one person&rsquo;s
+        evenings and weekends, and it stays free either way.
+      </p>
+      <div className="exported-actions">
+        <button
+          className="btn kofi"
+          onClick={() => void api.openExternal('https://ko-fi.com/X8P322YMB1')}
+        >
+          Support me on Ko-fi
+        </button>
+        <button className="btn ghost" onClick={onClose}>
+          Not today
+        </button>
+      </div>
+    </div>
   )
 }

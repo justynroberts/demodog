@@ -17,6 +17,7 @@ import { dirname, join, resolve as resolvePath, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { setupUpdates } from './updater'
 import { installMenu } from './menu'
+import { analyticsEnabled, setAnalyticsEnabled, track } from './analytics'
 import { clearQuarantine } from './quarantine'
 import { mkdir, writeFile, readFile, stat } from 'node:fs/promises'
 import { createReadStream, createWriteStream, existsSync, WriteStream } from 'node:fs'
@@ -494,6 +495,11 @@ app.whenReady().then(() => {
 
   installMenu(() => studioWindow)
 
+  // One event per launch. Sent from here rather than the renderer so it does
+  // not depend on a window having finished loading, and so the renderer's
+  // content policy stays closed to third parties.
+  void track('app_open')
+
   // Never while a take is in progress: an update dialog stealing focus would be
   // captured into the recording.
   if (studioWindow) setupUpdates(studioWindow, () => Boolean(recorder))
@@ -765,6 +771,28 @@ ipcMain.handle('file:write', async (_e, path: string, data: ArrayBuffer) => {
 })
 
 ipcMain.handle('app:version', () => app.getVersion())
+
+/**
+ * Named events from the renderer.
+ *
+ * Deliberately no free-form payload: the renderer passes an event name and a
+ * couple of numbers, never a path, a title or anything typed by the user. It
+ * would be easy to widen this to "send whatever you like" and then leak a file
+ * name into an analytics property by accident.
+ */
+ipcMain.handle('analytics:event', (_e, name: string, params?: Record<string, number>) => {
+  const clean: Record<string, number> = {}
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (typeof value === 'number' && Number.isFinite(value)) clean[key] = value
+  }
+  void track(String(name).slice(0, 40), clean)
+})
+
+ipcMain.handle('analytics:enabled', () => analyticsEnabled())
+ipcMain.handle('analytics:set-enabled', (_e, enabled: boolean) => {
+  setAnalyticsEnabled(!!enabled)
+  return analyticsEnabled()
+})
 ipcMain.handle('shell:reveal', (_e, path: string) => shell.showItemInFolder(path))
 
 /**

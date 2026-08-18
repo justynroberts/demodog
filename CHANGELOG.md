@@ -4,6 +4,24 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- **A tip jar on the export card.** A quiet *Thanks* opens a note asking, once
+  and without insisting, whether the app was worth a coffee. Ko-fi publish a
+  drop-in widget script, which cannot be used here — the renderer runs under
+  `script-src 'self'` and loading a third-party script to draw a button would
+  mean reopening that. The widget only ever renders a link to the same page, so
+  this is that link, in Ko-fi's own blue, opened in the real browser where
+  someone is already signed in.
+- Groundwork for product analytics, **dormant**. GA4's Measurement Protocol
+  from the main process rather than a tag script in the renderer, for the same
+  content-policy reason, and because a tag script in an app window reports
+  half-populated page views. It is off by default *and* carries no credentials,
+  so nothing is sent: the app still makes no third-party requests beyond the
+  update check. Turning it on is a deliberate two-part act, and the reasoning
+  for leaving it off is recorded next to the code so it does not read as an
+  oversight later.
+
 ## 1.3.1 — 2026-08-18
 
 - **Playback still stopped at the end of the recording rather than the end of
