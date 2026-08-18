@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.4.0 — 2026-08-18
 
 - **A tip jar on the export card.** A quiet *Thanks* opens a note asking, once
   and without insisting, whether the app was worth a coffee. Ko-fi publish a
