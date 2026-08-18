@@ -21,6 +21,15 @@ export default function ControlBar(): ReactNode {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const startRef = useRef(0)
   const [hasCamera, setHasCamera] = useState(false)
+  /**
+   * Set while the user is arranging their screen, before a take begins.
+   *
+   * The same bar carries both jobs. It floats above every other window and is
+   * already where the user looks for the recording controls, so putting Start
+   * anywhere else means two floating panels and a button that disappears
+   * behind the very window it just brought forward.
+   */
+  const [stage, setStage] = useState<{ title: string; hint: string } | null>(null)
   // Distinguishes 'no camera chosen' from 'camera chosen but unavailable'.
   const [cameraWanted, setCameraWanted] = useState(false)
 
@@ -169,8 +178,30 @@ export default function ControlBar(): ReactNode {
     setElapsed(0)
   }
 
+  useEffect(() => api.on('bar:stage', (detail) => setStage(detail as never)), [])
+
   const minutes = Math.floor(elapsed / 60)
   const seconds = Math.floor(elapsed % 60)
+
+  if (stage && !running) {
+    return (
+      <div className="bar-root">
+        <div className="bar bar-ready">
+          <span className="rec-dot" aria-hidden />
+          <div className="bar-ready-text">
+            <strong>{stage.title}</strong>
+            {stage.hint && <span>{stage.hint}</span>}
+          </div>
+          <button className="btn primary" onClick={() => api.sendReadyAction('start')}>
+            Start
+          </button>
+          <button className="btn ghost" onClick={() => api.sendReadyAction('back')}>
+            Back
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="bar-root">

@@ -380,8 +380,8 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
       title: selectedLabel(),
       hint:
         selected.kind === 'window'
-          ? 'That window is at the front. Arrange anything else, then start — the countdown gives you three more seconds.'
-          : 'Arrange your windows, then start — the countdown gives you three more seconds.'
+          ? 'Brought to the front. Arrange anything else, then Start.'
+          : 'Arrange your windows, then Start.'
     })
     // Raised after the panel is up, so the panel is never the thing that gets
     // covered by the window it just brought forward.

@@ -2352,37 +2352,30 @@ dialog.info a {
 
 /* ---- ready to record ---------------------------------------------------- */
 
-/* Its own transparent window, sat above everything. Bottom-right because the
-   step exists so the windows behind it can be arranged, and the middle of the
-   screen is where they go. */
-.ready-panel {
-  margin: 8px;
-  padding: 16px;
-  background: var(--surface);
-  border: var(--border);
-  box-shadow: var(--shadow-hard);
-  animation: snap-in 0.24s var(--snap) both;
+/* The same floating bar that carries Stop during a take, wearing its other
+   hat. One panel that changes what it offers, rather than two side by side. */
+.bar.bar-ready {
+  gap: 12px;
 }
 
-.ready-panel h2 {
-  margin: 0 0 8px;
-  font-size: var(--t-lg);
-  line-height: 1.25;
-}
-
-.ready-panel .hint {
-  margin: 0 0 14px;
-  font-size: var(--t-xs);
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-.ready-actions {
+.bar-ready-text {
   display: flex;
-  gap: 10px;
-  align-items: center;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
-.ready-actions .record-cta {
-  flex: 1;
+.bar-ready-text strong {
+  font-size: var(--t-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bar-ready-text span {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--muted);
 }

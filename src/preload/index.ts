@@ -107,11 +107,6 @@ const api = {
     ipcRenderer.on('ready:action', handler)
     return () => ipcRenderer.removeListener('ready:action', handler)
   },
-  onReadyDetail: (fn: (detail: { title: string; hint: string }) => void): (() => void) => {
-    const handler = (_e: unknown, detail: { title: string; hint: string }): void => fn(detail)
-    ipcRenderer.on('ready:detail', handler)
-    return () => ipcRenderer.removeListener('ready:detail', handler)
-  },
 
   pickImage: (): Promise<string | null> => ipcRenderer.invoke('dialog:image'),
 
