@@ -24,6 +24,9 @@ is where finished work waits.
   from that folder. It never needed it — the audio is read outside the editor
   and only text comes back — and it was the one place that boundary could be
   widened without the user having picked anything.
+
+## 1.1.0 — 2026-08-17
+
 - **Frame a zoom by dragging on the preview.** Draw a box around what should
   fill the frame and the shot is made from it — magnification worked out from
   the box rather than typed in as a number. With a shot selected it reframes
