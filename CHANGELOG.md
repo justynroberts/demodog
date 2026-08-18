@@ -6,6 +6,33 @@ is where finished work waits.
 
 ## 1.4.0 — 2026-08-18
 
+- **Capturing a single window could produce a take with no video.**
+  ScreenCaptureKit marks the first frame of a stream `.started` rather than
+  `.complete`, and only `.complete` was being kept. A whole display is never
+  still — something always moves within a frame or two — so a `.complete` frame
+  always followed and the omission never showed. One window that is not moving
+  emits `.started` once and `.idle` thereafter, so the writer session was never
+  begun, every audio buffer was dropped waiting for it, and the recording came
+  back empty.
+- That is also the most likely cause of **audio running ahead of the picture in
+  an exported window capture**: the session starting late means the sound
+  recorded before it is discarded. Reported as fixed with less confidence than
+  the above, since it has not been reproduced here.
+- **Transcription that never ran looked exactly like a recording with no
+  speech.** Each window is recognised in a child process, and a child that was
+  refused permission exited silently and was counted as having heard nothing.
+  When every window fails, that is now reported as the failure it is — with the
+  Speech Recognition permission named. A genuinely silent take says so too, and
+  points at the microphone rather than leaving "no speech was found" to be
+  interpreted.
+- Takes record what the capture stream actually delivered, counted by frame
+  status, so a recording that comes back empty can say why rather than leaving
+  nothing behind to look at.
+- **Report a bug** in the info panel: collects the version, this Mac's details
+  and the app's logs into a file, reveals it, and opens a pre-filled message.
+  Never a recording, its audio or its transcript.
+
+
 - **A tip jar on the export card.** A quiet *Thanks* opens a note asking, once
   and without insisting, whether the app was worth a coffee. Ko-fi publish a
   drop-in widget script, which cannot be used here — the renderer runs under

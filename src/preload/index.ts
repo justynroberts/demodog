@@ -102,6 +102,9 @@ const api = {
    */
   track: (name: string, params?: Record<string, number>): Promise<void> =>
     ipcRenderer.invoke('analytics:event', name, params),
+  /** Builds a diagnostics zip, reveals it, and opens a pre-filled mail. */
+  reportBug: (note: string): Promise<string> => ipcRenderer.invoke('report:bug', note),
+
   analyticsEnabled: (): Promise<boolean> => ipcRenderer.invoke('analytics:enabled'),
   setAnalyticsEnabled: (enabled: boolean): Promise<boolean> =>
     ipcRenderer.invoke('analytics:set-enabled', enabled),

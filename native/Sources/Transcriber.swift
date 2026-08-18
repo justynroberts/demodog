@@ -111,6 +111,15 @@ enum Transcriber {
         var lastText = ""
         /// Held back one line, so a trimmed stub can rejoin what it came from.
         var pending: Cue?
+        /// How many windows were attempted, and how many could not even start.
+        ///
+        /// A window that hears nothing and a window that was refused permission
+        /// both contribute no cues, and treating them the same is why a
+        /// transcription that never ran came back as an empty transcript with
+        /// nothing to explain it. Counted so the difference can be reported.
+        var windowsTried = 0
+        var windowsFailed = 0
+        var lastFailure: Int32 = 0
         while offset < duration {
             let length = min(windowSeconds, duration - offset)
             let clipped = max(0, offset - (offset > 0 ? overlapSeconds : 0))
@@ -119,8 +128,14 @@ enum Transcriber {
             do {
                 let clip = try await extract(asset: asset, start: clipped, seconds: span)
                 defer { try? FileManager.default.removeItem(at: clip) }
-                let cues = try recogniseInChild(
+                let window = try recogniseInChild(
                     url: clip, locale: locale, shift: clipped, context: lastText)
+                windowsTried += 1
+                if window.status != 0 {
+                    windowsFailed += 1
+                    lastFailure = window.status
+                }
+                let cues = window.cues
                 // Windows overlap so a sentence crossing a boundary is heard
                 // whole, which means the same words can arrive twice. Captions
                 // have to be a sequence, not a pile: anything already covered is
@@ -187,7 +202,26 @@ enum Transcriber {
             produced += 1
             emitCue(last)
         }
-        emit(["event": "done", "cues": produced])
+
+        // Nothing heard, and every window refused: that is a failure, not a
+        // silent recording, and it is the whole reason "Transcribe did nothing"
+        // was impossible to act on. Reported only when nothing was produced —
+        // an occasional failed window among successful ones is not worth
+        // alarming anyone about, and the transcript speaks for itself.
+        if produced == 0 && windowsTried > 0 && windowsFailed == windowsTried {
+            let denied = lastFailure == 4
+            emit([
+                "event": "error",
+                "code": denied ? "denied" : "unavailable",
+                "message": denied
+                    ? "Speech Recognition permission was not granted, so nothing could be transcribed."
+                    : "The speech recogniser was unavailable, so nothing could be transcribed.",
+                "windows": windowsTried,
+            ])
+            exit(denied ? 4 : 5)
+        }
+
+        emit(["event": "done", "cues": produced, "windows": windowsTried, "failed": windowsFailed])
         exit(0)
     }
 
@@ -203,9 +237,16 @@ enum Transcriber {
     ///
     /// The cost is one short-lived child per fifteen seconds of audio, which is
     /// nothing beside the recognition it performs.
+    /// A window's result: what was heard, and why nothing was if nothing was.
+    struct WindowResult {
+        var cues: [Cue]
+        /// The child's exit status. Non-zero means it could not even try.
+        var status: Int32
+    }
+
     private static func recogniseInChild(
         url: URL, locale: String, shift: Double, context: String
-    ) throws -> [Cue] {
+    ) throws -> WindowResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
         var arguments = ["transcribe-window", "--audio", url.path, "--locale", locale]
@@ -234,17 +275,22 @@ enum Transcriber {
                     start: shift + start, end: shift + end, text: text,
                     confidence: payload["confidence"] as? Double ?? 0))
         }
-        return cues
+        return WindowResult(cues: cues, status: process.terminationStatus)
     }
 
     /// The child half: recognise one clip and print its cues, timed from zero.
     static func runWindow(audioPath: String, locale: String, context: String) async {
         let url = URL(fileURLWithPath: audioPath)
-        guard await requestAuthorization() == .authorized,
+        // Exit codes are the only channel back to the parent, so they have to
+        // carry the reason. A child that cannot try at all is a different fact
+        // from a child that tried and heard nothing, and collapsing the two is
+        // what made a whole failed transcription look like a silent recording.
+        guard await requestAuthorization() == .authorized else { exit(4) }
+        guard
             let recognizer = SFSpeechRecognizer(locale: Locale(identifier: locale)),
             recognizer.isAvailable
         else {
-            exit(4)
+            exit(5)
         }
         do {
             for cue in try await recognise(

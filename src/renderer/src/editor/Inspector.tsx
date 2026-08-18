@@ -1205,7 +1205,14 @@ function CaptionsTab({
     try {
       const { cues, source } = await api.transcribe(recording.dir, navigator.language || 'en-GB')
       if (cues.length === 0) {
-        setError('No speech was found in this recording.')
+        setError(
+          // "Nothing was found" is true and useless. The usual cause is that
+          // the microphone was not part of the take at all, and the fix is a
+          // setting on the *next* recording rather than anything to try here.
+          'No speech was heard. The narration comes from the microphone track, ' +
+            'so check a microphone was selected when this was recorded — system ' +
+            'audio alone is not transcribed.'
+        )
       } else {
         // The camera track begins after the screen track, so words timed
         // against it are early against the editor's clock by that difference.

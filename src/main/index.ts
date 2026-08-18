@@ -18,6 +18,7 @@ import { pathToFileURL } from 'node:url'
 import { setupUpdates } from './updater'
 import { installMenu } from './menu'
 import { analyticsEnabled, setAnalyticsEnabled, track } from './analytics'
+import { sendBugReport } from './bugreport'
 import { clearQuarantine } from './quarantine'
 import { mkdir, writeFile, readFile, stat } from 'node:fs/promises'
 import { createReadStream, createWriteStream, existsSync, WriteStream } from 'node:fs'
@@ -787,6 +788,8 @@ ipcMain.handle('analytics:event', (_e, name: string, params?: Record<string, num
   }
   void track(String(name).slice(0, 40), clean)
 })
+
+ipcMain.handle('report:bug', async (_e, note: string) => sendBugReport(String(note ?? '')))
 
 ipcMain.handle('analytics:enabled', () => analyticsEnabled())
 ipcMain.handle('analytics:set-enabled', (_e, enabled: boolean) => {

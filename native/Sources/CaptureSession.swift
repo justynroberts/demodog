@@ -39,6 +39,18 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
 
     private var sessionStarted = false
     private var firstFrameHost: Double = 0
+    /**
+     * How many frames arrived with each status.
+     *
+     * Written into meta.json because the interesting failure — a capture that
+     * produces no video — leaves nothing else behind to look at. Knowing it was
+     * all `.idle`, or all `.blank`, or that nothing arrived at all, is the
+     * difference between a diagnosis and a guess, and this is not something a
+     * user can reproduce on request.
+     */
+    private var statusCounts: [Int: Int] = [:]
+    /** The first audio sample's timestamp, once one has been written. */
+    private var firstAudioHost: Double = -1
     private var frameCount = 0
     private var lastFrameHost: Double = 0
     private var finishing = false
@@ -253,14 +265,24 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
 
         switch type {
         case .screen:
-            // ScreenCaptureKit emits buffers for idle/blank frames too; only
-            // `.complete` ones carry new pixels.
+            // ScreenCaptureKit emits buffers for idle/blank frames too, which
+            // carry no new pixels.
+            //
+            // `.started` does carry them, and dropping it is why capturing a
+            // single window could produce a take with no video at all. A whole
+            // display is never still — a clock, a cursor, an animation — so a
+            // `.complete` frame always follows within moments and the omission
+            // never showed. One window that is not moving emits `.started`
+            // once and then `.idle` forever, so the writer session was never
+            // begun, every audio buffer was dropped waiting for it, and the
+            // recording came back empty.
             guard
                 let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
                 let raw = attachments.first?[.status] as? Int,
-                let status = SCFrameStatus(rawValue: raw),
-                status == .complete
+                let status = SCFrameStatus(rawValue: raw)
             else { return }
+            statusCounts[raw, default: 0] += 1
+            guard status == .complete || status == .started else { return }
 
             guard let writer, let videoInput else { return }
 
@@ -280,6 +302,10 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
 
         case .audio:
             guard sessionStarted, let audioInput, audioInput.isReadyForMoreMediaData else { return }
+            if firstAudioHost < 0 {
+                firstAudioHost = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+                meta["firstAudioHost"] = firstAudioHost
+            }
             audioInput.append(sampleBuffer)
 
         default:
@@ -321,6 +347,11 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
         meta["frames"] = frameCount
         meta["duration"] = duration
         meta["endHost"] = hostSeconds()
+        // What the stream actually delivered. A take with no video is otherwise
+        // silent about why, and it is not a thing anyone can reproduce to order.
+        meta["frameStatus"] = statusCounts.reduce(into: [String: Int]()) { out, pair in
+            out[Self.statusName(pair.key)] = pair.value
+        }
         writeJSON(meta, to: options.outputDir + "/meta.json")
 
         emit([
@@ -334,6 +365,19 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
     }
 
     // MARK: - Helpers
+
+    /** Readable names, so meta.json says "idle" rather than "3". */
+    private static func statusName(_ raw: Int) -> String {
+        switch SCFrameStatus(rawValue: raw) {
+        case .complete: return "complete"
+        case .idle: return "idle"
+        case .blank: return "blank"
+        case .suspended: return "suspended"
+        case .started: return "started"
+        case .stopped: return "stopped"
+        default: return "unknown-\(raw)"
+        }
+    }
 
     private static func scaleFactor(for displayID: CGDirectDisplayID) -> Double {
         let screen = NSScreen.screens.first {

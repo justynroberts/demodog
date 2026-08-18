@@ -129,6 +129,21 @@ export function ThemeToggle(): ReactNode {
 export function InfoButton(): ReactNode {
   const ref = useRef<HTMLDialogElement>(null)
   const [version, setVersion] = useState('')
+  const [note, setNote] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  const report = async (): Promise<void> => {
+    setSending(true)
+    try {
+      await api.reportBug(note)
+      setSent(true)
+    } catch {
+      setSent(false)
+    } finally {
+      setSending(false)
+    }
+  }
 
   useEffect(() => {
     void api
@@ -172,6 +187,32 @@ export function InfoButton(): ReactNode {
               Made by FintonLabs
             </a>
           </p>
+
+          <div className="report">
+            <span className="label">Report a bug</span>
+            <p className="hint">
+              Sends the version, this Mac&rsquo;s details and the app&rsquo;s logs. Never a
+              recording, its audio or its transcript.
+            </p>
+            <textarea
+              className="text-input"
+              rows={3}
+              placeholder="What happened, and what you expected instead"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+            <button className="btn" disabled={sending} onClick={() => void report()}>
+              {sending ? 'Collecting…' : 'Compose the report'}
+            </button>
+            {sent && (
+              <p className="hint">
+                Your mail app is open, and the diagnostics file is showing in Finder — drag it
+                onto the message before sending. Mail cannot be given an attachment from
+                outside, so that last step is yours.
+              </p>
+            )}
+          </div>
+
           <button className="btn" onClick={() => ref.current?.close()}>
             Close
           </button>
