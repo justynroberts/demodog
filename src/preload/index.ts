@@ -91,6 +91,10 @@ const api = {
   }): Promise<string[]> => ipcRenderer.invoke('publish:youtube', payload),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke('shell:open-external', url),
 
+  /** Brings the window about to be recorded to the front. */
+  focusWindow: (windowId: number): Promise<boolean> =>
+    ipcRenderer.invoke('source:focus', windowId),
+
   pickImage: (): Promise<string | null> => ipcRenderer.invoke('dialog:image'),
 
   /**

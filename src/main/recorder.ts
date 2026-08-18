@@ -105,6 +105,21 @@ function runOnce(args: string[]): Promise<Record<string, unknown>> {
   })
 }
 
+/**
+ * Raises a window by activating the app that owns it.
+ *
+ * Never throws: this is a convenience before recording, and failing to raise a
+ * window is not a reason to refuse to record it.
+ */
+export async function focusWindow(windowId: number): Promise<boolean> {
+  try {
+    const result = await runOnce(['focus', '--window', String(windowId)])
+    return result.event === 'focused' && result.raised === true
+  } catch {
+    return false
+  }
+}
+
 export async function listSources(): Promise<Sources> {
   const result = await runOnceShared(['list'])
   if (result.event === 'error') {

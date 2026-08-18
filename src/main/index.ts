@@ -29,7 +29,8 @@ import {
   checkPermissions,
   openPrivacySettings,
   reapStrayHelpers,
-  transcribe
+  transcribe,
+  focusWindow
 } from './recorder'
 import type {
   RecordOptions,
@@ -585,6 +586,15 @@ ipcMain.handle('sources:thumbnails', async () => {
   }
   return { displays, windows }
 })
+
+/**
+ * Brings a chosen window to the front.
+ *
+ * Picking a window to record and then having to find it behind the recorder is
+ * a poor way to start — and a window left behind something else is exactly the
+ * one that sits idle and records almost nothing.
+ */
+ipcMain.handle('source:focus', (_e, windowId: number) => focusWindow(Number(windowId)))
 
 ipcMain.handle('permissions:check', () => checkPermissions(false))
 ipcMain.handle('permissions:request', () => checkPermissions(true))

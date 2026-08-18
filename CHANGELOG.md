@@ -6,6 +6,16 @@ is where finished work waits.
 
 ## 1.4.0 — 2026-08-18
 
+- **Choosing a window now brings it to the front**, and there is a step between
+  choosing what to record and recording it. The first button says *Let's Start*
+  and moves to a small panel in the corner; the recording begins from there.
+  Everything before that point is configuration, everything after it is
+  arranging your actual screen, and having the start button at the end of a
+  settings panel meant the first seconds of every take were spent moving
+  windows into place. Raising the chosen window matters for more than
+  convenience: a window left behind something else is also the one that records
+  almost nothing, since capture only produces frames when its content changes.
+
 - **A window capture recorded almost no frames, and its audio drifted.** Both
   were the same fault. ScreenCaptureKit produces pixels only when the content
   changes, and an idle frame was discarded as having nothing in it. A whole

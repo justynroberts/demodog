@@ -45,6 +45,11 @@ case "list":
     Task { await SourceLister.run() }
     RunLoop.main.run()
 
+case "focus":
+    startWatchdog(seconds: 8, label: "focus")
+    Task { await WindowFocus.run(windowID: CGWindowID(args.int("window") ?? 0)) }
+    RunLoop.main.run()
+
 case "permissions":
     startWatchdog(seconds: 8, label: "permissions")
     Permissions.check(requesting: args.bool("request", default: false))

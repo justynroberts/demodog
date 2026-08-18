@@ -76,10 +76,44 @@ enum SourceLister {
     }
 }
 
+enum WindowFocus {
+    static func run(windowID: CGWindowID) async {
+        guard
+            let content = try? await SCShareableContent.excludingDesktopWindows(
+                false, onScreenWindowsOnly: true),
+            let window = content.windows.first(where: { $0.windowID == windowID }),
+            let pid = window.owningApplication?.processID
+        else {
+            emit(["event": "error", "code": "no-window", "message": "window \(windowID) is gone"])
+            exit(2)
+        }
+
+        let app = NSRunningApplication(processIdentifier: pid)
+        let raised = app?.activate(options: [.activateAllWindows]) ?? false
+        emit([
+            "event": "focused",
+            "window": Int(windowID),
+            "app": window.owningApplication?.applicationName ?? "",
+            "raised": raised,
+        ])
+        exit(0)
+    }
+}
+
 /// Reports whether this process currently holds the Screen Recording grant.
 /// `CGPreflightScreenCaptureAccess` answers without prompting; the request
 /// variant triggers the system dialog exactly once per app.
 enum Permissions {
+/// Brings a window to the front so it can be arranged before recording.
+///
+/// Choosing a window to record and then having to hunt for it behind the
+/// recorder is a poor way to start a take — and a window that is behind
+/// something else is exactly the one that sits idle and records nothing.
+///
+/// Activation goes through the owning application rather than the window: a
+/// window cannot raise itself from another process, and asking the app to come
+/// forward is the supported route that needs no automation permission.
+
     static func check(requesting: Bool) {
         let screen = CGPreflightScreenCaptureAccess()
         if !screen && requesting {

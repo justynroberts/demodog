@@ -1,5 +1,6 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '../api'
 import Tour, { TOUR_STEPS, markTourSeen, tourSeen } from './Tour'
 import { MadeByFintonLabs, Segmented, Toggle } from '../ui/controls'
@@ -44,6 +45,15 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
     setTourStep(null)
   }
   const [selected, setSelected] = useState<Selection | null>(null)
+  /**
+   * The pause between choosing what to record and recording it.
+   *
+   * Everything up to here is configuration; from here the user is arranging
+   * their actual screen. Those are different jobs, and putting the button that
+   * starts a take at the end of a settings panel meant the first seconds of
+   * every recording were spent moving windows into place.
+   */
+  const [staged, setStaged] = useState(false)
   const [filter, setFilter] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
@@ -341,6 +351,19 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
   }, [cameraId, previewNonce, optionTab])
 
   // ---- start -------------------------------------------------------------
+
+  /**
+   * Moves to the ready screen, bringing the chosen window forward with it.
+   *
+   * A window picked from a list is usually behind the recorder, and one left
+   * behind something else is also the one that records almost nothing, since
+   * the capture only produces frames when its content changes.
+   */
+  const stage = async (): Promise<void> => {
+    if (!selected) return
+    if (selected.kind === 'window') await api.focusWindow(selected.id)
+    setStaged(true)
+  }
 
   const start = async (): Promise<void> => {
     if (!selected) return
@@ -726,13 +749,44 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
 
         <button
           className="record-cta"
-          onClick={() => void start()}
+          onClick={() => void stage()}
           disabled={!selected || starting}
         >
           <span className="rec-dot" />
-          {starting ? 'Starting…' : 'Start recording'}
+          Let&rsquo;s Start
         </button>
       </aside>
+
+      {staged &&
+        createPortal(
+          // Deliberately a small panel rather than a full screen. The whole
+          // point of this step is arranging the windows behind it, so it covers
+          // as little of them as possible and stays out of the middle.
+          <div className="ready-card snap">
+            <span className="label">Ready</span>
+            <h2>{selectedLabel()}</h2>
+            <p className="hint">
+              {selected?.kind === 'window'
+                ? 'That window has been brought to the front. Arrange anything else you need, then start — the countdown gives you three more seconds.'
+                : 'Arrange your windows the way you want them, then start — the countdown gives you three more seconds.'}
+            </p>
+            {error && (
+              <p className="hint" style={{ color: 'var(--danger)' }}>
+                {error}
+              </p>
+            )}
+            <div className="ready-actions">
+              <button className="btn ghost" onClick={() => setStaged(false)} disabled={starting}>
+                Back
+              </button>
+              <button className="record-cta" onClick={() => void start()} disabled={starting}>
+                <span className="rec-dot" />
+                {starting ? 'Starting…' : 'Start recording'}
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
 
       {tourStep !== null && <Tour step={tourStep} onStep={showTourStep} onClose={endTour} />}
     </div>

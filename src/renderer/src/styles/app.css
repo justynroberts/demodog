@@ -2349,3 +2349,42 @@ dialog.info a {
   color: var(--muted);
   margin: 0 0 10px;
 }
+
+/* ---- ready to record ---------------------------------------------------- */
+
+/* Bottom-right rather than centred: this panel exists so windows can be
+   arranged behind it, and the middle of the screen is where they go. */
+.ready-card {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
+  width: 340px;
+  padding: 18px;
+  background: var(--surface);
+  border: var(--border);
+  box-shadow: var(--shadow-hard);
+}
+
+.ready-card h2 {
+  margin: 0 0 8px;
+  font-size: var(--t-lg);
+  line-height: 1.25;
+}
+
+.ready-card .hint {
+  margin: 0 0 14px;
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.ready-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.ready-actions .record-cta {
+  flex: 1;
+}
