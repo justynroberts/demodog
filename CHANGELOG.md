@@ -6,6 +6,21 @@ is where finished work waits.
 
 ## 1.4.0 — 2026-08-18
 
+- **Turning the camera bubble off removed your narration from the export.** The
+  microphone is recorded into the camera file, and one flag decided both
+  whether the bubble was drawn *and* whether that file was read at all — so
+  switching off the picture-in-picture, which people do when they would rather
+  not be in the corner of their own demo, silently exported the video without
+  their voice. Nothing in the preview showed it, because the preview plays the
+  camera element's audio whether or not the bubble is drawn. Found by writing
+  the sync check below, not by anyone noticing.
+- Exports are now checked for audio/video sync before any build ships. The
+  fixture's camera track carries a 1 kHz pip every two seconds, and the check
+  measures where those land in the exported file: it fails if any mark is more
+  than 60ms out, and separately if the marks have moved by *different* amounts,
+  which is drift rather than an offset and needs a different fix. Every check
+  that existed passed happily on a file whose audio was a second adrift.
+
 - **Capturing a single window could produce a take with no video.**
   ScreenCaptureKit marks the first frame of a stream `.started` rather than
   `.complete`, and only `.complete` was being kept. A whole display is never

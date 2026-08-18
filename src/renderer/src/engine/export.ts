@@ -7,6 +7,14 @@ export interface ExportOptions {
   composition: Composition
   screenURL: string
   cameraURL?: string
+  /**
+   * Whether the camera's *picture* is wanted. Its sound always is.
+   *
+   * These were one flag, and the microphone is in the camera file — so turning
+   * the picture-in-picture off, which people do when they do not want their
+   * face in the corner, silently removed their narration from the export.
+   */
+  cameraVideo?: boolean
   cameraOffset: number
   /** Extra nudge applied to the camera track, in seconds. */
   cameraSync: number
@@ -64,7 +72,7 @@ export async function exportMP4(options: ExportOptions): Promise<ExportResult> {
   const screen = await openFrameSource(options.screenURL, SEQUENTIAL_DECODE ? 'decode' : 'seek')
   // MP4 cameras decode sequentially like the screen; WebM ones can only be
   // seeked, so they keep the tolerance that avoids re-seeking within a frame.
-  const camera = options.cameraURL
+  const camera = options.cameraURL && options.cameraVideo !== false
     ? await openFrameSource(
         options.cameraURL,
         options.cameraURL.toLowerCase().includes('.mp4') ? 'decode' : 'seek',

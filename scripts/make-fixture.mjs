@@ -212,7 +212,14 @@ async function buildCamera(path) {
     '-f',
     'lavfi',
     '-i',
-    `sine=frequency=420:duration=${DURATION}`,
+    // Beeps at known instants rather than a continuous tone.
+    //
+    // A steady sine proves audio survived the export and nothing else: it
+    // sounds identical however far it has slipped against the picture. A short
+    // 1 kHz pip every two seconds has an onset that can be located to a few
+    // milliseconds, which is what turns "the audio is out of sync" from a
+    // judgement into a measurement.
+    `aevalsrc=exprs='0.7*sin(2*PI*1000*t)*lt(mod(t+1\\,2)\\,0.08)':d=${DURATION}:s=48000`,
     '-c:v',
     'libx264',
     '-preset',

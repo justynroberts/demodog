@@ -636,7 +636,13 @@ export default function Editor({
       const result = await exportMP4({
         composition,
         screenURL: recording.screenURL,
-        cameraURL: project.pip.enabled ? recording.cameraURL : undefined,
+        // Always passed, because the microphone is in this file. Gating it on
+        // the picture-in-picture meant switching the bubble off also removed
+        // the narration from the exported video — silently, and with nothing
+        // in the preview to show it, since the preview plays the camera
+        // element's audio regardless of whether the bubble is drawn.
+        cameraURL: recording.cameraURL,
+        cameraVideo: project.pip.enabled,
         cameraOffset: recording.cameraOffset,
         cameraSync,
         start: trim.start,

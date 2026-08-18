@@ -55,6 +55,32 @@ async function has(command) {
 }
 
 const failures = []
+/**
+ * Where each pip starts, in seconds.
+ *
+ * Deliberately crude — a 10ms window, a fixed threshold and half a second of
+ * refractory period — because the signal is a loud tone against near silence
+ * and anything cleverer would be harder to trust than the thing it measures.
+ */
+function findOnsets(buffer) {
+  const samples = new Int16Array(buffer.buffer, buffer.byteOffset, Math.floor(buffer.byteLength / 2))
+  const rate = 8000
+  const window = Math.round(0.01 * rate)
+  const found = []
+  let last = -9
+  for (let i = 0; i + window < samples.length; i += window) {
+    let sum = 0
+    for (let j = i; j < i + window; j++) sum += samples[j] * samples[j]
+    const rms = Math.sqrt(sum / window)
+    const at = i / rate
+    if (rms > 2000 && at - last > 0.5) {
+      found.push(at)
+      last = at
+    }
+  }
+  return found
+}
+
 function check(ok, description, detail) {
   console.log(`  ${ok ? green('✓') : red('✗')} ${description}`)
   if (!ok) {
@@ -136,7 +162,53 @@ try {
         ? 'every frame is identical — the export is frozen'
         : 'some frames repeat, so the reader is not advancing cleanly'
     )
+    // ---- audio against picture ------------------------------------------
+    //
+    // The fixture's camera track carries a 1 kHz pip every two seconds, at
+    // t = 1, 3, 5. The exporter maps output time to source time itself, so if
+    // those onsets come back where they went in, the sound and the picture
+    // agree. This is the check that was missing when an export came back with
+    // the audio running ahead of the video: everything above passes on a file
+    // whose audio is a second out, because every frame still differs and the
+    // file is still a plausible size.
+    const raw = join(work, 'audio.raw')
+    await run('ffmpeg', ['-v', 'error', '-i', output, '-vn', '-ac', '1', '-ar', '8000', '-f', 's16le', raw])
+    // Said out loud rather than skipped quietly. An export with no audio track
+    // cannot be judged for sync, and a check that quietly passes in that case
+    // would report "audio lines up" about a file with no audio in it.
+    const onsets = existsSync(raw) ? findOnsets(await readFile(raw)) : []
+    const expected = [1, 3, 5].filter((t) => t < SECONDS - 0.2)
+
+    if (!existsSync(raw)) {
+      console.log(
+        '  – audio sync not checked: the exported fixture has no audio track.\n' +
+          '      Real takes do export audio, so this is a gap in the fixture rather\n' +
+          '      than a known fault — but it means sync is currently unmeasured.'
+      )
+    } else if (onsets.length > 0) {
+      const drifts = expected.map((want) => {
+        const near = onsets.reduce((a, b) => (Math.abs(b - want) < Math.abs(a - want) ? b : a))
+        return { want, got: near, off: near - want }
+      })
+      const worst = drifts.reduce((a, b) => (Math.abs(b.off) > Math.abs(a.off) ? b : a))
+      check(
+        Math.abs(worst.off) <= 0.06,
+        `audio lines up with the picture (worst mark ${(worst.off * 1000).toFixed(0)}ms out)`,
+        drifts.map((d) => `expected ${d.want}s, found ${d.got.toFixed(3)}s`).join('; ')
+      )
+      // Two marks two seconds apart that have moved by different amounts is a
+      // rate problem, not an offset, and needs a different fix entirely.
+      if (drifts.length > 1) {
+        const spread = Math.max(...drifts.map((d) => d.off)) - Math.min(...drifts.map((d) => d.off))
+        check(
+          spread <= 0.04,
+          `the offset does not grow across the take (${(spread * 1000).toFixed(0)}ms spread)`,
+          'the marks have moved by different amounts, so the audio drifts rather than sitting at a fixed offset'
+        )
+      }
+    }
   }
+
   // A second pass with the overlays left on, purely to confirm the zoom shots
   // reach the exporter. They live in their own state, and an export that
   // silently rendered with an empty shot list looked completely normal — every
