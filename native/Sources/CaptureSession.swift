@@ -51,6 +51,8 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
     private var statusCounts: [Int: Int] = [:]
     /** The first audio sample's timestamp, once one has been written. */
     private var firstAudioHost: Double = -1
+    /** The most recent frame that actually carried pixels, for repeating. */
+    private var lastComplete: CMSampleBuffer?
     private var frameCount = 0
     private var lastFrameHost: Double = 0
     private var finishing = false
@@ -282,6 +284,35 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
                 let status = SCFrameStatus(rawValue: raw)
             else { return }
             statusCounts[raw, default: 0] += 1
+
+            // An idle frame means "nothing changed", not "nothing to record".
+            //
+            // ScreenCaptureKit only produces pixels when the content moves. A
+            // whole display always moves, so this never mattered; a single
+            // window that is largely still produces a handful of frames for a
+            // recording of any length. One nine-second capture of a terminal
+            // gave 13 complete frames and 523 idle ones — which plays as a
+            // frozen picture, and leaves the video track running 12.6s against
+            // 9.2s of audio, because a track assembled from sparse samples does
+            // not end where the sound does. That divergence is the reported
+            // lip-sync fault, and it only ever appeared on window captures.
+            //
+            // So an idle frame repeats the last real one at the current time.
+            // Identical frames cost almost nothing to encode — H.264 spends a
+            // few bytes saying "the same again" — and the track comes out
+            // continuous at the frame rate that was asked for.
+            if status == .idle || status == .blank {
+                guard sessionStarted, let videoInput, videoInput.isReadyForMoreMediaData,
+                    let last = lastComplete
+                else { return }
+                let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                guard let repeated = Self.retimed(last, to: pts) else { return }
+                videoInput.append(repeated)
+                frameCount += 1
+                lastFrameHost = pts.seconds
+                return
+            }
+
             guard status == .complete || status == .started else { return }
 
             guard let writer, let videoInput else { return }
@@ -298,6 +329,7 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
                 videoInput.append(sampleBuffer)
                 frameCount += 1
                 lastFrameHost = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+                lastComplete = sampleBuffer
             }
 
         case .audio:
@@ -365,6 +397,27 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
     }
 
     // MARK: - Helpers
+
+    /// The same frame, stamped with a later time.
+    ///
+    /// A writer input will not take the same sample twice — presentation times
+    /// have to increase — so a repeat is a copy carrying only new timing. The
+    /// pixels are shared rather than duplicated.
+    private static func retimed(_ buffer: CMSampleBuffer, to pts: CMTime) -> CMSampleBuffer? {
+        var timing = CMSampleTimingInfo(
+            duration: .invalid, presentationTimeStamp: pts, decodeTimeStamp: .invalid)
+        var copy: CMSampleBuffer?
+        guard
+            CMSampleBufferCreateCopyWithNewTiming(
+                allocator: kCFAllocatorDefault,
+                sampleBuffer: buffer,
+                sampleTimingEntryCount: 1,
+                sampleTimingArray: &timing,
+                sampleBufferOut: &copy
+            ) == noErr
+        else { return nil }
+        return copy
+    }
 
     /** Readable names, so meta.json says "idle" rather than "3". */
     private static func statusName(_ raw: Int) -> String {

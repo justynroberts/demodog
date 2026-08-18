@@ -6,6 +6,18 @@ is where finished work waits.
 
 ## 1.4.0 — 2026-08-18
 
+- **A window capture recorded almost no frames, and its audio drifted.** Both
+  were the same fault. ScreenCaptureKit produces pixels only when the content
+  changes, and an idle frame was discarded as having nothing in it. A whole
+  display always changes, so this never showed; one window that is largely
+  still does not. A nine-second capture of a terminal recorded **13 frames**
+  against 523 idle ones — which plays as a frozen picture, and leaves the video
+  track running 12.6s against 9.2s of audio, because a track assembled from
+  sparse samples does not end where the sound does. That divergence is the
+  lip-sync fault, and it is why it only ever appeared on window captures. An
+  idle frame now repeats the last real one at the current time; identical
+  frames cost a few bytes each to encode.
+
 - **Turning the camera bubble off removed your narration from the export.** The
   microphone is recorded into the camera file, and one flag decided both
   whether the bubble was drawn *and* whether that file was read at all — so
