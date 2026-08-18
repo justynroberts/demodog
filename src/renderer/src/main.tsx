@@ -8,13 +8,19 @@ import StudioApp from './StudioApp'
 import ControlBar from './recorder/ControlBar'
 import Countdown from './recorder/Countdown'
 import Splash from './ui/Splash'
+import ReadyPanel from './recorder/ReadyPanel'
 
 // Several windows share one bundle; the hash decides which one this is.
 const [route, query] = (window.location.hash.replace('#', '') || '/studio').split('?')
 const params = new URLSearchParams(query ?? '')
 
 // These routes render into transparent windows and must not paint a ground.
-if (route === '/countdown' || route === '/bar' || route === '/splash') {
+if (
+  route === '/countdown' ||
+  route === '/bar' ||
+  route === '/splash' ||
+  route === '/ready'
+) {
   document.documentElement.classList.add('transparent-window')
 }
 
@@ -22,6 +28,7 @@ function Root(): React.ReactNode {
   if (route === '/bar') return <ControlBar />
   if (route === '/countdown') return <Countdown from={Number(params.get('n') ?? 3)} />
   if (route === '/splash') return <Splash />
+  if (route === '/ready') return <ReadyPanel />
   return <StudioApp />
 }
 

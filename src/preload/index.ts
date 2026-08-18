@@ -95,6 +95,24 @@ const api = {
   focusWindow: (windowId: number): Promise<boolean> =>
     ipcRenderer.invoke('source:focus', windowId),
 
+  /** The floating ready-to-record panel. */
+  showReady: (detail: { title: string; hint: string }): Promise<void> =>
+    ipcRenderer.invoke('ready:show', detail),
+  hideReady: (): Promise<void> => ipcRenderer.invoke('ready:hide'),
+  /** Sent by the panel; heard by the studio, which owns the settings. */
+  sendReadyAction: (action: 'start' | 'back'): void =>
+    ipcRenderer.send('ready:action', action),
+  onReadyAction: (fn: (action: 'start' | 'back') => void): (() => void) => {
+    const handler = (_e: unknown, action: 'start' | 'back'): void => fn(action)
+    ipcRenderer.on('ready:action', handler)
+    return () => ipcRenderer.removeListener('ready:action', handler)
+  },
+  onReadyDetail: (fn: (detail: { title: string; hint: string }) => void): (() => void) => {
+    const handler = (_e: unknown, detail: { title: string; hint: string }): void => fn(detail)
+    ipcRenderer.on('ready:detail', handler)
+    return () => ipcRenderer.removeListener('ready:detail', handler)
+  },
+
   pickImage: (): Promise<string | null> => ipcRenderer.invoke('dialog:image'),
 
   /**

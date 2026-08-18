@@ -1,6 +1,5 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
 import { api } from '../api'
 import Tour, { TOUR_STEPS, markTourSeen, tourSeen } from './Tour'
 import { MadeByFintonLabs, Segmented, Toggle } from '../ui/controls'
@@ -350,6 +349,21 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
     }
   }, [cameraId, previewNonce, optionTab])
 
+  // The floating panel has the only start button that survives another app
+  // being raised, so its presses are what actually begin a take.
+  useEffect(() => {
+    return api.onReadyAction((action) => {
+      if (action === 'back') {
+        void api.hideReady()
+        setStaged(false)
+      } else {
+        void start()
+      }
+    })
+    // `start` is redefined every render; the listener is re-registered with it
+    // so it always closes over the current settings.
+  })
+
   // ---- start -------------------------------------------------------------
 
   /**
@@ -361,8 +375,17 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
    */
   const stage = async (): Promise<void> => {
     if (!selected) return
-    if (selected.kind === 'window') await api.focusWindow(selected.id)
     setStaged(true)
+    await api.showReady({
+      title: selectedLabel(),
+      hint:
+        selected.kind === 'window'
+          ? 'That window is at the front. Arrange anything else, then start — the countdown gives you three more seconds.'
+          : 'Arrange your windows, then start — the countdown gives you three more seconds.'
+    })
+    // Raised after the panel is up, so the panel is never the thing that gets
+    // covered by the window it just brought forward.
+    if (selected.kind === 'window') await api.focusWindow(selected.id)
   }
 
   const start = async (): Promise<void> => {
@@ -389,6 +412,8 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
         cameraDeviceId: cameraId || null,
         micDeviceId: micId || null
       })
+      void api.hideReady()
+      setStaged(false)
       onRecording()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -756,37 +781,6 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
           Let&rsquo;s Start
         </button>
       </aside>
-
-      {staged &&
-        createPortal(
-          // Deliberately a small panel rather than a full screen. The whole
-          // point of this step is arranging the windows behind it, so it covers
-          // as little of them as possible and stays out of the middle.
-          <div className="ready-card snap">
-            <span className="label">Ready</span>
-            <h2>{selectedLabel()}</h2>
-            <p className="hint">
-              {selected?.kind === 'window'
-                ? 'That window has been brought to the front. Arrange anything else you need, then start — the countdown gives you three more seconds.'
-                : 'Arrange your windows the way you want them, then start — the countdown gives you three more seconds.'}
-            </p>
-            {error && (
-              <p className="hint" style={{ color: 'var(--danger)' }}>
-                {error}
-              </p>
-            )}
-            <div className="ready-actions">
-              <button className="btn ghost" onClick={() => setStaged(false)} disabled={starting}>
-                Back
-              </button>
-              <button className="record-cta" onClick={() => void start()} disabled={starting}>
-                <span className="rec-dot" />
-                {starting ? 'Starting…' : 'Start recording'}
-              </button>
-            </div>
-          </div>,
-          document.body
-        )}
 
       {tourStep !== null && <Tour step={tourStep} onStep={showTourStep} onClose={endTour} />}
     </div>

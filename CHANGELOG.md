@@ -8,7 +8,10 @@ is where finished work waits.
 
 - **Choosing a window now brings it to the front**, and there is a step between
   choosing what to record and recording it. The first button says *Let's Start*
-  and moves to a small panel in the corner; the recording begins from there.
+  and raises a small panel that floats above everything, including the window it
+  just brought forward; the recording begins from there. It has to be its own
+  window rather than part of the studio, because raising another application
+  puts the studio behind it — and would take the start button with it.
   Everything before that point is configuration, everything after it is
   arranging your actual screen, and having the start button at the end of a
   settings panel meant the first seconds of every take were spent moving

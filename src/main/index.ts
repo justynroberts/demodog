@@ -272,6 +272,53 @@ function createStudioWindow(): void {
  * microphone capture, because it is the one renderer guaranteed to be alive for
  * the whole take.
  */
+let readyWindow: BrowserWindow | null = null
+
+/**
+ * The floating "ready to record" panel.
+ *
+ * A window of its own rather than a panel inside the studio, because the step
+ * it belongs to *raises another application* — which puts the studio window
+ * behind it, taking the start button with it. The one control that has to
+ * survive that is the one that starts the recording.
+ *
+ * Same treatment as the control bar: above everything, on every space, and
+ * never stealing focus, since the user is arranging other windows while it is
+ * up and a panel that grabs the keyboard would fight them for it.
+ */
+function createReadyWindow(): BrowserWindow {
+  const display = screen.getPrimaryDisplay()
+  const width = 360
+  const height = 210
+
+  const panel = new BrowserWindow({
+    width,
+    height,
+    x: Math.round(display.workArea.x + display.workArea.width - width - 24),
+    y: Math.round(display.workArea.y + display.workArea.height - height - 24),
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    movable: true,
+    skipTaskbar: true,
+    show: false,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  panel.setAlwaysOnTop(true, 'screen-saver')
+  panel.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  panel.loadURL(rendererURL('/ready'))
+  panel.once('ready-to-show', () => panel.showInactive())
+  panel.on('closed', () => (readyWindow = null))
+  return panel
+}
+
 function createBarWindow(): BrowserWindow {
   const display = screen.getPrimaryDisplay()
   const width = 520
@@ -595,6 +642,26 @@ ipcMain.handle('sources:thumbnails', async () => {
  * one that sits idle and records almost nothing.
  */
 ipcMain.handle('source:focus', (_e, windowId: number) => focusWindow(Number(windowId)))
+
+/** Puts the floating ready panel up, with the text the studio worked out. */
+ipcMain.handle('ready:show', (_e, detail: { title: string; hint: string }) => {
+  if (!readyWindow) readyWindow = createReadyWindow()
+  const panel = readyWindow
+  const send = (): void => panel.webContents.send('ready:detail', detail)
+  if (panel.webContents.isLoading()) panel.webContents.once('did-finish-load', send)
+  else send()
+  panel.showInactive()
+})
+
+ipcMain.handle('ready:hide', () => {
+  readyWindow?.destroy()
+  readyWindow = null
+})
+
+/** The panel's buttons, relayed to the studio, which owns the capture settings. */
+ipcMain.on('ready:action', (_e, action: 'start' | 'back') => {
+  studioWindow?.webContents.send('ready:action', action)
+})
 
 ipcMain.handle('permissions:check', () => checkPermissions(false))
 ipcMain.handle('permissions:request', () => checkPermissions(true))
