@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.3.0 — 2026-08-18
 
 - **The recording played underneath the intro card.** Pressing play started the
   video immediately, and the card branch of the draw loop never paused it — so
