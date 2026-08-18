@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
+import { ensureTitleImages, phaseAt, recordingRuns } from '../engine/titles'
 import { Composition } from '../engine/composition'
 import { baseViewport } from '../engine/camera'
 import { generateSegments } from '../engine/autozoom'
@@ -188,7 +189,13 @@ export default function Editor({
         if (Math.abs(screen.currentTime - want) > 0.05) screen.currentTime = want
       }
       cardClock.current = performance.now()
-      void screen.play()
+      // Not while a card is showing. The recording is not on screen yet, and
+      // starting it here meant its audio played underneath the intro and the
+      // picture advanced behind the card — so the take was already several
+      // seconds in by the time the card lifted, and then snapped back. The
+      // draw loop starts it at the moment the card ends.
+      if (recordingRuns(phaseAt(timeRef.current, trim, leadIn, leadOut))) void screen.play()
+      else screen.pause()
       // The camera is started by the draw loop rather than here: its track
       // begins slightly after the screen's, so at t=0 it is not due yet.
       setPlaying(true)
@@ -318,10 +325,22 @@ export default function Editor({
   useEffect(() => {
     const screen = screenRef.current
     if (!screen) return
-    const onEnded = (): void => setPlaying(false)
+    const onEnded = (): void => {
+      // Reaching the end of the file is not the end of the piece when there is
+      // an outro still to come. Stopping here is what stopped the outro from
+      // ever being shown on a take whose video is a hair shorter than its trim
+      // — which is most of them, since the trim defaults to the full duration.
+      // The clock is handed to the card instead.
+      if (leadOut > 0 && timeRef.current < trim.end + leadOut - 0.02) {
+        timeRef.current = Math.max(timeRef.current, trim.end)
+        cardClock.current = performance.now()
+        return
+      }
+      setPlaying(false)
+    }
     screen.addEventListener('ended', onEnded)
     return () => screen.removeEventListener('ended', onEnded)
-  }, [recording])
+  }, [recording, trim, leadOut])
 
   useEffect(() => {
     const screen = screenRef.current
@@ -358,6 +377,14 @@ export default function Editor({
         // While a card is showing the recording is paused, so the clock has to
         // come from elsewhere: real time, advanced by hand.
         if (timeRef.current < trim.start || timeRef.current >= trim.end) {
+          // A card is the whole frame, so nothing of the recording should be
+          // running underneath it — not the picture and, more obviously, not
+          // the sound. Anything still playing here is stopped rather than left
+          // to be inaudible-but-advancing.
+          if (!screen.paused) screen.pause()
+          const camera = cameraRef.current
+          if (camera && !camera.paused) camera.pause()
+
           const now = performance.now()
           const step = Math.min(0.25, (now - cardClock.current) / 1000)
           cardClock.current = now
@@ -554,6 +581,12 @@ export default function Editor({
   const runExport = async (choice: ExportChoice): Promise<void> => {
     if (exporting) return
     setAskingExport(false)
+
+    // A card's logo and background have to be decoded before the first frame
+    // is drawn. The preview can afford to miss one and pick it up next frame;
+    // the exporter draws each frame once, so a picture chosen a moment ago
+    // would be silently missing from the file.
+    await ensureTitleImages([project.intro, project.outro])
 
     // The chosen size and rate are the project's from here on, so the preview
     // and the exported file cannot disagree about framing.

@@ -5,6 +5,7 @@ import { BACKGROUND_PRESETS, OUTPUT_PRESETS, mergeSettings } from '../engine/def
 import { Group, Segmented, Slider, Toggle } from '../ui/controls'
 import { CAPTION_FONTS, captionsFromCues } from '../engine/captions'
 import type { Caption } from '../engine/captions'
+import { DEFAULT_INTRO } from '../engine/titles'
 import type { CursorSettings, Project, Recording, ZoomSegment } from '../engine/types'
 import type { Profile } from '../../../shared/types'
 
@@ -1551,6 +1552,17 @@ function TitlesTab({ project, patch }: { project: Project; patch: Patcher }): Re
               onChange={(v) => set({ seconds: v })}
               format={(v) => `${v.toFixed(1)}s`}
             />
+            <span className="label">Font</span>
+            <select
+              value={value.fontFamily ?? DEFAULT_INTRO.fontFamily}
+              onChange={(e) => set({ fontFamily: e.target.value })}
+            >
+              {CAPTION_FONTS.map((font) => (
+                <option key={font} value={font}>
+                  {font}
+                </option>
+              ))}
+            </select>
             <Slider
               label="Title size"
               min={28}
@@ -1558,6 +1570,15 @@ function TitlesTab({ project, patch }: { project: Project; patch: Patcher }): Re
               step={2}
               value={value.titleSize}
               onChange={(v) => set({ titleSize: v })}
+              format={(v) => `${Math.round(v)}pt`}
+            />
+            <Slider
+              label="Subtitle size"
+              min={14}
+              max={90}
+              step={1}
+              value={value.subtitleSize}
+              onChange={(v) => set({ subtitleSize: v })}
               format={(v) => `${Math.round(v)}pt`}
             />
             <div className="row-between">
@@ -1576,6 +1597,44 @@ function TitlesTab({ project, patch }: { project: Project; patch: Patcher }): Re
                 onChange={(e) => set({ background: e.target.value })}
               />
             </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                className="btn small"
+                onClick={() => {
+                  void api.pickImage().then((src) => {
+                    if (src) set({ backgroundSrc: src })
+                  })
+                }}
+              >
+                {value.backgroundSrc ? 'Change picture…' : 'Background picture…'}
+              </button>
+              {value.backgroundSrc && (
+                <button className="btn small ghost" onClick={() => set({ backgroundSrc: null })}>
+                  Remove
+                </button>
+              )}
+            </div>
+            {value.backgroundSrc && (
+              <>
+                <span className="label">Fit</span>
+                <select
+                  value={value.backgroundFit ?? 'cover'}
+                  onChange={(e) => set({ backgroundFit: e.target.value as 'cover' | 'contain' })}
+                >
+                  <option value="cover">Fill the frame (crops)</option>
+                  <option value="contain">Fit the whole picture</option>
+                </select>
+                <Slider
+                  label="Dim"
+                  min={0}
+                  max={0.9}
+                  step={0.05}
+                  value={value.backgroundDim ?? 0.45}
+                  onChange={(v) => set({ backgroundDim: v })}
+                  format={(v) => (v < 0.01 ? 'None' : `${Math.round(v * 100)}%`)}
+                />
+              </>
+            )}
             <Slider
               label="Fade"
               min={0}

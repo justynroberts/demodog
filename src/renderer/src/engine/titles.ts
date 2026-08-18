@@ -26,8 +26,28 @@ export interface TitleCard {
   titleSize: number
   subtitleSize: number
   color: string
+  /** The face the card is set in. Its own, rather than the captions'. */
+  fontFamily: string
   /** Drawn behind the text; the recording's own background is used when null. */
   background: string
+  /**
+   * A full-bleed image behind the text.
+   *
+   * Drawn over `background` rather than instead of it, so a picture that does
+   * not match the frame's aspect has something deliberate behind it rather
+   * than whatever the canvas last held.
+   */
+  backgroundSrc: string | null
+  /** How the background image fills the frame. */
+  backgroundFit: 'cover' | 'contain'
+  /**
+   * A wash of `background` over the image, 0–1.
+   *
+   * A photograph is rarely quiet enough to set type over, and the alternative
+   * is asking the user to pick a text colour that works against every part of
+   * their own picture.
+   */
+  backgroundDim: number
   /** A logo or image above the text. */
   imageSrc: string | null
   imageHeight: number
@@ -43,7 +63,11 @@ export const DEFAULT_INTRO: TitleCard = {
   titleSize: 88,
   subtitleSize: 34,
   color: '#ffffff',
+  fontFamily: 'Bricolage Grotesque',
   background: '#0d0d12',
+  backgroundSrc: null,
+  backgroundFit: 'cover',
+  backgroundDim: 0.45,
   imageSrc: null,
   imageHeight: 180,
   fade: 0.45
@@ -55,8 +79,15 @@ export const DEFAULT_OUTRO: TitleCard = {
   subtitle: ''
 }
 
-/** Cached decode, so a card does not re-decode its logo on every frame. */
-const images = new Map<string, HTMLImageElement>()
+/**
+ * Cached decode, so a card does not re-decode its logo on every frame.
+ *
+ * Exported so the checks can seed it with a stand-in image: the drawing code
+ * is where a background gets stretched or mis-cropped, and that is not
+ * something a screenshot review reliably catches.
+ */
+export const titleImages = new Map<string, HTMLImageElement>()
+const images = titleImages
 
 export function titleImage(src: string): HTMLImageElement | null {
   const existing = images.get(src)
@@ -65,6 +96,64 @@ export function titleImage(src: string): HTMLImageElement | null {
   image.src = src
   images.set(src, image)
   return null
+}
+
+/** Which part of the piece a time falls in. */
+export type Phase = 'intro' | 'recording' | 'outro' | 'ended'
+
+/**
+ * Where `t` sits relative to the recording and its cards.
+ *
+ * Named rather than left as an inline comparison because the answer decides
+ * whether the recording's *audio* is running, and getting that wrong is not
+ * subtle: the take played underneath the intro card, so by the time the card
+ * lifted the recording was already several seconds in and then jumped back.
+ */
+export function phaseAt(
+  t: number,
+  range: { start: number; end: number },
+  leadIn: number,
+  leadOut: number
+): Phase {
+  if (t < range.start) return leadIn > 0 ? 'intro' : 'recording'
+  if (t < range.end) return 'recording'
+  if (t < range.end + leadOut) return 'outro'
+  return 'ended'
+}
+
+/** The recording plays during its own part of the piece and nowhere else. */
+export function recordingRuns(phase: Phase): boolean {
+  return phase === 'recording'
+}
+
+/**
+ * Waits for every image a set of cards needs.
+ *
+ * `titleImage` returns null until a decode finishes, which is the right answer
+ * for a preview — the next frame is 16ms away and will have it. The exporter
+ * gets one attempt at each frame, so a picture chosen a moment before pressing
+ * Export would simply be absent from the file, with nothing to say so.
+ */
+export async function ensureTitleImages(cards: TitleCard[]): Promise<void> {
+  const sources = cards
+    .filter((card) => card.enabled)
+    .flatMap((card) => [card.imageSrc, card.backgroundSrc])
+    .filter((src): src is string => !!src)
+
+  await Promise.all(
+    sources.map(
+      (src) =>
+        new Promise<void>((resolve) => {
+          if (titleImage(src)) return resolve()
+          const image = images.get(src)
+          if (!image) return resolve()
+          // Resolve either way: a picture that cannot be decoded should not
+          // stop the export, it should simply not be in it.
+          image.addEventListener('load', () => resolve(), { once: true })
+          image.addEventListener('error', () => resolve(), { once: true })
+        })
+    )
+  )
 }
 
 /**
@@ -95,18 +184,57 @@ function alphaFor(progress: number, card: TitleCard): number {
   return Math.max(0, Math.min(rising, falling))
 }
 
+/**
+ * Fills the frame with an image without distorting it.
+ *
+ * `cover` crops the overflowing axis; `contain` fits the whole picture and
+ * leaves the card's background colour showing either side. Scaling it to the
+ * frame instead — the obvious one-liner — stretches faces, which is the single
+ * most obvious way for a title card to look amateurish.
+ */
+function drawCover(
+  ctx: Ctx,
+  image: HTMLImageElement,
+  output: { width: number; height: number },
+  fit: 'cover' | 'contain'
+): void {
+  const ratio = image.naturalWidth / image.naturalHeight
+  const frame = output.width / output.height
+  const wide = fit === 'cover' ? ratio > frame : ratio < frame
+  const width = wide ? output.height * ratio : output.width
+  const height = wide ? output.height : output.width / ratio
+  ctx.drawImage(image, (output.width - width) / 2, (output.height - height) / 2, width, height)
+}
+
 export function drawTitleCard(
   ctx: Ctx,
   card: TitleCard,
   progress: number,
   output: { width: number; height: number },
-  fontFamily: string
+  /** Used only when the card has no face of its own — older projects. */
+  fallbackFont: string
 ): void {
   const alpha = alphaFor(progress, card)
+  const fontFamily = card.fontFamily || fallbackFont
 
   ctx.save()
   ctx.fillStyle = card.background
   ctx.fillRect(0, 0, output.width, output.height)
+
+  const backdrop = card.backgroundSrc ? titleImage(card.backgroundSrc) : null
+  if (backdrop) {
+    drawCover(ctx, backdrop, output, card.backgroundFit)
+    // The wash is part of the background, not of the text, so it is painted at
+    // full strength and the card fades as one thing. Dimming it along with the
+    // type would make the picture flash to full brightness on the way in.
+    if (card.backgroundDim > 0.001) {
+      ctx.save()
+      ctx.globalAlpha = Math.min(1, card.backgroundDim)
+      ctx.fillStyle = card.background
+      ctx.fillRect(0, 0, output.width, output.height)
+      ctx.restore()
+    }
+  }
 
   ctx.globalAlpha = alpha
   // Authored against 1080 so a card looks the same at any export size.

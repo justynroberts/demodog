@@ -6,6 +6,26 @@ is where finished work waits.
 
 ## Unreleased
 
+- **The recording played underneath the intro card.** Pressing play started the
+  video immediately, and the card branch of the draw loop never paused it — so
+  the take's audio ran while the title was on screen and the picture advanced
+  behind it, then snapped back when the card lifted. Nothing of the recording
+  runs while a card is showing now.
+- **The outro was often never shown.** A take's video file can end a hair before
+  its trim does, and reaching the end of the file stopped playback outright.
+  With an outro still to come that is not the end of the piece, so the clock is
+  handed to the card instead of stopping.
+- **Title cards can carry a picture.** A full-bleed background image, set to
+  fill the frame or fit inside it, with an adjustable wash of the background
+  colour over it so text stays readable over a photograph.
+- Cards choose their own font and their own subtitle size, rather than
+  borrowing the caption face.
+- Card artwork is decoded before an export begins. The preview can miss an
+  image and pick it up on the next frame; the exporter draws each frame once, so
+  a picture chosen just before pressing Export was silently absent from the file.
+
+## 1.2.0 — 2026-08-18
+
 - **Title cards are on the timeline.** They were playable but not scrubbable:
   the timeline started at the beginning of the recording, and a card is time
   *before* that, so the playhead sat pinned at the left edge for the whole intro
