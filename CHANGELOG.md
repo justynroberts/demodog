@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.4.1 — 2026-08-18
 
 - **A recording now refuses rather than capturing the wrong window.** Windows
   are identified by an id, and macOS reuses those ids. That was academic while
