@@ -14,6 +14,10 @@ import { fadeOutAndPause, isRamping, rampVolume } from './mediaFade'
 import { musicLevelAt, musicTimeAt } from './music'
 import { formatTime } from '../ui/controls'
 import Timeline from './Timeline'
+
+/** How narrow and how wide the settings rail may be dragged. */
+const RAIL_MIN = 260
+const RAIL_MAX = 720
 import Inspector from './Inspector'
 import ExportedPanel from './ExportedPanel'
 import ExportDialog, { formatDuration, rememberRate, type ExportChoice } from './ExportDialog'
@@ -68,6 +72,47 @@ export default function Editor({
   const [selected, setSelected] = useState<string | null>(null)
   const [selectedCaption, setSelectedCaption] = useState<string | null>(null)
   /** Armed by the inspector: the next drag on the preview chooses a zoom area. */
+  /**
+   * How wide the settings rail is, and whether it is there at all.
+   *
+   * A fixed 300px meant six tabs in a single scrolling column, so anything past
+   * the first panel was below the fold and Music sat buried inside Camera.
+   * Widening it buys tab room; collapsing it gives the whole window back to the
+   * picture, which is what you want while judging a shot rather than changing
+   * one. Remembered, because it is a working preference rather than a decision
+   * to be made again every launch.
+   */
+  const [rail, setRail] = useState<number>(() => {
+    const saved = Number(localStorage.getItem('demodog-rail'))
+    return Number.isFinite(saved) && saved >= RAIL_MIN ? Math.min(saved, RAIL_MAX) : 300
+  })
+  const [railOpen, setRailOpen] = useState(
+    () => localStorage.getItem('demodog-rail-open') !== 'false'
+  )
+  useEffect(() => {
+    localStorage.setItem('demodog-rail', String(rail))
+    localStorage.setItem('demodog-rail-open', String(railOpen))
+  }, [rail, railOpen])
+
+  /** Dragging the divider between the picture and the settings. */
+  const beginRailDrag = (event: React.PointerEvent): void => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    const from = event.clientX
+    const start = rail
+    const move = (e: PointerEvent): void => {
+      // Rightwards narrows: the rail is pinned to the right edge, so the
+      // divider moving right takes width away from it.
+      setRail(Math.max(RAIL_MIN, Math.min(RAIL_MAX, start - (e.clientX - from))))
+    }
+    const up = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
   const [picking, setPicking] = useState(false)
   const pickRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const [exported, setExported] = useState<{ path: string; captions: number } | null>(null)
@@ -796,7 +841,10 @@ export default function Editor({
   const autoCount = segments.filter((s) => s.auto).length
 
   return (
-    <div className="editor">
+    <div
+      className={railOpen ? 'editor' : 'editor rail-closed'}
+      style={{ ['--rail' as string]: `${railOpen ? rail : 0}px` }}
+    >
       <div className="stage">
         <canvas
           ref={canvasRef}
@@ -950,7 +998,36 @@ export default function Editor({
         />
       )}
 
+      {/* The divider. A real target rather than a hairline: a 2px edge is a
+          thing you hunt for, and this one is dragged often. */}
+      {railOpen && (
+        <div
+          className="rail-grip"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the settings panel"
+          onPointerDown={beginRailDrag}
+          onDoubleClick={() => setRail(300)}
+          title="Drag to resize · double-click to reset"
+        />
+      )}
+
+      {/* With the rail away, one tab remains to bring it back. Hiding a panel
+          with no way back is how a control disappears for good. */}
+      {!railOpen && (
+        <button
+          className="rail-pullout"
+          onClick={() => setRailOpen(true)}
+          aria-label="Show the settings panel"
+          title="Show the settings panel"
+        >
+          <span>Settings</span>
+        </button>
+      )}
+
       <Inspector
+        wide={rail >= 420}
+        onCollapse={() => setRailOpen(false)}
         project={project}
         onChange={setProject}
         segments={segments}

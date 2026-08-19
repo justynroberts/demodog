@@ -2368,12 +2368,6 @@ dialog.info a {
   text-overflow: ellipsis;
 }
 
-.bar-ready-unused span {.bar-ready-text span {
-  font-size: 10.5px;
-  line-height: 1.35;
-  color: var(--muted);
-}
-
 /* ---- music lane --------------------------------------------------------- */
 
 .track.music {
@@ -2414,4 +2408,128 @@ dialog.info a {
   background: var(--violet);
   opacity: 0.5;
   pointer-events: none;
+}
+
+/* ---- a rail you can size -------------------------------------------------- */
+
+/* The divider between the picture and the settings. Wider than it looks: the
+   visible line is 2px, the target is 10, because a hairline is something you
+   hunt for and this is dragged often. */
+.rail-grip {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  position: relative;
+  width: 10px;
+  margin-right: -10px;
+  z-index: 30;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.rail-grip::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 4px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+
+.rail-grip:hover::after,
+.rail-grip:active::after {
+  background: var(--violet);
+}
+
+/* Collapsed: the grid column goes to nothing and the picture takes the room. */
+.editor.rail-closed .inspector {
+  display: none;
+}
+
+/* The one control left when the panel is away. Vertical, on the right edge,
+   because that is where the thing it restores lives. */
+.rail-pullout {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 30;
+  padding: 14px 6px;
+  border: var(--border);
+  border-right: none;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  writing-mode: vertical-rl;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition:
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.rail-pullout:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* Tabs wrap once there is room, so a seventh does not shrink the rest to
+   nothing — which is the whole reason Music was buried inside Camera. */
+.insp-tabs {
+  flex-wrap: wrap;
+}
+
+.insp-tab-name {
+  display: none;
+}
+
+.inspector.wide .insp-tabs button {
+  flex: 1 0 33%;
+  grid-auto-flow: column;
+  gap: 8px;
+  place-items: center;
+  padding: 11px 8px;
+}
+
+.inspector.wide .insp-tab-name {
+  display: inline;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.insp-caption {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.insp-collapse {
+  margin-left: auto;
+  padding: 0 6px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.insp-collapse:hover {
+  color: var(--text);
+}
+
+/* Wide enough for two columns of controls, which is where the extra width
+   pays for itself rather than only stretching every slider.
+ *
+ * Grid rather than multi-column: the body is a flex container, and `column-count`
+ * has no effect on one — the rule was written, applied, and did nothing. Grid
+ * also keeps each group whole instead of letting one flow across a column
+ * break, which is what you want for a titled panel of controls. */
+.inspector.wide .insp-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  align-items: start;
+  gap: 16px 14px;
 }

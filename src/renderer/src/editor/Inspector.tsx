@@ -32,6 +32,9 @@ function extractProfileSettings(project: Project): Record<string, unknown> {
 }
 
 interface Props {
+  /** True once the rail is wide enough to name its tabs rather than only draw them. */
+  wide?: boolean
+  onCollapse?: () => void
   project: Project
   onChange: (project: Project) => void
   segments: ZoomSegment[]
@@ -54,7 +57,7 @@ interface Props {
   onProfileId: (id: string) => void
 }
 
-type Tab = 'style' | 'zoom' | 'cursor' | 'camera' | 'text' | 'titles'
+type Tab = 'style' | 'zoom' | 'cursor' | 'camera' | 'audio' | 'text' | 'titles'
 
 /**
  * The inspector's tabs.
@@ -105,6 +108,18 @@ const TABS: { id: Tab; name: string; hint: string; icon: ReactNode }[] = [
     )
   },
   {
+    id: 'audio',
+    name: 'Audio',
+    hint: 'Levels for the recording and the microphone, and a music bed under it all.',
+    icon: (
+      <>
+        <path d="M9 18V6l10-2v12" />
+        <circle cx="6.5" cy="18" r="2.5" />
+        <circle cx="16.5" cy="16" r="2.5" />
+      </>
+    )
+  },
+  {
     id: 'text',
     name: 'Captions',
     hint: 'Transcribe what you said, then edit the lines and style them.',
@@ -129,7 +144,7 @@ const TABS: { id: Tab; name: string; hint: string; icon: ReactNode }[] = [
 ]
 
 export default function Inspector(props: Props): ReactNode {
-  const { project, onChange } = props
+  const { project, onChange, wide = false, onCollapse } = props
   const [tab, setTab] = useState<Tab>('style')
   /** Whichever tab the pointer is over, so the caption can preview it. */
   const [hovered, setHovered] = useState<Tab | null>(null)
@@ -145,7 +160,7 @@ export default function Inspector(props: Props): ReactNode {
   const described = TABS.find((t) => t.id === (hovered ?? tab)) ?? TABS[0]
 
   return (
-    <aside className="inspector">
+    <aside className={wide ? 'inspector wide' : 'inspector'}>
       <div className="insp-tabs" role="tablist">
         {TABS.map(({ id, name, hint, icon }) => (
           <button
@@ -162,6 +177,9 @@ export default function Inspector(props: Props): ReactNode {
             <svg viewBox="0 0 24 24" aria-hidden="true">
               {icon}
             </svg>
+            {/* Always rendered, revealed by width. Mounting it on resize would
+                rebuild the tabs mid-drag and drop the hover state. */}
+            <span className="insp-tab-name">{name}</span>
           </button>
         ))}
       </div>
@@ -174,6 +192,14 @@ export default function Inspector(props: Props): ReactNode {
       <div className="insp-caption">
         <strong>{described.name}</strong>
         <span>{described.hint}</span>
+        <button
+          className="insp-collapse"
+          onClick={onCollapse}
+          aria-label="Hide the settings panel"
+          title="Hide the settings panel"
+        >
+          ›
+        </button>
       </div>
 
       <div className="insp-body">
@@ -192,6 +218,7 @@ export default function Inspector(props: Props): ReactNode {
         {tab === 'zoom' && <ZoomTab {...props} patch={patch} />}
         {tab === 'cursor' && <CursorTab project={project} patch={patch} />}
         {tab === 'camera' && <CameraTab {...props} patch={patch} />}
+        {tab === 'audio' && <AudioTab project={project} patch={patch} />}
         {tab === 'text' && <CaptionsTab {...props} set={set} patch={patch} />}
         {tab === 'titles' && <TitlesTab project={project} patch={patch} />}
       </div>
@@ -1144,6 +1171,21 @@ function CameraTab({
         )}
       </Group>
 
+    </>
+  )
+}
+
+/**
+ * Everything you can hear, in one place.
+ *
+ * These lived at the bottom of the Camera tab, below the bubble's shape and
+ * position — so the music controls were two scrolls past anything about music,
+ * and were found by accident if at all. A rail that can be widened is what
+ * makes a seventh tab affordable.
+ */
+function AudioTab({ project, patch }: { project: Project; patch: Patcher }): ReactNode {
+  return (
+    <>
       <Group title="Audio">
         <Slider
           label="System audio"
