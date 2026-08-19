@@ -120,6 +120,28 @@ export async function focusWindow(windowId: number): Promise<boolean> {
   }
 }
 
+export interface AudioProbe {
+  path: string
+  hasAudio: boolean
+  duration?: number
+  peakDb?: number
+}
+
+/** What a file's audio actually contains. Never throws; unknown reads as none. */
+export async function probeAudio(path: string): Promise<AudioProbe> {
+  try {
+    const result = await runOnce(['probe', '--audio', path])
+    return {
+      path,
+      hasAudio: result.hasAudio === true,
+      duration: typeof result.duration === 'number' ? result.duration : undefined,
+      peakDb: typeof result.peakDb === 'number' ? result.peakDb : undefined
+    }
+  } catch {
+    return { path, hasAudio: false }
+  }
+}
+
 export async function listSources(): Promise<Sources> {
   const result = await runOnceShared(['list'])
   if (result.event === 'error') {
@@ -369,6 +391,11 @@ function describeTranscribeError(code: string, message: string): string {
         'This Mac has no on-device speech model for that language. ' +
         'Add the language under System Settings → General → Language & Region, ' +
         'then try again. Transcription never uploads your recording.'
+      )
+    case 'unreadable':
+      return (
+        'No audio could be read from this take. The narration is recorded with ' +
+        'the camera, so a take made without a microphone has nothing to transcribe.'
       )
     case 'missing':
       return 'That take has no audio to transcribe.'

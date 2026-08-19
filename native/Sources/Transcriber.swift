@@ -187,6 +187,14 @@ enum Transcriber {
             } catch {
                 // A window that fails is a gap, not a failure: the rest of the
                 // take is still worth having, and saying so beats abandoning it.
+                //
+                // But it is counted. These were warnings and nothing else, so a
+                // file that failed to extract on *every* window — a camera
+                // track with no audio in it — produced no cues, no failures and
+                // no explanation, and the user was told nothing was heard.
+                windowsTried += 1
+                windowsFailed += 1
+                lastFailure = 6
                 emit([
                     "event": "warning",
                     "at": offset,
@@ -210,12 +218,15 @@ enum Transcriber {
         // alarming anyone about, and the transcript speaks for itself.
         if produced == 0 && windowsTried > 0 && windowsFailed == windowsTried {
             let denied = lastFailure == 4
+            let unreadable = lastFailure == 6
             emit([
                 "event": "error",
-                "code": denied ? "denied" : "unavailable",
+                "code": denied ? "denied" : unreadable ? "unreadable" : "unavailable",
                 "message": denied
                     ? "Speech Recognition permission was not granted, so nothing could be transcribed."
-                    : "The speech recogniser was unavailable, so nothing could be transcribed.",
+                    : unreadable
+                        ? "No audio could be read from this take."
+                        : "The speech recogniser was unavailable, so nothing could be transcribed.",
                 "windows": windowsTried,
             ])
             exit(denied ? 4 : 5)

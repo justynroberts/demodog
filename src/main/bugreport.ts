@@ -5,6 +5,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { probeAudio } from './recorder'
 
 const run = promisify(execFile)
 
@@ -86,6 +87,24 @@ export async function collectDiagnostics(note: string): Promise<{ zip: string; b
       const meta = join(takes, take.name, 'meta.json')
       if (existsSync(meta)) {
         await writeFile(join(folder, `${take.name}.meta.json`), await readFile(meta, 'utf8'))
+      }
+      // What each track actually contains. "Transcription found nothing" has
+      // three different causes — no audio track, a silent one, and speech the
+      // recogniser could not make out — and they are indistinguishable from a
+      // description. A peak level settles it without anyone sending a file.
+      const lines: string[] = []
+      for (const name of ['camera.mp4', 'camera.webm', 'screen.mp4']) {
+        const path = join(takes, take.name, name)
+        if (!existsSync(path)) continue
+        const probe = await probeAudio(path)
+        lines.push(
+          probe.hasAudio
+            ? `${name}: audio, ${probe.duration?.toFixed(1) ?? '?'}s, peaks ${probe.peakDb?.toFixed(1) ?? '?'} dB`
+            : `${name}: no audio track`
+        )
+      }
+      if (lines.length) {
+        await writeFile(join(folder, `${take.name}.audio.txt`), lines.join('\n'), 'utf8')
       }
     }
   }

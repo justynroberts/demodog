@@ -30,7 +30,8 @@ import {
   openPrivacySettings,
   reapStrayHelpers,
   transcribe,
-  focusWindow
+  focusWindow,
+  probeAudio
 } from './recorder'
 import type {
   RecordOptions,
@@ -655,10 +656,42 @@ ipcMain.handle('permissions:open', (_e, kind) => openPrivacySettings(kind))
  * fallback when nobody spoke into a microphone.
  */
 ipcMain.handle('transcribe:run', async (event, dir: string, locale: string) => {
-  const spoken = ['camera.mp4', 'camera.webm', 'screen.mp4']
+  const candidates = ['camera.mp4', 'camera.webm', 'screen.mp4']
     .map((name) => join(dir, name))
-    .find((candidate) => existsSync(candidate))
-  if (!spoken) throw new Error('That take has no audio to transcribe.')
+    .filter((candidate) => existsSync(candidate))
+  if (candidates.length === 0) throw new Error('That take has no audio to transcribe.')
+
+  // Chosen by what a file *contains*, not by which one exists.
+  //
+  // It used to take the first file present, which for a take recorded with a
+  // camera but no microphone is a video-only camera.mp4 — every window then
+  // failed to extract, and the user was told "no speech was heard". That is
+  // confidently wrong, and it sends someone to check a microphone level when
+  // the microphone was never in the take. It also meant the screen track, which
+  // may well have carried the sound, was never even considered.
+  const probes = await Promise.all(candidates.map((path) => probeAudio(path)))
+  // Below this a track is silence rather than quiet speech. A whisper at arm's
+  // length still peaks well above it; a muted input sits at the floor.
+  const SILENT_DB = -60
+  const spoken =
+    probes.find((p) => p.hasAudio && (p.peakDb ?? -120) > SILENT_DB)?.path ??
+    probes.find((p) => p.hasAudio)?.path
+
+  if (!spoken) {
+    throw new Error(
+      'None of the tracks in this take contain audio. Choose a microphone ' +
+        'before recording — the narration is captured with the camera, and ' +
+        'system audio alone is not transcribed.'
+    )
+  }
+  const chosen = probes.find((p) => p.path === spoken)
+  if ((chosen?.peakDb ?? 0) <= SILENT_DB) {
+    throw new Error(
+      `The audio in this take is silent (peaks at ${Math.round(chosen?.peakDb ?? -120)} dB). ` +
+        'The microphone was recorded but captured nothing — check it is not ' +
+        'muted, and that the right input was selected.'
+    )
+  }
 
   // Deliberately does *not* widen the `rec:` roots. Transcribing reads the
   // audio here in the main process and returns text; the renderer never streams

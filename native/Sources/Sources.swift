@@ -136,3 +136,73 @@ enum Permissions {
         exit(0)
     }
 }
+
+/**
+ * What a file's audio actually contains.
+ *
+ * Transcription picked its source by which file *existed*, not by which had
+ * anything in it — so a take recorded with a camera but no microphone handed
+ * the recogniser a video-only file, every window failed to extract, and the
+ * user was told "no speech was heard". That is confidently wrong: it sends
+ * someone to check their microphone level when the microphone was never in the
+ * take at all.
+ *
+ * Reports whether there is an audio track and how loud it gets, so the three
+ * cases — no track, silence, and genuinely no speech — can be told apart and
+ * said out loud.
+ */
+enum AudioProbe {
+    /// Only the opening is scanned. Peak level is being used to tell silence
+    /// from speech, and half a minute settles that for any real recording.
+    private static let scanSeconds = 30.0
+
+    static func run(path: String) async {
+        let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+        guard let audio = try? await asset.loadTracks(withMediaType: .audio).first ?? nil
+        else {
+            emit(["event": "probe", "hasAudio": false, "path": path])
+            exit(0)
+        }
+
+        let duration = (try? await CMTimeGetSeconds(asset.load(.duration))) ?? 0
+        var peak: Float = 0
+
+        if let reader = try? AVAssetReader(asset: asset) {
+            let output = AVAssetReaderTrackOutput(
+                track: audio,
+                outputSettings: [
+                    AVFormatIDKey: kAudioFormatLinearPCM,
+                    AVLinearPCMBitDepthKey: 32,
+                    AVLinearPCMIsFloatKey: true,
+                    AVLinearPCMIsNonInterleaved: false,
+                ])
+            reader.add(output)
+            reader.timeRange = CMTimeRange(
+                start: .zero, duration: CMTime(seconds: scanSeconds, preferredTimescale: 600))
+            reader.startReading()
+            while let buffer = output.copyNextSampleBuffer() {
+                guard let block = CMSampleBufferGetDataBuffer(buffer) else { continue }
+                var length = 0
+                var pointer: UnsafeMutablePointer<Int8>?
+                guard
+                    CMBlockBufferGetDataPointer(
+                        block, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &length,
+                        dataPointerOut: &pointer) == noErr, let raw = pointer
+                else { continue }
+                raw.withMemoryRebound(to: Float.self, capacity: length / 4) { samples in
+                    for i in 0..<(length / 4) { peak = max(peak, abs(samples[i])) }
+                }
+            }
+            reader.cancelReading()
+        }
+
+        // dBFS, floored so a digitally silent track reports a number rather
+        // than negative infinity, which nothing downstream wants to parse.
+        let db = peak > 0 ? 20 * log10(Double(peak)) : -120.0
+        emit([
+            "event": "probe", "hasAudio": true, "path": path,
+            "duration": duration, "peakDb": db,
+        ])
+        exit(0)
+    }
+}

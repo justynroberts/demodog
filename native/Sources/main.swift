@@ -50,6 +50,11 @@ case "focus":
     Task { await WindowFocus.run(windowID: CGWindowID(args.int("window") ?? 0)) }
     RunLoop.main.run()
 
+case "probe":
+    startWatchdog(seconds: 25, label: "probe")
+    Task { await AudioProbe.run(path: args.string("audio") ?? "") }
+    RunLoop.main.run()
+
 case "permissions":
     startWatchdog(seconds: 8, label: "permissions")
     Permissions.check(requesting: args.bool("request", default: false))

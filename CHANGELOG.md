@@ -4,6 +4,25 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## 1.4.4 — 2026-08-19
+
+- **"No speech was heard" was often not true.** Transcription chose its source
+  by which file *existed* rather than which had anything in it, so a take
+  recorded with a camera but no microphone handed the recogniser a video-only
+  file. Every window then failed to extract, those failures were emitted as
+  warnings nobody surfaced, and the count that would have caught it was only
+  incremented further down — past the point the failures happened. The result
+  was no words, no errors and a message that sent people to check a microphone
+  level when the microphone was never in the take. The screen track, which may
+  well have carried the sound, was never even considered.
+- The source is now chosen by what it contains, and the three causes are told
+  apart: no audio track at all, a track that is digital silence, and audio the
+  recogniser genuinely could not make out. The silent case reports the peak
+  level it measured.
+- Bug reports include what each track of the last few takes contains — length
+  and peak level — because those three cases are indistinguishable from a
+  description.
+
 ## 1.4.3 — 2026-08-19
 
 - **The camera vanished from the recording bar.** The bar shows Start before a
