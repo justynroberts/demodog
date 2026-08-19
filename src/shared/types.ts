@@ -44,6 +44,14 @@ export interface RecordOptions {
   windowId?: number
   /** The window's owning app when it was chosen, checked before recording. */
   windowApp?: string
+  /**
+   * Where the chosen window sits, so the countdown appears over it.
+   *
+   * A window capture carries no display id, so the countdown fell back to the
+   * primary display — counting down on a screen the user was not looking at
+   * while the one being recorded showed nothing.
+   */
+  windowBounds?: { x: number; y: number; width: number; height: number }
   fps: number
   systemAudio: boolean
   trackKeystrokes: boolean

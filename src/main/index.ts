@@ -321,6 +321,15 @@ function createBarWindow(): BrowserWindow {
  * whatever the user is about to demonstrate. Capture only starts once this has
  * finished, so it can never appear in the recording.
  */
+/** Which display the countdown belongs on for a given capture. */
+function countdownDisplay(options: RecordOptions): number | undefined {
+  if (options.displayId !== undefined) return options.displayId
+  const box = options.windowBounds
+  if (!box) return undefined
+  const centre = { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) }
+  return screen.getDisplayNearestPoint(centre).id
+}
+
 async function runCountdown(seconds: number, displayId?: number): Promise<void> {
   if (seconds <= 0) return
 
@@ -708,7 +717,10 @@ ipcMain.handle(
 
     // Count down *after* the camera has been acquired, so the device is warm
     // and the take starts the instant the counter hits zero.
-    await runCountdown(options.countdown ?? 0, options.displayId)
+    // Over whatever is being recorded: the chosen display, or the display the
+    // chosen window sits on. Counting down on a screen the user is not watching
+    // is the same as not counting down at all.
+    await runCountdown(options.countdown ?? 0, countdownDisplay(options))
 
     try {
       const info = await recorder.start(options)

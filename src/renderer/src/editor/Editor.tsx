@@ -563,7 +563,21 @@ export default function Editor({
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       const target = event.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'SELECT') return
+      // Anything the user can type into keeps its keys.
+      //
+      // TEXTAREA was missing, and the caption editor is one — so editing a
+      // transcript line meant Space toggled playback instead of typing a
+      // space, Backspace deleted the selected zoom shot, and the arrow keys
+      // scrubbed the playhead. Every shortcut below is a plain key, which is
+      // exactly the set a text field needs back.
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'SELECT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        return
+      }
       if (event.code === 'Space') {
         event.preventDefault()
         togglePlay()

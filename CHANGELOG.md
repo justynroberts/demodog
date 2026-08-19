@@ -4,6 +4,24 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- **The camera vanished from the recording bar.** The bar shows Start before a
+  take and Stop during one, and those were two separate pieces of markup — so
+  the element the camera stream attaches to only existed in the second. The
+  stream was handed over while the bar still showed Start, found nothing to
+  attach to, and the camera was missing for the whole take. One bar now, with
+  the video kept mounted through both states.
+- **The countdown appeared on the wrong screen.** A window capture carries no
+  display id, so 3-2-1 fell back to the primary display — counting down on a
+  screen you were not watching while the one being recorded showed nothing. It
+  now goes on the display the chosen window sits on.
+- **Editing a caption could not type a space.** Every editor shortcut is a plain
+  key, and the guard that keeps them out of text fields listed inputs and
+  selects but not text areas — which is what the caption editor is. So Space
+  toggled playback, Backspace deleted the selected zoom shot and the arrows
+  scrubbed the playhead, all while typing.
+
 ## 1.4.2 — 2026-08-19
 
 - **The app got in its own way between choosing a source and recording it.** The

@@ -183,32 +183,26 @@ export default function ControlBar(): ReactNode {
   const minutes = Math.floor(elapsed / 60)
   const seconds = Math.floor(elapsed % 60)
 
-  if (stage && !running) {
-    return (
-      <div className="bar-root">
-        <div className="bar bar-ready">
-          <span className="rec-dot" aria-hidden />
-          {/* No source name. You just chose it, and it is the window now in
-              front of you — repeating it back is a label nobody reads. */}
-          <span className="bar-ready-text">Arrange your screen, then start.</span>
-          <button className="btn primary" onClick={() => api.sendReadyAction('start')}>
-            Start
-          </button>
-          <button className="btn ghost" onClick={() => api.sendReadyAction('back')}>
-            Back
-          </button>
-        </div>
-      </div>
-    )
-  }
+  // Ready and recording are two faces of one bar, rendered from one tree.
+  //
+  // They were two separate returns, and the camera paid for it: the element the
+  // stream attaches to only existed in the recording branch, so a stream handed
+  // over while the bar was still showing Start found no element to attach to
+  // and the camera never appeared for the whole take. The video stays mounted
+  // in both states; only the controls around it change.
+  const ready = Boolean(stage) && !running
 
   return (
     <div className="bar-root">
-      <div className="bar">
+      <div className={ready ? 'bar bar-ready' : 'bar'}>
         <span className="rec-dot" aria-hidden />
-        <span className="bar-time">
-          {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
-        </span>
+        {ready ? (
+          <span className="bar-ready-text">Arrange your screen, then start.</span>
+        ) : (
+          <span className="bar-time">
+            {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+          </span>
+        )}
 
         <video
           ref={videoRef}
@@ -218,15 +212,28 @@ export default function ControlBar(): ReactNode {
           title="Your camera as it is being recorded"
           style={{ display: hasCamera ? 'block' : 'none' }}
         />
-        {cameraWanted && !hasCamera && <span className="bar-nocam">camera failed</span>}
+        {cameraWanted && !hasCamera && !ready && <span className="bar-nocam">camera failed</span>}
 
-        <button className="btn primary" onClick={() => void stop()} disabled={stopping}>
-          {stopping ? 'Finishing…' : 'Stop'}
-        </button>
-        <button className="btn ghost" onClick={() => void cancel()} title="Discard this take">
-          Discard
-        </button>
-        <span className="bar-hint">⌘⇧2</span>
+        {ready ? (
+          <>
+            <button className="btn primary" onClick={() => api.sendReadyAction('start')}>
+              Start
+            </button>
+            <button className="btn ghost" onClick={() => api.sendReadyAction('back')}>
+              Back
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="btn primary" onClick={() => void stop()} disabled={stopping}>
+              {stopping ? 'Finishing…' : 'Stop'}
+            </button>
+            <button className="btn ghost" onClick={() => void cancel()} title="Discard this take">
+              Discard
+            </button>
+            <span className="bar-hint">⌘⇧2</span>
+          </>
+        )}
       </div>
     </div>
   )

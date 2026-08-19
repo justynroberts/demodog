@@ -12,6 +12,7 @@
  * Before the ResizeObserver fires the lane is 1000px wide, which conveniently
  * makes every pixel one thousandth of the span.
  */
+import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import Timeline from '../src/renderer/src/editor/Timeline'
 
@@ -98,6 +99,20 @@ check(
 // The common case must be untouched: with no cards the mapping is what it was.
 check(!noCards.includes('track cards'), 'no lane when both cards are off')
 check(noCards.includes('left:500px'), 'a click at 5s of 10s still lands mid-lane')
+
+
+// ---- keyboard shortcuts must not eat typing ------------------------------
+// Editing a caption is done in a <textarea>, and every editor shortcut is a
+// plain key — Space, Backspace, the arrows. A guard that lists INPUT and
+// SELECT but not TEXTAREA therefore breaks typing in the one place the app
+// asks you to type prose.
+{
+  // Run from the repo root by `npm run verify:timeline`.
+  const source = readFileSync('src/renderer/src/editor/Editor.tsx', 'utf8')
+  const guard = source.slice(source.indexOf('const onKey'), source.indexOf("event.code === 'Space'"))
+  check(guard.includes("tagName === 'TEXTAREA'"), 'typing in a textarea keeps its keys')
+  check(guard.includes('isContentEditable'), 'content-editable fields keep their keys')
+}
 
 if (failed > 0) {
   console.error(`\n[31m${failed} timeline check(s) failed.[0m\n`)

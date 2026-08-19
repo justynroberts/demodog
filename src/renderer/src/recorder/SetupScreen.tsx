@@ -411,6 +411,14 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
           selected.kind === 'window'
             ? sources?.windows.find((w) => w.id === selected.id)?.app
             : undefined,
+        // So the countdown lands on the display the window is on.
+        windowBounds:
+          selected.kind === 'window'
+            ? (() => {
+                const w = sources?.windows.find((s2) => s2.id === selected.id)
+                return w ? { x: w.x, y: w.y, width: w.width, height: w.height } : undefined
+              })()
+            : undefined,
         fps,
         systemAudio,
         trackKeystrokes: keystrokes,
