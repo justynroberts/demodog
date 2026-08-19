@@ -6,6 +6,20 @@ is where finished work waits.
 
 ## Unreleased
 
+- **The settings panel is shown or hidden**, with a *Menu* tab on its edge in
+  the play button's colour. It floats over the picture rather than taking width
+  from it, and the picture keeps clear of it rather than sitting a third hidden
+  underneath. Esc closes it; M toggles it.
+- **The panel's width goes on settings.** Laying out the controls in columns —
+  rather than pairing whole groups, where one tall group leaves an empty column
+  beside it — roughly halves every tab: Style 1308px to 659, Zoom 1210 to 603,
+  Cursor 756 to 392, Camera 951 to 509, Titles 286 to 75. Sliders and switches
+  pair up; prose, fields and swatch rows keep the full width.
+- **Audio is its own tab.** The levels and the music bed were at the foot of the
+  Camera tab, below the bubble's shape and position — two scrolls past anything
+  to do with either.
+
+
 - **Transcription on macOS 26.** Apple moved speech recognition onto a new
   framework there, and the old one still reports itself available and then
   returns nothing — because the model it wants is an asset that has to be
