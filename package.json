@@ -24,9 +24,13 @@
     "release": "node scripts/release.mjs",
     "verify:timeline": "mkdir -p node_modules/.cache && esbuild scripts/verify-timeline.tsx --bundle --platform=node --format=cjs --jsx=automatic --outfile=node_modules/.cache/verify-timeline.cjs --log-level=warning && node node_modules/.cache/verify-timeline.cjs",
     "verify:titles": "mkdir -p node_modules/.cache && esbuild scripts/verify-titles.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/verify-titles.mjs --log-level=warning && node node_modules/.cache/verify-titles.mjs",
-    "verify:music": "mkdir -p node_modules/.cache && esbuild scripts/verify-music.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/verify-music.cjs --log-level=warning && node node_modules/.cache/verify-music.cjs"
+    "verify:music": "mkdir -p node_modules/.cache && esbuild scripts/verify-music.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/verify-music.cjs --log-level=warning && node node_modules/.cache/verify-music.cjs",
+    "author": "node scripts/author.mjs",
+    "walkthrough": "node scripts/walkthrough.mjs",
+    "mcp": "node mcp/server.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "electron-updater": "^6.8.9",
     "mp4-muxer": "^5.2.2",
     "mp4box": "^2.4.1"
