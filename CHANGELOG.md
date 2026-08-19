@@ -6,6 +6,14 @@ is where finished work waits.
 
 ## 1.5.0 — 2026-08-19
 
+- **Choose the language being spoken.** Transcription used the language the Mac
+  was set to, which is not the language people speak: a Dutch machine asked the
+  recogniser for Dutch however plainly the narration was in English, and got
+  back nothing — indistinguishable from a broken recogniser or a silent take.
+  There is now a *Spoken language* picker listing every language this Mac can
+  transcribe, remembered between takes, and the message when nothing is heard
+  names the language it tried.
+
 - **The settings panel is shown or hidden**, with a *Menu* tab on its edge in
   the play button's colour. It floats over the picture rather than taking width
   from it, and the picture keeps clear of it rather than sitting a third hidden

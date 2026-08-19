@@ -1325,20 +1325,59 @@ function CaptionsTab({
 
   useEffect(() => api.onTranscribeProgress(setProgress), [])
 
+  /**
+   * The language being spoken, which is not the language the Mac is set to.
+   *
+   * This was `navigator.language`, so a Dutch machine asked for Dutch however
+   * plainly the person was speaking English — and got nothing back, which
+   * looks exactly like a broken recogniser. Remembered, because someone who
+   * narrates in English on a Dutch Mac will do it every time.
+   */
+  const [locales, setLocales] = useState<string[]>([])
+  const [locale, setLocale] = useState<string>(
+    () => localStorage.getItem('demodog-speech-locale') || navigator.language || 'en-GB'
+  )
+  useEffect(() => {
+    void api.speechLocales().then((list) => {
+      setLocales(list)
+      // Keep the remembered choice if this Mac still offers it; otherwise the
+      // interface language, then anything in the same language, then English.
+      setLocale((current) => {
+        if (list.includes(current)) return current
+        const ui = list.find((l) => l === navigator.language)
+        const same = list.find((l) => l.split('-')[0] === navigator.language.split('-')[0])
+        return ui ?? same ?? list.find((l) => l.startsWith('en')) ?? current
+      })
+    })
+  }, [])
+  useEffect(() => {
+    localStorage.setItem('demodog-speech-locale', locale)
+  }, [locale])
+
+  /** "en-GB" as "English (United Kingdom)", where the platform can say so. */
+  const localeName = (tag: string): string => {
+    try {
+      return new Intl.DisplayNames([navigator.language], { type: 'language' }).of(tag) ?? tag
+    } catch {
+      return tag
+    }
+  }
+
   const transcribe = async (): Promise<void> => {
     setBusy(true)
     setError(null)
     setProgress(0)
     try {
-      const { cues, source } = await api.transcribe(recording.dir, navigator.language || 'en-GB')
+      const { cues, source } = await api.transcribe(recording.dir, locale)
       if (cues.length === 0) {
         setError(
           // "Nothing was found" is true and useless. The usual cause is that
           // the microphone was not part of the take at all, and the fix is a
           // setting on the *next* recording rather than anything to try here.
-          'No speech was heard. The narration comes from the microphone track, ' +
-            'so check a microphone was selected when this was recorded — system ' +
-            'audio alone is not transcribed.'
+          `No speech was heard in ${localeName(locale)}. If the narration is in ` +
+            'another language, choose it above and try again. Otherwise check a ' +
+            'microphone was selected when this was recorded, since system audio ' +
+            'on its own is not transcribed.'
         )
       } else {
         // The camera track begins after the screen track, so words timed
@@ -1384,6 +1423,23 @@ function CaptionsTab({
   return (
     <>
       <Group title="Transcript" span>
+        <span className="label">Spoken language</span>
+        <select
+          value={locale}
+          disabled={busy || locales.length === 0}
+          onChange={(e) => setLocale(e.target.value)}
+        >
+          {(locales.length ? locales : [locale]).map((tag) => (
+            <option key={tag} value={tag}>
+              {localeName(tag)} — {tag}
+            </option>
+          ))}
+        </select>
+        <p className="hint" style={{ marginTop: -4 }}>
+          The language being spoken, which is not necessarily the one this Mac is
+          set to. It used to be taken from the system, so narration in English on
+          a Dutch Mac was transcribed as Dutch and came back empty.
+        </p>
         {captions.length === 0 ? (
           <>
             <p className="hint">

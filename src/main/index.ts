@@ -31,7 +31,8 @@ import {
   reapStrayHelpers,
   transcribe,
   focusWindow,
-  probeAudio
+  probeAudio,
+  speechCheck
 } from './recorder'
 import type {
   RecordOptions,
@@ -666,6 +667,20 @@ ipcMain.handle('ready:hide', () => {
 /** The panel's buttons, relayed to the studio, which owns the capture settings. */
 ipcMain.on('ready:action', (_e, action: 'start' | 'back') => {
   studioWindow?.webContents.send('ready:action', action)
+})
+
+/**
+ * The languages this Mac can transcribe.
+ *
+ * Offered as a choice because the language someone speaks is not the language
+ * their computer is set to. Transcription took the interface locale, so a Dutch
+ * Mac asked for Dutch however plainly the person was speaking English — and got
+ * back nothing, which is indistinguishable from a broken recogniser.
+ */
+ipcMain.handle('speech:locales', async (): Promise<string[]> => {
+  const result = await speechCheck('en-GB')
+  const locales = Array.isArray(result.locales) ? (result.locales as string[]) : []
+  return locales.map((l) => l.replace(/_/g, '-')).sort()
 })
 
 ipcMain.handle('permissions:check', () => checkPermissions(false))

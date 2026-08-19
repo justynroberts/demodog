@@ -253,8 +253,9 @@ enum SpeechCheck {
             info["onDevice"] = false
             info["note"] = "no recogniser could be created for that locale"
         }
-        // A handful, so a report shows what this Mac would accept instead.
-        info["someSupported"] = Array(supported.prefix(8))
+        // All of them: the app offers this list to choose from, because the
+        // language someone speaks is not the language their Mac is set to.
+        info["locales"] = supported
         emit(info)
         exit(0)
     }

@@ -113,6 +113,9 @@ const api = {
   pickImage: (): Promise<string | null> => ipcRenderer.invoke('dialog:image'),
   pickAudio: (): Promise<string | null> => ipcRenderer.invoke('dialog:audio'),
 
+  /** Languages this Mac can transcribe, for the user to choose from. */
+  speechLocales: (): Promise<string[]> => ipcRenderer.invoke('speech:locales'),
+
   /**
    * A named event, with numeric parameters only.
    *
