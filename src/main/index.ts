@@ -677,19 +677,31 @@ ipcMain.handle('transcribe:run', async (event, dir: string, locale: string) => {
     probes.find((p) => p.hasAudio && (p.peakDb ?? -120) > SILENT_DB)?.path ??
     probes.find((p) => p.hasAudio)?.path
 
-  if (!spoken) {
+  // Which of these is true decides what to say, and saying the wrong one is
+  // worse than saying nothing: telling someone their microphone captured
+  // nothing, when no microphone was in the take, sends them to adjust a device
+  // that was never involved.
+  const micTrack = probes.find((p) => /camera\.(mp4|webm)$/.test(p.path))
+  const chosen = probes.find((p) => p.path === spoken)
+
+  if (!micTrack) {
     throw new Error(
-      'None of the tracks in this take contain audio. Choose a microphone ' +
-        'before recording — the narration is captured with the camera, and ' +
-        'system audio alone is not transcribed.'
+      'This take was recorded without a microphone, so there is no narration ' +
+        'to transcribe. Choose a microphone before recording — system audio on ' +
+        'its own is not transcribed.'
     )
   }
-  const chosen = probes.find((p) => p.path === spoken)
-  if ((chosen?.peakDb ?? 0) <= SILENT_DB) {
+  if (!micTrack.hasAudio) {
     throw new Error(
-      `The audio in this take is silent (peaks at ${Math.round(chosen?.peakDb ?? -120)} dB). ` +
-        'The microphone was recorded but captured nothing — check it is not ' +
-        'muted, and that the right input was selected.'
+      'The camera in this take carries no audio, so there is no narration to ' +
+        'transcribe. That happens when a camera is chosen but a microphone is not.'
+    )
+  }
+  if (!spoken || (chosen?.peakDb ?? -120) <= SILENT_DB) {
+    throw new Error(
+      `The microphone in this take is silent (peaks at ${Math.round(micTrack.peakDb ?? -120)} dB). ` +
+        'It was recorded but captured nothing — check it is not muted, and that ' +
+        'the right input was selected.'
     )
   }
 

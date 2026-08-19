@@ -5,7 +5,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { probeAudio } from './recorder'
+import { probeAudio, checkPermissions } from './recorder'
 
 const run = promisify(execFile)
 
@@ -42,27 +42,21 @@ export async function collectDiagnostics(note: string): Promise<{ zip: string; b
   add('Electron', process.versions.electron)
   add('Packaged', String(app.isPackaged))
 
-  // Permission states, because most reports that read as "it did nothing" are
+  // Permission state, because most reports that read as "it did nothing" are
   // one of these being off — and the user cannot see them from inside the app.
-  for (const service of ['ScreenCapture', 'Microphone', 'Camera', 'SpeechRecognition']) {
-    try {
-      const { stdout } = await run('/usr/bin/log', [
-        'show',
-        '--last',
-        '1m',
-        '--style',
-        'compact',
-        '--predicate',
-        `subsystem == "com.apple.TCC" AND composedMessage CONTAINS "${service}"`
-      ])
-      add(`TCC ${service}`, stdout.trim() ? 'recent activity' : 'no recent activity')
-    } catch {
-      add(`TCC ${service}`, 'not readable')
-    }
+  //
+  // This used to grep the TCC subsystem's log for recent activity, which is a
+  // different question and a useless answer: every line came back "recent
+  // activity" whether or not the permission had been granted. The app already
+  // knows; it just had to be asked.
+  try {
+    const permissions = await checkPermissions(false)
+    add('Screen Recording', permissions.screenRecording ? 'granted' : 'NOT GRANTED')
+    add('Accessibility', permissions.accessibility ? 'granted' : 'not granted')
+  } catch (error) {
+    add('Permissions', `could not be read (${String(error)})`)
   }
 
-  const summary = [...lines, '', 'What happened:', note.trim() || '(not described)'].join('\n')
-  await writeFile(join(folder, 'summary.txt'), summary, 'utf8')
 
   // The updater's own log, which is the one that explains a failed update.
   const updaterLog = join(app.getPath('logs'), 'updater.log')
@@ -76,13 +70,21 @@ export async function collectDiagnostics(note: string): Promise<{ zip: string; b
   // The most recent take's metadata — geometry, frame rate, clock offsets and
   // the frame-status counts that say why a capture produced no video. Not the
   // recording: just the numbers describing it.
+  const notes: string[] = []
   const takes = join(app.getPath('videos'), 'DemoDog')
   if (existsSync(takes)) {
     const recent = readdirSync(takes)
       .filter((name) => name.endsWith('.demodog'))
-      .map((name) => ({ name, at: statSync(join(takes, name)).mtimeMs }))
+      .map((name) => {
+        try {
+          return { name, at: statSync(join(takes, name)).mtimeMs }
+        } catch {
+          return { name, at: 0 }
+        }
+      })
       .sort((a, b) => b.at - a.at)
       .slice(0, 3)
+
     for (const take of recent) {
       const meta = join(takes, take.name, 'meta.json')
       if (existsSync(meta)) {
@@ -106,8 +108,21 @@ export async function collectDiagnostics(note: string): Promise<{ zip: string; b
       if (lines.length) {
         await writeFile(join(folder, `${take.name}.audio.txt`), lines.join('\n'), 'utf8')
       }
+      // Each take says what it contributed. A take with no metadata is one
+      // whose recording never started — worth seeing as itself rather than as
+      // a report that appears to have collected less than it claimed.
+      notes.push(
+        `${take.name}: ${existsSync(meta) ? 'metadata' : 'no metadata (recording never started)'}` +
+          (lines.length ? `, ${lines.length} track(s)` : ', no media')
+      )
     }
+    add('Recent takes', notes.length ? `\n  ${notes.join('\n  ')}` : 'none')
   }
+
+  // Written last, so every fact gathered above is in it.
+  const summary =
+    [...lines, '', 'What happened:', note.trim() || '(not described)'].join('\n') + '\n'
+  await writeFile(join(folder, 'summary.txt'), summary, 'utf8')
 
   const zip = join(app.getPath('temp'), `demodog-report-${stamp}.zip`)
   await run('/usr/bin/ditto', ['-c', '-k', '--sequesterRsrc', folder, zip])

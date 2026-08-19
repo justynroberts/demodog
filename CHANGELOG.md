@@ -4,6 +4,20 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- Transcription now names the case it actually found. 1.4.4 stopped it claiming
+  "no speech was heard" when there was no audio, but it still blamed the
+  microphone for a take that never had one — telling someone to check a device
+  that was not involved. There are three separate answers now: recorded without
+  a microphone, a camera track carrying no audio, and a microphone that was
+  recorded but captured nothing.
+- Bug reports carry the real permission state rather than whether the privacy
+  subsystem had logged anything recently, which was the same answer for every
+  service whether granted or not. Each recent take also says what it
+  contributed, so a take whose recording never started reads as that rather
+  than as a report that collected less than it claimed.
+
 ## 1.4.4 — 2026-08-19
 
 - **"No speech was heard" was often not true.** Transcription chose its source
