@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.4.3 — 2026-08-19
 
 - **The camera vanished from the recording bar.** The bar shows Start before a
   take and Stop during one, and those were two separate pieces of markup — so
