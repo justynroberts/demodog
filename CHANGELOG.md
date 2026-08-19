@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.5.2 — 2026-08-19
 
 - **A saved preset looked unsaved on the next launch** — the same fault as the
   profile picker, in the recorder. Two things are remembered: how the setup was
