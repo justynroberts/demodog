@@ -174,6 +174,15 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
 
   const applyPreset = (preset: CapturePreset): void => {
     setPresetId(preset.id)
+    // Remembered so the next launch can still name it. The snapshot written
+    // on every change carries the values; this carries where they came from.
+    if (preset.id !== 'last-used') {
+      try {
+        localStorage.setItem(LAST_PRESET, preset.id)
+      } catch {
+        // Losing the name is survivable; losing the recording is not.
+      }
+    }
     setPresetName(preset.name)
     setFps(preset.fps)
     setSystemAudio(preset.systemAudio)
@@ -218,6 +227,17 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
   /** How the setup was left last time, so a second take starts where the first did. */
   const LAST_USED = 'demodog-last-capture'
 
+  /**
+   * Which preset that setup came from.
+   *
+   * Kept apart from the setup itself because they answer different questions:
+   * one is "how was it left", the other "what is this called". Only the first
+   * was written down, so the picker was blanked on every launch — a preset
+   * could be saved, starred, used, and still look unsaved next time. The same
+   * fault the editor's profiles had.
+   */
+  const LAST_PRESET = 'demodog-last-preset'
+
   // Restore the previous setup, falling back to the starred preset on a machine
   // that has never recorded. Last used wins because it is the more recent
   // statement of intent: applying a preset makes it the last used, so nothing
@@ -238,10 +258,14 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
     if (!preferred) return
     appliedDefault.current = true
     applyPreset(preferred)
-    // A remembered setup is not a saved preset, so it must not look like one.
     if (remembered) {
-      setPresetId('')
-      setPresetName('')
+      // The remembered setup is the more recent statement of intent, so its
+      // values win — but it came from somewhere, and that somewhere still has
+      // a name. Blanking the picker here is what made a saved, starred preset
+      // look unsaved on the very next launch.
+      const from = presets.find((p) => p.id === localStorage.getItem(LAST_PRESET))
+      setPresetId(from?.id ?? '')
+      setPresetName(from?.name ?? '')
     }
   }, [sources, devicesReady, presets, cameras, mics])
 
@@ -312,6 +336,12 @@ export default function SetupScreen({ onRecording }: { onRecording: () => void }
       countdown
     }
     setPresets(await api.savePreset(preset))
+    // Saving makes it the current preset, so it is the one to come back to.
+    try {
+      localStorage.setItem(LAST_PRESET, preset.id)
+    } catch {
+      // See applyPreset.
+    }
     setPresetId(preset.id)
   }
 

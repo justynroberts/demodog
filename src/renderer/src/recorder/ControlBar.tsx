@@ -44,25 +44,44 @@ export default function ControlBar(): ReactNode {
       if (!cameraDeviceId && !micDeviceId) return
       setCameraWanted(Boolean(cameraDeviceId))
 
+      const constraints: MediaStreamConstraints = {
+        video: cameraDeviceId
+          ? {
+              deviceId: { exact: cameraDeviceId },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 30 }
+            }
+          : false,
+        audio: micDeviceId
+          ? {
+              deviceId: { exact: micDeviceId },
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            }
+          : false
+      }
+
+      // Asked for more than once, because the usual failure is a race rather
+      // than a fault. The setup screen holds the camera for its preview and
+      // releases it as the take begins; the handover is a fixed pause, and a
+      // pause is a guess. Losing that race costs the whole take's camera and
+      // leaves the bar showing nothing, so the first refusal is not taken as
+      // the answer. The device is normally free by the second attempt.
+      const acquire = async (attempt = 0): Promise<MediaStream> => {
+        try {
+          return await navigator.mediaDevices.getUserMedia(constraints)
+        } catch (error) {
+          if (attempt >= 3) throw error
+          console.warn(`[bar] capture device busy, retrying (${attempt + 1})`)
+          await new Promise((resolve) => setTimeout(resolve, 250 + attempt * 250))
+          return acquire(attempt + 1)
+        }
+      }
+
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: cameraDeviceId
-            ? {
-                deviceId: { exact: cameraDeviceId },
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                frameRate: { ideal: 30 }
-              }
-            : false,
-          audio: micDeviceId
-            ? {
-                deviceId: { exact: micDeviceId },
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true
-              }
-            : false
-        })
+        const stream = await acquire()
         streamRef.current = stream
         setHasCamera(Boolean(cameraDeviceId))
         console.log(
@@ -74,8 +93,9 @@ export default function ControlBar(): ReactNode {
           await videoRef.current.play().catch(() => undefined)
         }
       } catch (error) {
-        // Most often the device is still held by the setup screen's preview.
-        console.error('[bar] camera/mic unavailable', error)
+        // Said out loud: a take recorded without the camera someone chose is
+        // worth knowing about while it is still being recorded.
+        console.error('[bar] camera/mic unavailable after retries', error)
         setHasCamera(false)
       }
     })

@@ -4,6 +4,21 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- **A saved preset looked unsaved on the next launch** — the same fault as the
+  profile picker, in the recorder. Two things are remembered: how the setup was
+  left, and which preset that came from. Only the first was written down, so a
+  preset could be saved, starred as default, used, and still show as nothing the
+  next time. The values were right; the name was gone, which is what makes it
+  read as "the preset didn't save".
+- **The camera could be missing from the recording bar.** The setup screen holds
+  the camera for its preview and hands it over as the take begins, with a fixed
+  pause in between — and a fixed pause is a guess. Losing that race cost the
+  whole take's camera and left the bar showing nothing. The first refusal is no
+  longer taken as the answer: it asks again, up to three times over a second,
+  which is enough for a device that is simply still being released.
+
 ## 1.5.1 — 2026-08-19
 
 - **The profile picker went blank and stayed blank.** Two things were being
