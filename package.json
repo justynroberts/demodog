@@ -30,7 +30,6 @@
     "mcp": "node mcp/server.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
     "electron-updater": "^6.8.9",
     "mp4-muxer": "^5.2.2",
     "mp4box": "^2.4.1"
