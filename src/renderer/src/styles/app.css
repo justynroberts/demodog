@@ -2359,22 +2359,16 @@ dialog.info a {
 }
 
 .bar-ready-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
   flex: 1;
-}
-
-.bar-ready-text strong {
+  min-width: 0;
   font-size: var(--t-sm);
-  font-weight: 700;
+  color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.bar-ready-text span {
+.bar-ready-unused span {.bar-ready-text span {
   font-size: 10.5px;
   line-height: 1.35;
   color: var(--muted);

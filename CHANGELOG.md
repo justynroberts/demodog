@@ -14,6 +14,9 @@ is where finished work waits.
   studio jumped to the front at the exact moment it was meant to disappear.
   It now goes away as soon as Let's Start is pressed, leaving the floating bar
   and your own windows; **Back** brings it straight back.
+- The bar no longer names the window it just brought forward. You chose it a
+  second ago and it is the window now in front of you; repeating it back is a
+  label nobody reads.
 - Raising the chosen window no longer raises every other window that
   application owns. Rearranging someone's desktop around a choice they made
   about one window is not what they asked for.

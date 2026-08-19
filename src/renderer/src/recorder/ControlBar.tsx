@@ -188,10 +188,9 @@ export default function ControlBar(): ReactNode {
       <div className="bar-root">
         <div className="bar bar-ready">
           <span className="rec-dot" aria-hidden />
-          <div className="bar-ready-text">
-            <strong>{stage.title}</strong>
-            {stage.hint && <span>{stage.hint}</span>}
-          </div>
+          {/* No source name. You just chose it, and it is the window now in
+              front of you — repeating it back is a label nobody reads. */}
+          <span className="bar-ready-text">Arrange your screen, then start.</span>
           <button className="btn primary" onClick={() => api.sendReadyAction('start')}>
             Start
           </button>
