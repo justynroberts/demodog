@@ -13,7 +13,7 @@ import {
   clipboard,
   globalShortcut
 } from 'electron'
-import { dirname, join, resolve as resolvePath, sep } from 'node:path'
+import { dirname, extname, join, resolve as resolvePath, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { setupUpdates } from './updater'
 import { installMenu } from './menu'
@@ -90,6 +90,28 @@ const isDev = !app.isPackaged
  * an arbitrary file read. Seeded with the recordings folder and extended only
  * by paths the user has explicitly chosen through a dialog.
  */
+/** What the `rec:` scheme says a file is, by extension. */
+const MEDIA_TYPES: Record<string, string> = {
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.wav': 'audio/wav',
+  '.aif': 'audio/aiff',
+  '.aiff': 'audio/aiff',
+  '.flac': 'audio/flac',
+  '.caf': 'audio/x-caf',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.heic': 'image/heic'
+}
+
 const mediaRoots = new Set<string>()
 
 function allowMediaPath(target: string): void {
@@ -419,11 +441,11 @@ app.whenReady().then(() => {
       return new Response('Not found', { status: 404 })
     }
 
-    const type = filePath.endsWith('.webm')
-      ? 'video/webm'
-      : filePath.endsWith('.mp4')
-        ? 'video/mp4'
-        : 'application/octet-stream'
+    // The type matters as much as the bytes. A media element checks it before
+    // it will play anything, so a music bed served as octet-stream is refused
+    // outright — which is how mp3 and wav beds could be chosen, mixed into an
+    // export correctly, and still be silent in the preview.
+    const type = MEDIA_TYPES[extname(filePath).toLowerCase()] ?? 'application/octet-stream'
 
     const asStream = (start: number, end: number): ReadableStream =>
       Readable.toWeb(createReadStream(filePath, { start, end })) as ReadableStream

@@ -1199,15 +1199,27 @@ function CameraTab({
               onChange={(v) => patch('music', { gain: v })}
               format={(v) => `${Math.round(v * 100)}%`}
             />
-            <Slider
+            <Toggle
               label="Duck under speech"
-              value={project.music.duckDb}
-              min={0}
-              max={30}
-              step={1}
-              onChange={(v) => patch('music', { duckDb: v })}
-              format={(v) => (v === 0 ? 'Off' : `−${Math.round(v)} dB`)}
+              checked={project.music.duckDb > 0}
+              onChange={(v) => patch('music', { duckDb: v ? 12 : 0 })}
             />
+            {project.music.duckDb > 0 && (
+              <>
+                <Slider
+                  label="How far it drops"
+                  value={project.music.duckDb}
+                  min={3}
+                  max={30}
+                  step={1}
+                  onChange={(v) => patch('music', { duckDb: v })}
+                  format={(v) => `−${Math.round(v)} dB`}
+                />
+                <p className="hint" style={{ marginTop: -4 }}>
+                  Follows the transcript, so it needs captions to duck against.
+                </p>
+              </>
+            )}
             <Slider
               label="Fade in"
               value={project.music.fadeIn}

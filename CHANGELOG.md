@@ -10,6 +10,14 @@ is where finished work waits.
   its own level, fades, a start offset and looping when the track is shorter
   than the take. It appears as a lane on the timeline rather than only in a
   panel.
+- Ducking is a switch rather than a slider you have to find the zero of, and
+  says plainly that it follows the transcript — so it needs captions to duck
+  against.
+- **mp3 and wav beds are audible in the preview.** Media files were served with
+  a type worked out from a two-entry list, so anything that was not mp4 or webm
+  arrived as `application/octet-stream`. A media element checks the type before
+  it will play anything, so those beds mixed into an export correctly and were
+  silent while you were choosing them.
 - **It ducks under the narration by itself.** The transcript already states
   where words are, so ducking is scheduled from the caption cues rather than
   detected from the audio: exact, free, and still correct after a line is
