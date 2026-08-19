@@ -59,6 +59,18 @@ enum Transcriber {
             exit(2)
         }
 
+        // macOS 26 and later take a different route entirely.
+        //
+        // The old recogniser still exists there and still reports itself
+        // available, then returns nothing — because the model it needs is an
+        // asset that was never installed, and it does not say so. That is the
+        // reported fault: loud audio, no words, no error. The new framework
+        // knows about the asset and can fetch it.
+        if #available(macOS 26.0, *) {
+            await runModern(url: url, locale: locale)
+            return
+        }
+
         let status = await requestAuthorization()
         guard status == .authorized else {
             emit([
@@ -287,6 +299,55 @@ enum Transcriber {
                     confidence: payload["confidence"] as? Double ?? 0))
         }
         return WindowResult(cues: cues, status: process.terminationStatus)
+    }
+
+    /**
+     * Transcription on macOS 26 and later, in one pass over the whole file.
+     *
+     * Reports which engine ran, because a transcript that comes out
+     * differently on two Macs should say why rather than being a mystery.
+     */
+    @available(macOS 26.0, *)
+    private static func runModern(url: URL, locale: String) async {
+        let asked = Locale(identifier: locale)
+        guard let matched = await ModernTranscriber.resolve(asked) else {
+            emit([
+                "event": "error", "code": "locale",
+                "message": "this Mac cannot transcribe \(locale)",
+            ])
+            exit(5)
+        }
+
+        do {
+            let (_, installed) = await ModernTranscriber.availability(locale: matched)
+            if !installed {
+                emit(["event": "installing", "locale": matched.identifier])
+                try await ModernTranscriber.ensureModel(locale: matched) { fraction in
+                    emit(["event": "installing", "fraction": fraction])
+                }
+            }
+
+            let duration = (try? await CMTimeGetSeconds(AVURLAsset(url: url).load(.duration))) ?? 0
+            emit(["event": "started", "locale": matched.identifier, "duration": duration, "engine": "speechanalyzer"])
+
+            let lines = try await ModernTranscriber.transcribe(url: url, locale: matched) { fraction in
+                emit(["event": "progress", "seconds": fraction * duration, "of": max(duration, 0.001)])
+            }
+            for line in lines {
+                emit([
+                    "event": "cue", "start": line.start, "end": line.end,
+                    "text": line.text, "confidence": 1.0,
+                ])
+            }
+            emit(["event": "done", "cues": lines.count, "engine": "speechanalyzer"])
+            exit(0)
+        } catch {
+            emit([
+                "event": "error", "code": "unavailable",
+                "message": "the recogniser failed: \(error.localizedDescription)",
+            ])
+            exit(5)
+        }
     }
 
     /// The child half: recognise one clip and print its cues, timed from zero.

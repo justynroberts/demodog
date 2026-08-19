@@ -22,6 +22,7 @@ SOURCES=(
   "$HERE/Sources/Sources.swift"
   "$HERE/Sources/InputTracker.swift"
   "$HERE/Sources/CaptureSession.swift"
+  "$HERE/Sources/ModernSpeech.swift"
   "$HERE/Sources/Transcriber.swift"
   "$HERE/Sources/main.swift"
 )

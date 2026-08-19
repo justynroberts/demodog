@@ -6,6 +6,19 @@ is where finished work waits.
 
 ## Unreleased
 
+- **Transcription on macOS 26.** Apple moved speech recognition onto a new
+  framework there, and the old one still reports itself available and then
+  returns nothing — because the model it wants is an asset that has to be
+  installed and never was. From outside that is indistinguishable from a silent
+  recording, which is exactly how it was reported: loud audio, no words, no
+  error. macOS 26 and later now use `SpeechAnalyzer`, which knows about the
+  asset and fetches it, saying so while it does — the first run in a language is
+  a real download. Older versions of macOS keep the path they already had.
+  A side effect worth having: the new framework takes the whole file at once and
+  returns times attached to the words, so the windowing, overlapping and
+  repeat-trimming the old one needed — and the seams that left — do not apply.
+
+
 - **A fresh install had no profile at all.** The file is only written when
   something is saved, so a new user opened the editor with an empty Profile
   picker, nothing marked as default, and no named starting point to save over.

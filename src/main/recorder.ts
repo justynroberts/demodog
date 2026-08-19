@@ -366,6 +366,11 @@ export function transcribe(
         } else if (message.event === 'progress') {
           const of = Number(message.of)
           if (of > 0) onProgress(Math.min(1, Number(message.seconds) / of))
+        } else if (message.event === 'installing') {
+          // The first transcription in a language on macOS 26 downloads its
+          // model, which is a real wait. Silence here reads as a hang.
+          const percent = Number(message.fraction ?? 0) * 100
+          console.log(`[transcribe] installing the language model (${percent.toFixed(0)}%)`)
         } else if (message.event === 'error') {
           failure = new Error(
             describeTranscribeError(String(message.code), String(message.message))
