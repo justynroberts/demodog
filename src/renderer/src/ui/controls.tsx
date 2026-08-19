@@ -78,9 +78,26 @@ export function Segmented<T extends string>({
   )
 }
 
-export function Group({ title, children }: { title: string; children: ReactNode }): ReactNode {
+/**
+ * A titled block of settings.
+ *
+ * `span` gives a group the full width of the panel rather than one column.
+ * Some content does not divide: a list of transcript lines, a row of colour
+ * swatches, a paragraph of prose. Squeezed into half the width those wrap into
+ * something unreadable, and the column they leave beside them is worse than
+ * the width they took.
+ */
+export function Group({
+  title,
+  span = false,
+  children
+}: {
+  title: string
+  span?: boolean
+  children: ReactNode
+}): ReactNode {
   return (
-    <div className="insp-group">
+    <div className={span ? 'insp-group span' : 'insp-group'}>
       <span className="label">{title}</span>
       {children}
     </div>

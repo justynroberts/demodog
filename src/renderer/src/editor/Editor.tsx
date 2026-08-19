@@ -14,6 +14,20 @@ import { fadeOutAndPause, isRamping, rampVolume } from './mediaFade'
 import { musicLevelAt, musicTimeAt } from './music'
 import { formatTime } from '../ui/controls'
 import Timeline from './Timeline'
+
+/**
+ * How wide the settings panel is when it is there at all.
+ *
+ * There are two states, and they are shown and hidden — not two widths. The
+ * panel is either being used, in which case it wants room, or it is not, in
+ * which case the picture should have the whole window. Anything between those
+ * serves neither.
+ *
+ * Wide enough for the settings to sit in two columns, which is the point of
+ * the width: the same panel that was one long scroll at 300px shows most of a
+ * tab at once here.
+ */
+const RAIL_WIDTH = 560
 import Inspector from './Inspector'
 import ExportedPanel from './ExportedPanel'
 import ExportDialog, { formatDuration, rememberRate, type ExportChoice } from './ExportDialog'
@@ -68,6 +82,28 @@ export default function Editor({
   const [selected, setSelected] = useState<string | null>(null)
   const [selectedCaption, setSelectedCaption] = useState<string | null>(null)
   /** Armed by the inspector: the next drag on the preview chooses a zoom area. */
+  /**
+   * How wide the settings rail is, and whether it is there at all.
+   *
+   * A fixed 300px meant six tabs in a single scrolling column, so anything past
+   * the first panel was below the fold and Music sat buried inside Camera.
+   * Widening it buys tab room; collapsing it gives the whole window back to the
+   * picture, which is what you want while judging a shot rather than changing
+   * one. Remembered, because it is a working preference rather than a decision
+   * to be made again every launch.
+   */
+  /**
+   * Whether the rail is expanded, remembered between sessions.
+   *
+   * A working preference rather than a decision to make again every launch.
+   */
+  const [railOpen, setRailOpen] = useState(
+    () => localStorage.getItem('demodog-rail-open') !== 'false'
+  )
+  useEffect(() => {
+    localStorage.setItem('demodog-rail-open', String(railOpen))
+  }, [railOpen])
+
   const [picking, setPicking] = useState(false)
   const pickRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const [exported, setExported] = useState<{ path: string; captions: number } | null>(null)
@@ -641,6 +677,11 @@ export default function Editor({
         event.preventDefault()
         setSegments((current) => current.filter((s) => s.id !== selectedRef.current))
         setSelected(null)
+      } else if (event.code === 'Escape') {
+        // Somewhere to go when the panel is in the way and the mouse is not.
+        setRailOpen(false)
+      } else if (event.code === 'KeyM' && !event.metaKey && !event.ctrlKey) {
+        setRailOpen((v) => !v)
       } else if (event.code === 'KeyE' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault()
         exportRef.current()
@@ -796,7 +837,10 @@ export default function Editor({
   const autoCount = segments.filter((s) => s.auto).length
 
   return (
-    <div className="editor">
+    <div
+      className={railOpen ? 'editor' : 'editor rail-hidden'}
+      style={{ ['--rail' as string]: `${railOpen ? RAIL_WIDTH : 0}px` }}
+    >
       <div className="stage">
         <canvas
           ref={canvasRef}
@@ -949,6 +993,19 @@ export default function Editor({
           onClose={() => setExported(null)}
         />
       )}
+
+      {/* One control, on the edge of the panel it belongs to. It expands to
+          make room for the tab names and a second column of settings, and
+          contracts to give the picture the space back. */}
+      <button
+        className="rail-tab"
+        onClick={() => setRailOpen((v) => !v)}
+        aria-expanded={railOpen}
+        aria-label={railOpen ? 'Hide the settings' : 'Show the settings'}
+        title={railOpen ? 'Hide the settings' : 'Show the settings'}
+      >
+        Menu
+      </button>
 
       <Inspector
         project={project}

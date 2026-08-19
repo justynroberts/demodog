@@ -679,7 +679,10 @@ input[type='checkbox']:checked::after {
 .editor {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr var(--rail);
+  /* One column. The settings float over the picture rather than taking width
+     from it — a panel that resizes the stage every time it opens changes the
+     framing of the very thing you are judging. */
+  grid-template-columns: 1fr;
   grid-template-rows: 1fr auto;
   min-height: 0;
 }
@@ -716,8 +719,15 @@ input[type='checkbox']:checked::after {
 }
 
 .inspector {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+  /* The stage's own grid cell, pinned to its right edge, so it overlaps the
+     picture instead of displacing it. The stage's row only, so the timeline
+     underneath stays whole and scrubbable while the settings are open. */
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  width: var(--rail);
+  z-index: 25;
+  box-shadow: -6px 0 0 rgba(0, 0, 0, 0.14);
   border-left: var(--border);
   background: var(--surface);
   overflow-y: auto;
@@ -811,6 +821,39 @@ input[type='checkbox']:checked::after {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* The width lays out the *controls*, not the groups.
+ *
+ * Pairing whole groups is the obvious reading and it barely helped: one tall
+ * group — Automatic zoom, Picture in picture — leaves an empty column beside
+ * it and the panel stays as long as it ever was. Laying out the controls
+ * halves exactly the tabs that were worst. */
+.insp-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(214px, 1fr));
+  align-items: start;
+  gap: 12px 14px;
+  min-width: 0;
+}
+
+/* A title names the whole group. */
+.insp-group > .label {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
+/* What halves cleanly is a slider or a switch: a short label and a control.
+   Everything else — prose, a field, a segmented control, a row of swatches — is
+   already horizontal or wraps to nothing useful at half the width. */
+.insp-group > * {
+  grid-column: 1 / -1;
+}
+
+.insp-group > .slider-row,
+.insp-group > .row,
+.insp-group > .row-between {
+  grid-column: auto;
 }
 
 .insp-group {
@@ -2368,12 +2411,6 @@ dialog.info a {
   text-overflow: ellipsis;
 }
 
-.bar-ready-unused span {.bar-ready-text span {
-  font-size: 10.5px;
-  line-height: 1.35;
-  color: var(--muted);
-}
-
 /* ---- music lane --------------------------------------------------------- */
 
 .track.music {
@@ -2414,4 +2451,72 @@ dialog.info a {
   background: var(--violet);
   opacity: 0.5;
   pointer-events: none;
+}
+
+/* ---- settings: shown or hidden ------------------------------------------- */
+
+/* Deliberately loud, and it says what it opens. It is the only way back to
+   every setting in the app, and a chevron on a grey edge is something found by
+   accident. It carries the play button's colour, which is this app's "does
+   something" colour, and rides the panel's edge as it opens. */
+.rail-tab {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  align-self: start;
+  margin-top: 76px;
+  margin-right: var(--rail);
+  z-index: 26;
+  width: 30px;
+  padding: 16px 0;
+  border: var(--border);
+  border-right: none;
+  background: var(--lime);
+  color: var(--lime-ink);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: var(--t-xs);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: var(--shadow-hard-sm);
+  transition:
+    margin-right 0.24s var(--snap),
+    filter 0.12s ease;
+}
+
+.rail-tab:hover {
+  filter: brightness(1.06);
+}
+
+.rail-tab:active {
+  box-shadow: none;
+}
+
+/* The panel moves under the same easing, so the tab reads as carrying it. */
+.editor {
+  transition: grid-template-columns 0.24s var(--snap);
+}
+
+.editor.rail-hidden .inspector {
+  display: none;
+}
+
+/* The picture keeps out from under the panel.
+ *
+ * Floating over the stage rather than taking a column keeps the window and the
+ * layout still, which is the point — but measured, the open panel covered a
+ * third of the preview. A third of the thing you are looking at is not a
+ * trade worth making for a panel you opened in order to change how it looks.
+ * The stage keeps its size; only the picture inside it makes room, so nothing
+ * about the window moves. */
+.editor:not(.rail-hidden) .stage {
+  padding-right: calc(20px + var(--rail));
+}
+
+/* Icons only, on one row: seven fit at this width, and a name beside each
+   would spend the width on labels rather than on settings. */
+.insp-tabs {
+  flex-wrap: nowrap;
 }
