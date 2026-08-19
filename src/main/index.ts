@@ -609,12 +609,25 @@ ipcMain.handle('ready:show', async (_e, detail: { title: string; hint: string })
   bar.showInactive()
   await barReady
   bar.webContents.send('bar:stage', detail)
+
+  // The studio goes away *here*, not when recording starts.
+  //
+  // It used to be hidden inside `recording:start`, which left it on screen for
+  // the whole arranging step — sitting behind the window it had just raised,
+  // and in the way of the very thing being arranged. Worse, pressing Start on
+  // the bar activates the app, and macOS raises an app's windows when it is
+  // activated: the studio jumped to the front at exactly the moment it was
+  // meant to disappear.
+  studioWindow?.hide()
 })
 
 ipcMain.handle('ready:hide', () => {
-  // Only hidden if nothing is being recorded; during a take this is the bar
-  // that carries Stop.
-  if (!recorder) barWindow?.hide()
+  // Only unwound if nothing is being recorded. During a take this is the bar
+  // that carries Stop, and the studio is meant to be out of the way.
+  if (!recorder) {
+    barWindow?.hide()
+    studioWindow?.show()
+  }
   barWindow?.webContents.send('bar:stage', null)
 })
 
@@ -689,6 +702,8 @@ ipcMain.handle(
       micDeviceId: options.micDeviceId
     })
 
+    // Already hidden by the ready step, but a take can also be started without
+    // one — the keyboard shortcut, or a future caller — so this stays.
     studioWindow?.hide()
 
     // Count down *after* the camera has been acquired, so the device is warm

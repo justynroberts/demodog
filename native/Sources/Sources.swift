@@ -89,7 +89,10 @@ enum WindowFocus {
         }
 
         let app = NSRunningApplication(processIdentifier: pid)
-        let raised = app?.activate(options: [.activateAllWindows]) ?? false
+        // Plain activation, not `.activateAllWindows`. Raising every window an
+        // application owns rearranges the user's desktop around a choice they
+        // made about one window, which is not what they asked for.
+        let raised = app?.activate() ?? false
         emit([
             "event": "focused",
             "window": Int(windowID),

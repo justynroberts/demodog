@@ -4,6 +4,20 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## 1.4.2 — 2026-08-19
+
+- **The app got in its own way between choosing a source and recording it.** The
+  studio window was hidden when the *recording* started, not when *Let's Start*
+  was pressed — so it stayed on screen for the whole arranging step, sitting
+  behind the window it had just raised. Worse, pressing Start on the bar
+  activates the app, and macOS raises an app's windows when it is activated: the
+  studio jumped to the front at the exact moment it was meant to disappear.
+  It now goes away as soon as Let's Start is pressed, leaving the floating bar
+  and your own windows; **Back** brings it straight back.
+- Raising the chosen window no longer raises every other window that
+  application owns. Rearranging someone's desktop around a choice they made
+  about one window is not what they asked for.
+
 ## 1.4.1 — 2026-08-18
 
 - **A recording now refuses rather than capturing the wrong window.** Windows
