@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.5.0 — 2026-08-19
 
 - **The settings panel is shown or hidden**, with a *Menu* tab on its edge in
   the play button's colour. It floats over the picture rather than taking width
