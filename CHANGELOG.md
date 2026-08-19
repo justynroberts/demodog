@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.4.5 — 2026-08-19
 
 - Transcription now names the case it actually found. 1.4.4 stopped it claiming
   "no speech was heard" when there was no audio, but it still blamed the
