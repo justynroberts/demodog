@@ -55,6 +55,11 @@ case "probe":
     Task { await AudioProbe.run(path: args.string("audio") ?? "") }
     RunLoop.main.run()
 
+case "speech-check":
+    startWatchdog(seconds: 20, label: "speech-check")
+    Task { await SpeechCheck.run(locale: args.string("locale") ?? "en-GB") }
+    RunLoop.main.run()
+
 case "permissions":
     startWatchdog(seconds: 8, label: "permissions")
     Permissions.check(requesting: args.bool("request", default: false))

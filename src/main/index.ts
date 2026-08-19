@@ -1152,11 +1152,39 @@ function profilesPath(): string {
   return join(app.getPath('userData'), 'profiles.json')
 }
 
+/**
+ * The profile a fresh install starts with.
+ *
+ * There was none: the file does not exist until something is saved, so a new
+ * user opened the editor with an empty Profile picker and nothing marked
+ * default — no named place to return to after changing something, and no
+ * starting point to save over.
+ *
+ * Its settings are deliberately empty. Merging an empty object over the
+ * defaults yields the defaults, so this is exactly "the way the app looks,
+ * named" rather than an opinion invented here that would then disagree with
+ * the real defaults the moment either changed.
+ */
+function starterProfile(): Profile {
+  return {
+    id: 'default',
+    name: 'Default',
+    isDefault: true,
+    settings: {}
+  } as Profile
+}
+
 async function readProfiles(): Promise<Profile[]> {
   try {
-    return JSON.parse(await readFile(profilesPath(), 'utf8')) as Profile[]
+    const saved = JSON.parse(await readFile(profilesPath(), 'utf8')) as Profile[]
+    return Array.isArray(saved) ? saved : [starterProfile()]
   } catch {
-    return []
+    // Only when the file is absent, so deleting every profile on purpose stays
+    // deleted rather than being undone on the next launch.
+    if (existsSync(profilesPath())) return []
+    const seeded = [starterProfile()]
+    await writeFile(profilesPath(), JSON.stringify(seeded, null, 2)).catch(() => undefined)
+    return seeded
   }
 }
 

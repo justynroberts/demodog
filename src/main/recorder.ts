@@ -142,6 +142,15 @@ export async function probeAudio(path: string): Promise<AudioProbe> {
   }
 }
 
+/** What the speech recogniser can do here. Never throws. */
+export async function speechCheck(locale: string): Promise<Record<string, unknown>> {
+  try {
+    return await runOnce(['speech-check', '--locale', locale])
+  } catch (error) {
+    return { event: 'speech', error: String(error) }
+  }
+}
+
 export async function listSources(): Promise<Sources> {
   const result = await runOnceShared(['list'])
   if (result.event === 'error') {
@@ -205,7 +214,15 @@ export class RecorderProcess {
     // Our own windows — the control bar and camera bubble — must not appear in
     // the recording.
     args.push('--exclude-pids', String(process.pid))
-    if (options.maxWidth) args.push('--max-width', String(options.maxWidth))
+    // Capped unless asked otherwise.
+    //
+    // Nothing set this, so a 5K display was captured at 5120x2880 and the
+    // encoder asked for about 80 Mbit/s of H.264 at 60fps — which it cannot
+    // sustain, so it silently refused frames. A report showed 437 arriving and
+    // 273 written: 27fps from a capture asked for at 60, with nothing to say
+    // so. 3840 is above every export size the app offers and leaves room to
+    // zoom into, and displays narrower than it are untouched.
+    args.push('--max-width', String(options.maxWidth ?? 3840))
 
     const child = spawn(helperPath(), args)
     this.child = child

@@ -1,6 +1,7 @@
 // MIT License - Copyright (c) fintonlabs.com
 import Foundation
 import ScreenCaptureKit
+import Speech
 import AppKit
 
 /// Enumerates what can be recorded: every active display, and every on-screen
@@ -203,6 +204,58 @@ enum AudioProbe {
             "event": "probe", "hasAudio": true, "path": path,
             "duration": duration, "peakDb": db,
         ])
+        exit(0)
+    }
+}
+
+/**
+ * What the speech recogniser can actually do on this machine.
+ *
+ * "Transcription found nothing" has too many causes to guess between from a
+ * description, and they live on the user's Mac rather than in the take: the
+ * permission, whether a locale is supported at all, and whether its on-device
+ * model has been downloaded. macOS 26 moved speech recognition onto a new
+ * framework and the old one can report itself available while quietly
+ * returning empty results, which is indistinguishable from silence.
+ *
+ * So this reports the state rather than inferring it, and travels in the bug
+ * report.
+ */
+enum SpeechCheck {
+    static func run(locale: String) async {
+        let status = await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
+        }
+        let name: String
+        switch status {
+        case .authorized: name = "authorized"
+        case .denied: name = "denied"
+        case .restricted: name = "restricted"
+        case .notDetermined: name = "notDetermined"
+        @unknown default: name = "unknown"
+        }
+
+        let supported = SFSpeechRecognizer.supportedLocales().map { $0.identifier }
+        let recogniser = SFSpeechRecognizer(locale: Locale(identifier: locale))
+        var info: [String: Any] = [
+            "event": "speech",
+            "os": ProcessInfo.processInfo.operatingSystemVersionString,
+            "authorization": name,
+            "requested": locale,
+            "localeSupported": supported.contains(where: { $0.replacingOccurrences(of: "_", with: "-") == locale }),
+            "supportedCount": supported.count,
+        ]
+        if let recogniser {
+            info["available"] = recogniser.isAvailable
+            info["onDevice"] = recogniser.supportsOnDeviceRecognition
+        } else {
+            info["available"] = false
+            info["onDevice"] = false
+            info["note"] = "no recogniser could be created for that locale"
+        }
+        // A handful, so a report shows what this Mac would accept instead.
+        info["someSupported"] = Array(supported.prefix(8))
+        emit(info)
         exit(0)
     }
 }

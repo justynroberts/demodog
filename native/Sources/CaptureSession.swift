@@ -61,6 +61,8 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
      * user can reproduce on request.
      */
     private var statusCounts: [Int: Int] = [:]
+    /// Frames the encoder was not ready for, and which are therefore lost.
+    private var droppedFrames = 0
     /** The first audio sample's timestamp, once one has been written. */
     private var firstAudioHost: Double = -1
     /** The most recent frame that actually carried pixels, for repeating. */
@@ -352,6 +354,16 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
                 frameCount += 1
                 lastFrameHost = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
                 lastComplete = sampleBuffer
+            } else {
+                // The encoder could not take it, so the frame is gone.
+                //
+                // Counted rather than shrugged at: a take can lose a third of
+                // its frames this way and look merely "a bit choppy", with
+                // nothing anywhere to say why. One report showed 437 frames
+                // arriving and 273 written on a 5K display — 27fps out of a
+                // capture asked for at 60.
+                droppedFrames += 1
+                lastComplete = sampleBuffer
             }
 
         case .audio:
@@ -406,6 +418,7 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
         meta["frameStatus"] = statusCounts.reduce(into: [String: Int]()) { out, pair in
             out[Self.statusName(pair.key)] = pair.value
         }
+        meta["droppedFrames"] = droppedFrames
         writeJSON(meta, to: options.outputDir + "/meta.json")
 
         emit([

@@ -5,7 +5,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs'
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { probeAudio, checkPermissions } from './recorder'
+import { probeAudio, checkPermissions, speechCheck } from './recorder'
 
 const run = promisify(execFile)
 
@@ -55,6 +55,22 @@ export async function collectDiagnostics(note: string): Promise<{ zip: string; b
     add('Accessibility', permissions.accessibility ? 'granted' : 'not granted')
   } catch (error) {
     add('Permissions', `could not be read (${String(error)})`)
+  }
+
+  // What the recogniser can do here, because "transcription found nothing" has
+  // causes that live on this Mac rather than in the take — the permission, an
+  // unsupported language, or a model that was never downloaded — and none of
+  // them can be told apart from a description.
+  try {
+    const speech = await speechCheck(app.getLocale() || 'en-GB')
+    add(
+      'Speech',
+      `${speech.authorization ?? '?'}, available=${speech.available ?? '?'}, ` +
+        `on-device=${speech.onDevice ?? '?'}, locale ${speech.requested ?? '?'} ` +
+        `${speech.localeSupported ? 'supported' : 'NOT SUPPORTED'}`
+    )
+  } catch (error) {
+    add('Speech', `could not be read (${String(error)})`)
   }
 
 

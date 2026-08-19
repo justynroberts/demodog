@@ -6,6 +6,28 @@ is where finished work waits.
 
 ## Unreleased
 
+- **A fresh install had no profile at all.** The file is only written when
+  something is saved, so a new user opened the editor with an empty Profile
+  picker, nothing marked as default, and no named starting point to save over.
+  There is now a *Default* profile from first launch. Its settings are
+  deliberately empty — merging nothing over the defaults gives the defaults, so
+  it is the way the app looks rather than a second opinion that could drift
+  from it. Deleting every profile on purpose still leaves them deleted.
+- **Frames were being dropped silently on large displays.** Nothing capped the
+  capture size, so a 5K display was recorded at 5120x2880 and the encoder was
+  asked for around 80 Mbit/s of H.264 at 60fps. It could not sustain that, so it
+  refused frames and they were discarded without a word: one report shows 437
+  frames arriving and 273 written — 27fps from a capture asked for at 60.
+  Capture is now capped at 3840 wide, which is above every export size offered
+  and still leaves room to zoom into, and displays narrower than that are
+  untouched. Any frame the encoder does refuse is counted into the take.
+- Bug reports say what the speech recogniser can do on that Mac — the
+  permission, whether the language is supported, and whether on-device
+  recognition is available. "Transcription found nothing" has causes that live
+  on the machine rather than in the recording, and none of them can be told
+  apart from a description.
+
+
 - **Background music.** A bed under the whole piece, title cards included, with
   its own level, fades, a start offset and looping when the track is shorter
   than the take. It appears as a lane on the timeline rather than only in a
