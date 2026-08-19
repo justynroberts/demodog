@@ -1293,6 +1293,19 @@ function AudioTab({ project, patch }: { project: Project; patch: Patcher }): Rea
   )
 }
 
+/**
+ * English, in this Mac's region where that exists.
+ *
+ * Deliberately not the interface language. A Dutch speaker narrating in English
+ * is ordinary, and taking the system language meant asking the recogniser for
+ * Dutch and getting an empty transcript back — a wrong answer that looks like a
+ * broken feature. Guessing English and being wrong costs one dropdown.
+ */
+function defaultSpokenLocale(): string {
+  const region = new Intl.Locale(navigator.language || 'en-GB').region
+  return region ? `en-${region}` : 'en-GB'
+}
+
 function swatchCSS(colors: string[], angle: number): string {
   if (colors.length === 1) return colors[0]
   return `linear-gradient(${angle + 90}deg, ${colors.join(', ')})`
@@ -1335,7 +1348,11 @@ function CaptionsTab({
    */
   const [locales, setLocales] = useState<string[]>([])
   const [locale, setLocale] = useState<string>(
-    () => localStorage.getItem('demodog-speech-locale') || navigator.language || 'en-GB'
+    // English by default rather than the system language. Narration is in
+    // English far more often than a Mac is set to English, and being wrong in
+    // that direction costs a dropdown; being wrong the other way returns an
+    // empty transcript with nothing to explain it.
+    () => localStorage.getItem('demodog-speech-locale') || defaultSpokenLocale()
   )
   useEffect(() => {
     void api.speechLocales().then((list) => {
@@ -1344,9 +1361,15 @@ function CaptionsTab({
       // interface language, then anything in the same language, then English.
       setLocale((current) => {
         if (list.includes(current)) return current
-        const ui = list.find((l) => l === navigator.language)
-        const same = list.find((l) => l.split('-')[0] === navigator.language.split('-')[0])
-        return ui ?? same ?? list.find((l) => l.startsWith('en')) ?? current
+        // This region's English if it exists — but named fallbacks after that,
+        // not simply the first English in the list. On a Dutch Mac "en-NL" does
+        // not exist and the first English happens to be en-AE, which is a
+        // stranger answer than either of the two everyone means.
+        for (const wanted of [defaultSpokenLocale(), 'en-GB', 'en-US']) {
+          const match = list.find((l) => l === wanted)
+          if (match) return match
+        }
+        return list.find((l) => l.startsWith('en')) ?? current
       })
     })
   }, [])

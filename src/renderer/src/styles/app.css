@@ -723,7 +723,9 @@ input[type='checkbox']:checked::after {
      picture instead of displacing it. The stage's row only, so the timeline
      underneath stays whole and scrubbable while the settings are open. */
   grid-column: 1;
-  grid-row: 1;
+  /* Both rows: the panel is a side of the window, and stopping it at the
+     timeline left it looking cut off half way down. */
+  grid-row: 1 / span 2;
   justify-self: end;
   width: var(--rail);
   z-index: 25;
@@ -2513,6 +2515,13 @@ dialog.info a {
  * about the window moves. */
 .editor:not(.rail-hidden) .stage {
   padding-right: calc(20px + var(--rail));
+}
+
+/* The timeline keeps out from under it too. It runs the width of the window
+   and every part of it is a scrub target, so a panel lying over its right
+   third would put the end of the take out of reach. */
+.editor:not(.rail-hidden) .timeline {
+  padding-right: calc(14px + var(--rail));
 }
 
 /* Icons only, on one row: seven fit at this width, and a name beside each
