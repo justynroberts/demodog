@@ -341,6 +341,25 @@ const LOOK_KEYS = [
   'outro'
 ] as const
 
+/** Which profile the look came from, so the picker can say so next time. */
+const PROFILE_KEY = 'demodog-profile'
+
+export function rememberProfile(id: string): void {
+  try {
+    localStorage.setItem(PROFILE_KEY, id)
+  } catch {
+    // Same as the look: not worth interrupting anyone over.
+  }
+}
+
+export function rememberedProfile(): string {
+  try {
+    return localStorage.getItem(PROFILE_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 export function rememberLook(project: Project): void {
   const look: Record<string, unknown> = {}
   for (const key of LOOK_KEYS) look[key] = project[key]

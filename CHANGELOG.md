@@ -4,6 +4,19 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## 1.5.1 — 2026-08-19
+
+- **The profile picker went blank and stayed blank.** Two things were being
+  remembered — the look, and which profile it came from — but only the look was
+  written down. Every adjustment writes a remembered look; on the next launch
+  that look was preferred over the starred profile and returned early, so the
+  picker was never handed an id and fell to *Custom (unsaved)*. Permanently,
+  from the first change onwards. The profiles were never lost, but nothing
+  pointed at them again — so saving made a copy rather than updating the one
+  that was supposedly open. The selected profile is now remembered alongside
+  the look: work in progress still wins over the profile's saved state, being
+  the more recent of the two, and the profile it came from stays named.
+
 ## 1.5.0 — 2026-08-19
 
 - **Transcription assumes English, and lets you say otherwise.** It used the

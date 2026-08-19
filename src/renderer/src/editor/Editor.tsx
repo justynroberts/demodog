@@ -6,7 +6,14 @@ import { ensureTitleImages, phaseAt, recordingEnded, recordingRuns } from '../en
 import { Composition } from '../engine/composition'
 import { baseViewport } from '../engine/camera'
 import { generateSegments } from '../engine/autozoom'
-import { defaultProject, mergeSettings, rememberLook, rememberedLook } from '../engine/defaults'
+import {
+  defaultProject,
+  mergeSettings,
+  rememberLook,
+  rememberedLook,
+  rememberProfile,
+  rememberedProfile
+} from '../engine/defaults'
 import { exportMP4 } from '../engine/export'
 import type { Project, Recording, ZoomSegment } from '../engine/types'
 import { fadeAlphaAt } from '../engine/composition'
@@ -152,15 +159,29 @@ export default function Editor({
       // Settings given to a headless export are the whole point of that export;
       // neither the remembered look nor a starred profile may override them.
       if (bench?.project) return
+      // Which profile is showing is remembered separately from the look.
+      //
+      // It was not, and the two came apart the moment anything was adjusted:
+      // every change writes a remembered look, the remembered look was preferred
+      // over the starred profile and returned early, so the picker was never
+      // handed an id and sat on "Custom (unsaved)" for good. Profiles appeared to
+      // stop existing after the first edit — the saved settings were still there,
+      // but nothing ever pointed at them again.
+      const lastId = rememberedProfile()
       const remembered = rememberedLook()
+      const preferred =
+        profiles.find((p) => p.id === lastId) ?? profiles.find((p) => p.isDefault)
+
       if (remembered) {
+        // Work in progress wins over the profile's saved state, being the more
+        // recent of the two — but the profile it came from is still named, so
+        // Save updates that one rather than quietly making a copy.
         setProject((current) => mergeSettings(current, remembered))
+        if (preferred) setProfileId(preferred.id)
         return
       }
-      const preferred = profiles.find((p) => p.isDefault)
       if (!preferred) return
       setProject((current) => mergeSettings(current, preferred.settings))
-      // Select it too, so saving updates this profile instead of making a copy.
       setProfileId(preferred.id)
     })
   }, [recording])
@@ -171,6 +192,11 @@ export default function Editor({
   useEffect(() => {
     rememberLook(project)
   }, [project])
+
+  // And which profile it came from, so the picker still names it next time.
+  useEffect(() => {
+    rememberProfile(profileId)
+  }, [profileId])
 
   // Regenerate the automatic zooms whenever their settings change, keeping any
   // segment the user added or edited by hand.
