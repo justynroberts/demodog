@@ -1,5 +1,5 @@
 // MIT License - Copyright (c) fintonlabs.com
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { api } from '../api'
 import { BACKGROUND_PRESETS, OUTPUT_PRESETS, mergeSettings } from '../engine/defaults'
 import { Group, Segmented, Slider, Toggle, formatTime } from '../ui/controls'
@@ -32,9 +32,6 @@ function extractProfileSettings(project: Project): Record<string, unknown> {
 }
 
 interface Props {
-  /** True once the rail is wide enough to name its tabs rather than only draw them. */
-  wide?: boolean
-  onCollapse?: () => void
   project: Project
   onChange: (project: Project) => void
   segments: ZoomSegment[]
@@ -144,8 +141,14 @@ const TABS: { id: Tab; name: string; hint: string; icon: ReactNode }[] = [
 ]
 
 export default function Inspector(props: Props): ReactNode {
-  const { project, onChange, wide = false, onCollapse } = props
+  const { project, onChange } = props
   const [tab, setTab] = useState<Tab>('style')
+  const bodyRef = useRef<HTMLDivElement>(null)
+  // A new tab starts at its top. Carrying the last one's scroll position into
+  // it lands you in the middle of settings you have not seen.
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: 0 })
+  }, [tab])
   /** Whichever tab the pointer is over, so the caption can preview it. */
   const [hovered, setHovered] = useState<Tab | null>(null)
 
@@ -160,7 +163,7 @@ export default function Inspector(props: Props): ReactNode {
   const described = TABS.find((t) => t.id === (hovered ?? tab)) ?? TABS[0]
 
   return (
-    <aside className={wide ? 'inspector wide' : 'inspector'}>
+    <aside className="inspector">
       <div className="insp-tabs" role="tablist">
         {TABS.map(({ id, name, hint, icon }) => (
           <button
@@ -177,9 +180,6 @@ export default function Inspector(props: Props): ReactNode {
             <svg viewBox="0 0 24 24" aria-hidden="true">
               {icon}
             </svg>
-            {/* Always rendered, revealed by width. Mounting it on resize would
-                rebuild the tabs mid-drag and drop the hover state. */}
-            <span className="insp-tab-name">{name}</span>
           </button>
         ))}
       </div>
@@ -192,17 +192,9 @@ export default function Inspector(props: Props): ReactNode {
       <div className="insp-caption">
         <strong>{described.name}</strong>
         <span>{described.hint}</span>
-        <button
-          className="insp-collapse"
-          onClick={onCollapse}
-          aria-label="Hide the settings panel"
-          title="Hide the settings panel"
-        >
-          ›
-        </button>
       </div>
 
-      <div className="insp-body">
+      <div className="insp-body" ref={bodyRef}>
         {tab === 'style' && (
           <StyleTab
             project={project}
@@ -305,7 +297,7 @@ function Profiles({
   const isRename = Boolean(current) && current!.name !== name.trim()
 
   return (
-    <Group title="Profile">
+    <Group title="Profile" span>
       <select value={selected} onChange={(e) => apply(e.target.value)}>
         <option value="">Custom (unsaved)</option>
         {profiles.map((profile) => (
@@ -386,7 +378,7 @@ function StyleTab({
         onSelected={onProfileId}
       />
 
-      <Group title="Background">
+      <Group title="Background" span>
         <div className="swatches">
           {BACKGROUND_PRESETS.map((preset) => (
             <button
@@ -603,7 +595,7 @@ function ZoomTab({
           refers to, and hunting for it under the automatic settings makes the
           two feel unrelated when one overrides the other. */}
       {active ? (
-        <Group title={active.auto ? 'Selected shot (automatic)' : 'Selected shot'}>
+        <Group span title={active.auto ? 'Selected shot (automatic)' : 'Selected shot'}>
           <button
             className={picking ? 'btn violet' : 'btn'}
             onClick={onPick}
@@ -1180,8 +1172,8 @@ function CameraTab({
  *
  * These lived at the bottom of the Camera tab, below the bubble's shape and
  * position — so the music controls were two scrolls past anything about music,
- * and were found by accident if at all. A rail that can be widened is what
- * makes a seventh tab affordable.
+ * and were found by accident if at all. A panel wide enough to show two
+ * columns of settings is what makes a seventh tab affordable.
  */
 function AudioTab({ project, patch }: { project: Project; patch: Patcher }): ReactNode {
   return (
@@ -1391,7 +1383,7 @@ function CaptionsTab({
 
   return (
     <>
-      <Group title="Transcript">
+      <Group title="Transcript" span>
         {captions.length === 0 ? (
           <>
             <p className="hint">
@@ -1439,7 +1431,7 @@ function CaptionsTab({
       </Group>
 
       {current && (
-        <Group title="Selected line">
+        <Group title="Selected line" span>
           <textarea
             className="caption-text"
             value={current.text}
@@ -1663,7 +1655,7 @@ function TitlesTab({ project, patch }: { project: Project; patch: Patcher }): Re
     const value = project[which]
     const set = (changes: Partial<typeof value>): void => patch(which, changes)
     return (
-      <Group title={which === 'intro' ? 'Intro' : 'Outro'}>
+      <Group span title={which === 'intro' ? 'Intro' : 'Outro'}>
         <Toggle
           label={which === 'intro' ? 'Show before the recording' : 'Show after the recording'}
           checked={value.enabled}

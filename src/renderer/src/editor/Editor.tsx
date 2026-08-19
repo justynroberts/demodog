@@ -15,9 +15,19 @@ import { musicLevelAt, musicTimeAt } from './music'
 import { formatTime } from '../ui/controls'
 import Timeline from './Timeline'
 
-/** How narrow and how wide the settings rail may be dragged. */
-const RAIL_MIN = 260
-const RAIL_MAX = 720
+/**
+ * How wide the settings panel is when it is there at all.
+ *
+ * There are two states, and they are shown and hidden — not two widths. The
+ * panel is either being used, in which case it wants room, or it is not, in
+ * which case the picture should have the whole window. Anything between those
+ * serves neither.
+ *
+ * Wide enough for the settings to sit in two columns, which is the point of
+ * the width: the same panel that was one long scroll at 300px shows most of a
+ * tab at once here.
+ */
+const RAIL_WIDTH = 560
 import Inspector from './Inspector'
 import ExportedPanel from './ExportedPanel'
 import ExportDialog, { formatDuration, rememberRate, type ExportChoice } from './ExportDialog'
@@ -82,36 +92,17 @@ export default function Editor({
    * one. Remembered, because it is a working preference rather than a decision
    * to be made again every launch.
    */
-  const [rail, setRail] = useState<number>(() => {
-    const saved = Number(localStorage.getItem('demodog-rail'))
-    return Number.isFinite(saved) && saved >= RAIL_MIN ? Math.min(saved, RAIL_MAX) : 300
-  })
+  /**
+   * Whether the rail is expanded, remembered between sessions.
+   *
+   * A working preference rather than a decision to make again every launch.
+   */
   const [railOpen, setRailOpen] = useState(
     () => localStorage.getItem('demodog-rail-open') !== 'false'
   )
   useEffect(() => {
-    localStorage.setItem('demodog-rail', String(rail))
     localStorage.setItem('demodog-rail-open', String(railOpen))
-  }, [rail, railOpen])
-
-  /** Dragging the divider between the picture and the settings. */
-  const beginRailDrag = (event: React.PointerEvent): void => {
-    if (event.button !== 0) return
-    event.preventDefault()
-    const from = event.clientX
-    const start = rail
-    const move = (e: PointerEvent): void => {
-      // Rightwards narrows: the rail is pinned to the right edge, so the
-      // divider moving right takes width away from it.
-      setRail(Math.max(RAIL_MIN, Math.min(RAIL_MAX, start - (e.clientX - from))))
-    }
-    const up = (): void => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-  }
+  }, [railOpen])
 
   const [picking, setPicking] = useState(false)
   const pickRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
@@ -686,6 +677,11 @@ export default function Editor({
         event.preventDefault()
         setSegments((current) => current.filter((s) => s.id !== selectedRef.current))
         setSelected(null)
+      } else if (event.code === 'Escape') {
+        // Somewhere to go when the panel is in the way and the mouse is not.
+        setRailOpen(false)
+      } else if (event.code === 'KeyM' && !event.metaKey && !event.ctrlKey) {
+        setRailOpen((v) => !v)
       } else if (event.code === 'KeyE' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault()
         exportRef.current()
@@ -842,8 +838,8 @@ export default function Editor({
 
   return (
     <div
-      className={railOpen ? 'editor' : 'editor rail-closed'}
-      style={{ ['--rail' as string]: `${railOpen ? rail : 0}px` }}
+      className={railOpen ? 'editor' : 'editor rail-hidden'}
+      style={{ ['--rail' as string]: `${railOpen ? RAIL_WIDTH : 0}px` }}
     >
       <div className="stage">
         <canvas
@@ -998,36 +994,20 @@ export default function Editor({
         />
       )}
 
-      {/* The divider. A real target rather than a hairline: a 2px edge is a
-          thing you hunt for, and this one is dragged often. */}
-      {railOpen && (
-        <div
-          className="rail-grip"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize the settings panel"
-          onPointerDown={beginRailDrag}
-          onDoubleClick={() => setRail(300)}
-          title="Drag to resize · double-click to reset"
-        />
-      )}
-
-      {/* With the rail away, one tab remains to bring it back. Hiding a panel
-          with no way back is how a control disappears for good. */}
-      {!railOpen && (
-        <button
-          className="rail-pullout"
-          onClick={() => setRailOpen(true)}
-          aria-label="Show the settings panel"
-          title="Show the settings panel"
-        >
-          <span>Settings</span>
-        </button>
-      )}
+      {/* One control, on the edge of the panel it belongs to. It expands to
+          make room for the tab names and a second column of settings, and
+          contracts to give the picture the space back. */}
+      <button
+        className="rail-tab"
+        onClick={() => setRailOpen((v) => !v)}
+        aria-expanded={railOpen}
+        aria-label={railOpen ? 'Hide the settings' : 'Show the settings'}
+        title={railOpen ? 'Hide the settings' : 'Show the settings'}
+      >
+        Menu
+      </button>
 
       <Inspector
-        wide={rail >= 420}
-        onCollapse={() => setRailOpen(false)}
         project={project}
         onChange={setProject}
         segments={segments}

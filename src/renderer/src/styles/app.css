@@ -679,7 +679,10 @@ input[type='checkbox']:checked::after {
 .editor {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr var(--rail);
+  /* One column. The settings float over the picture rather than taking width
+     from it — a panel that resizes the stage every time it opens changes the
+     framing of the very thing you are judging. */
+  grid-template-columns: 1fr;
   grid-template-rows: 1fr auto;
   min-height: 0;
 }
@@ -716,8 +719,15 @@ input[type='checkbox']:checked::after {
 }
 
 .inspector {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+  /* The stage's own grid cell, pinned to its right edge, so it overlaps the
+     picture instead of displacing it. The stage's row only, so the timeline
+     underneath stays whole and scrubbable while the settings are open. */
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  width: var(--rail);
+  z-index: 25;
+  box-shadow: -6px 0 0 rgba(0, 0, 0, 0.14);
   border-left: var(--border);
   background: var(--surface);
   overflow-y: auto;
@@ -811,6 +821,39 @@ input[type='checkbox']:checked::after {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* The width lays out the *controls*, not the groups.
+ *
+ * Pairing whole groups is the obvious reading and it barely helped: one tall
+ * group — Automatic zoom, Picture in picture — leaves an empty column beside
+ * it and the panel stays as long as it ever was. Laying out the controls
+ * halves exactly the tabs that were worst. */
+.insp-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(214px, 1fr));
+  align-items: start;
+  gap: 12px 14px;
+  min-width: 0;
+}
+
+/* A title names the whole group. */
+.insp-group > .label {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
+/* What halves cleanly is a slider or a switch: a short label and a control.
+   Everything else — prose, a field, a segmented control, a row of swatches — is
+   already horizontal or wraps to nothing useful at half the width. */
+.insp-group > * {
+  grid-column: 1 / -1;
+}
+
+.insp-group > .slider-row,
+.insp-group > .row,
+.insp-group > .row-between {
+  grid-column: auto;
 }
 
 .insp-group {
@@ -2410,126 +2453,70 @@ dialog.info a {
   pointer-events: none;
 }
 
-/* ---- a rail you can size -------------------------------------------------- */
+/* ---- settings: shown or hidden ------------------------------------------- */
 
-/* The divider between the picture and the settings. Wider than it looks: the
-   visible line is 2px, the target is 10, because a hairline is something you
-   hunt for and this is dragged often. */
-.rail-grip {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  position: relative;
-  width: 10px;
-  margin-right: -10px;
-  z-index: 30;
-  cursor: col-resize;
-  touch-action: none;
-}
-
-.rail-grip::after {
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 4px;
-  width: 2px;
-  background: transparent;
-  transition: background 0.12s ease;
-}
-
-.rail-grip:hover::after,
-.rail-grip:active::after {
-  background: var(--violet);
-}
-
-/* Collapsed: the grid column goes to nothing and the picture takes the room. */
-.editor.rail-closed .inspector {
-  display: none;
-}
-
-/* The one control left when the panel is away. Vertical, on the right edge,
-   because that is where the thing it restores lives. */
-.rail-pullout {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 30;
-  padding: 14px 6px;
+/* Deliberately loud, and it says what it opens. It is the only way back to
+   every setting in the app, and a chevron on a grey edge is something found by
+   accident. It carries the play button's colour, which is this app's "does
+   something" colour, and rides the panel's edge as it opens. */
+.rail-tab {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  align-self: start;
+  margin-top: 76px;
+  margin-right: var(--rail);
+  z-index: 26;
+  width: 30px;
+  padding: 16px 0;
   border: var(--border);
   border-right: none;
-  background: var(--surface);
-  color: var(--muted);
-  cursor: pointer;
+  background: var(--lime);
+  color: var(--lime-ink);
   writing-mode: vertical-rl;
+  transform: rotate(180deg);
   font-size: var(--t-xs);
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-weight: 800;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: var(--shadow-hard-sm);
   transition:
-    color 0.12s ease,
-    background 0.12s ease;
+    margin-right 0.24s var(--snap),
+    filter 0.12s ease;
 }
 
-.rail-pullout:hover {
-  background: var(--surface-2);
-  color: var(--text);
+.rail-tab:hover {
+  filter: brightness(1.06);
 }
 
-/* Tabs wrap once there is room, so a seventh does not shrink the rest to
-   nothing — which is the whole reason Music was buried inside Camera. */
-.insp-tabs {
-  flex-wrap: wrap;
+.rail-tab:active {
+  box-shadow: none;
 }
 
-.insp-tab-name {
+/* The panel moves under the same easing, so the tab reads as carrying it. */
+.editor {
+  transition: grid-template-columns 0.24s var(--snap);
+}
+
+.editor.rail-hidden .inspector {
   display: none;
 }
 
-.inspector.wide .insp-tabs button {
-  flex: 1 0 33%;
-  grid-auto-flow: column;
-  gap: 8px;
-  place-items: center;
-  padding: 11px 8px;
-}
-
-.inspector.wide .insp-tab-name {
-  display: inline;
-  font-size: var(--t-xs);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.insp-caption {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.insp-collapse {
-  margin-left: auto;
-  padding: 0 6px;
-  border: none;
-  background: none;
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.insp-collapse:hover {
-  color: var(--text);
-}
-
-/* Wide enough for two columns of controls, which is where the extra width
-   pays for itself rather than only stretching every slider.
+/* The picture keeps out from under the panel.
  *
- * Grid rather than multi-column: the body is a flex container, and `column-count`
- * has no effect on one — the rule was written, applied, and did nothing. Grid
- * also keeps each group whole instead of letting one flow across a column
- * break, which is what you want for a titled panel of controls. */
-.inspector.wide .insp-body {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  align-items: start;
-  gap: 16px 14px;
+ * Floating over the stage rather than taking a column keeps the window and the
+ * layout still, which is the point — but measured, the open panel covered a
+ * third of the preview. A third of the thing you are looking at is not a
+ * trade worth making for a panel you opened in order to change how it looks.
+ * The stage keeps its size; only the picture inside it makes room, so nothing
+ * about the window moves. */
+.editor:not(.rail-hidden) .stage {
+  padding-right: calc(20px + var(--rail));
+}
+
+/* Icons only, on one row: seven fit at this width, and a name beside each
+   would spend the width on labels rather than on settings. */
+.insp-tabs {
+  flex-wrap: nowrap;
 }
