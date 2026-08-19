@@ -237,7 +237,23 @@ async function buildCamera(path) {
   ])
 }
 
+/**
+ * A music bed at a frequency nothing else in the fixture uses.
+ *
+ * 300 Hz, where the narration pips are at 1 kHz — so a band-pass at either
+ * frequency measures one without the other, and the checks can say how loud the
+ * bed is at a given moment rather than only that audio exists.
+ */
+async function buildMusic(path) {
+  await run('ffmpeg', [
+    '-v', 'error', '-y', '-f', 'lavfi',
+    '-i', `sine=frequency=300:duration=${DURATION}`,
+    '-c:a', 'aac', '-b:a', '128k', path
+  ])
+}
+
 await mkdir(out, { recursive: true })
+await buildMusic(join(out, 'music.m4a'))
 await buildVideo(join(out, 'screen.mp4'))
 await buildCamera(join(out, 'camera.mp4'))
 

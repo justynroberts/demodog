@@ -4,6 +4,23 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- **Background music.** A bed under the whole piece, title cards included, with
+  its own level, fades, a start offset and looping when the track is shorter
+  than the take. It appears as a lane on the timeline rather than only in a
+  panel.
+- **It ducks under the narration by itself.** The transcript already states
+  where words are, so ducking is scheduled from the caption cues rather than
+  detected from the audio: exact, free, and still correct after a line is
+  retimed or deleted. Adjacent cues are merged first, since a bed that pumps
+  between sentences is more distracting than one that never moves. Measured in
+  a real export at 18.1 dB down against the 18 asked for.
+- A headless export can be handed project settings — captions, cards, music,
+  the zoom feel — through `DEMODOG_BENCH_PROJECT`. It could previously only
+  render whatever the app happened to remember, which made anything about the
+  project impossible to render deliberately or to check.
+
 ## 1.4.5 — 2026-08-19
 
 - Transcription now names the case it actually found. 1.4.4 stopped it claiming

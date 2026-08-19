@@ -11,6 +11,7 @@ import { exportMP4 } from '../engine/export'
 import type { Project, Recording, ZoomSegment } from '../engine/types'
 import { fadeAlphaAt } from '../engine/composition'
 import { fadeOutAndPause, isRamping, rampVolume } from './mediaFade'
+import { musicLevelAt, musicTimeAt } from './music'
 import { formatTime } from '../ui/controls'
 import Timeline from './Timeline'
 import Inspector from './Inspector'
@@ -31,22 +32,26 @@ export default function Editor({
 }: {
   recording: Recording
   /** Headless benchmark: export straight to this path, then quit. */
-  bench?: { out: string; seconds: number; plain?: boolean } | null
+  bench?: { out: string; seconds: number; plain?: boolean; project?: unknown } | null
 }): ReactNode {
   const [project, setProject] = useState<Project>(() => {
     const base = defaultProject(recording.source, Boolean(recording.cameraURL))
     // Applied here rather than in an effect, because the export closure
     // captures the project it was created with — updating the state later left
     // the overlays on and the check they exist to isolate meaningless.
-    if (!bench?.plain) return base
+    // Settings handed in from outside take precedence over the defaults, and
+    // over anything the app remembers — a scripted export has to be able to say
+    // exactly what it wants rendered.
+    const given = bench?.project ? mergeSettings(base, bench.project) : base
+    if (!bench?.plain) return given
     return {
-      ...base,
-      zoom: { ...base.zoom, enabled: false },
+      ...given,
+      zoom: { ...given.zoom, enabled: false },
       // `visible`, not `enabled` — the cursor has its own key, and setting the
       // wrong one left the pointer drawn and moving, which is enough on its own
       // to make every exported frame differ.
-      cursor: { ...base.cursor, visible: false },
-      pip: { ...base.pip, enabled: false },
+      cursor: { ...given.cursor, visible: false },
+      pip: { ...given.pip, enabled: false },
       // Fades brighten the picture across the opening and closing second, which
       // changes it every frame regardless of the recording underneath.
       fade: { in: 0, out: 0 }
@@ -84,6 +89,7 @@ export default function Editor({
 
   const screenRef = useRef<HTMLVideoElement>(null)
   const cameraRef = useRef<HTMLVideoElement>(null)
+  const musicRef = useRef<HTMLAudioElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const timeRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
@@ -107,6 +113,9 @@ export default function Editor({
       // reason it does in the recorder: applying a profile makes it the last
       // look, so preferring the more recent one loses nothing — while the
       // opposite throws away every adjustment made since.
+      // Settings given to a headless export are the whole point of that export;
+      // neither the remembered look nor a starred profile may override them.
+      if (bench?.project) return
       const remembered = rememberedLook()
       if (remembered) {
         setProject((current) => mergeSettings(current, remembered))
@@ -213,6 +222,44 @@ export default function Editor({
     Number.isFinite(camera.duration) && camera.duration > 0 ? camera.duration : Infinity
 
   /**
+   * Keeps the music bed in step with the playhead.
+   *
+   * The exporter renders the bed as Web Audio automation; the preview has an
+   * `<audio>` element and a volume, so the same shape is computed and applied
+   * frame by frame. Position is only corrected when it has drifted past a
+   * threshold — assigning `currentTime` every frame restarts the decoder and
+   * the result stutters rather than plays.
+   */
+  const driveMusic = useCallback(
+    (t: number, playing: boolean) => {
+      const bed = musicRef.current
+      const music = project.music
+      if (!bed || !music.src) return
+
+      if (!playing) {
+        if (!bed.paused) bed.pause()
+        return
+      }
+
+      const want = musicTimeAt(t, music, bed.duration || 0, trim, leadIn)
+      if (want === null) {
+        // The bed has run out and is not looping. Silence rather than a stop,
+        // so a later seek backwards picks it up again without a reload.
+        bed.volume = 0
+        if (!bed.paused) bed.pause()
+        return
+      }
+
+      bed.volume = musicLevelAt(t, music, project.captions, trim, leadIn, leadOut)
+      if (Number.isFinite(bed.duration) && Math.abs(bed.currentTime - want) > 0.25) {
+        bed.currentTime = want
+      }
+      if (bed.paused) void bed.play().catch(() => undefined)
+    },
+    [project.music, project.captions, trim, leadIn, leadOut]
+  )
+
+  /**
    * Turns a drag on the preview into a zoom shot framed on what was dragged.
    *
    * The preview may itself be zoomed at this moment, so a point on screen is
@@ -315,6 +362,7 @@ export default function Editor({
   // check never fired when the file was a hair shorter than the trim.
   useEffect(() => {
     if (playing) return
+    musicRef.current?.pause()
     screenRef.current?.pause()
     const camera = cameraRef.current
     if (camera && !camera.paused) fadeOutAndPause(camera)
@@ -398,6 +446,7 @@ export default function Editor({
             setPlaying(false)
           }
           composition.range = trim
+          driveMusic(timeRef.current, true)
           composition.render(ctx, timeRef.current, { screen: null, camera: null })
           return
         }
@@ -424,6 +473,8 @@ export default function Editor({
           if (leadOut <= 0) setPlaying(false)
           else cardClock.current = performance.now()
         }
+        driveMusic(timeRef.current, true)
+
         // The camera track starts after the screen track, so it has to be
         // started when its own timeline begins — not when playback does.
         // Waiting for `ct >= 0` at press time meant it never started at all.
@@ -778,6 +829,9 @@ export default function Editor({
             preload="auto"
           />
         )}
+        {project.music.src && (
+          <audio ref={musicRef} src={api.mediaURL(project.music.src)} preload="auto" loop={false} />
+        )}
 
         {askingExport && !exporting && (
           <ExportDialog
@@ -882,6 +936,7 @@ export default function Editor({
           onChange={setSegments}
           intro={project.intro}
           outro={project.outro}
+          music={project.music}
         />
       </div>
 

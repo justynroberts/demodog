@@ -21,7 +21,7 @@ import { analyticsEnabled, setAnalyticsEnabled, track } from './analytics'
 import { sendBugReport } from './bugreport'
 import { clearQuarantine } from './quarantine'
 import { mkdir, writeFile, readFile, stat } from 'node:fs/promises'
-import { createReadStream, createWriteStream, existsSync, WriteStream } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, readFileSync, WriteStream } from 'node:fs'
 import { Readable } from 'node:stream'
 import {
   RecorderProcess,
@@ -1050,9 +1050,30 @@ ipcMain.handle('bench:config', () => {
     seconds: Number(process.env['DEMODOG_BENCH_SECONDS'] ?? '0') || 0,
     // Export with no zoom, cursor or picture-in-picture, so the only thing that
     // can change between frames is the recording itself.
-    plain: process.env['DEMODOG_BENCH_PLAIN'] === '1'
+    plain: process.env['DEMODOG_BENCH_PLAIN'] === '1',
+    /**
+     * Settings to merge over the defaults, as a path to a JSON file.
+     *
+     * A headless export could previously only render a take with whatever the
+     * app happened to remember, which makes anything about the *project* —
+     * captions, cards, music, the zoom feel — impossible to render on purpose
+     * or to check. It is also the piece any scripted walkthrough needs, since
+     * the point of one is choosing all of that from outside.
+     */
+    project: readBenchProject()
   }
 })
+
+function readBenchProject(): unknown {
+  const path = process.env['DEMODOG_BENCH_PROJECT']
+  if (!path) return null
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    console.error(`[bench] could not read ${path}: ${String(error)}`)
+    return null
+  }
+}
 
 ipcMain.handle('bench:finish', async (_e, path: string, data: ArrayBuffer) => {
   await writeFile(path, Buffer.from(data))
@@ -1085,6 +1106,20 @@ ipcMain.handle('dialog:image', async (): Promise<string | null> => {
   })
   if (result.canceled || !result.filePaths[0]) return null
   // Picked deliberately by the user, so it may be loaded as a background.
+  allowMediaPath(result.filePaths[0])
+  return result.filePaths[0]
+})
+
+/** Music to lay under a take. Picked by the user, so it may be streamed. */
+ipcMain.handle('dialog:audio', async (): Promise<string | null> => {
+  const result = await dialog.showOpenDialog(studioWindow!, {
+    properties: ['openFile'],
+    title: 'Choose background music',
+    filters: [
+      { name: 'Audio', extensions: ['mp3', 'm4a', 'aac', 'wav', 'aiff', 'aif', 'flac', 'caf'] }
+    ]
+  })
+  if (result.canceled || !result.filePaths[0]) return null
   allowMediaPath(result.filePaths[0])
   return result.filePaths[0]
 })

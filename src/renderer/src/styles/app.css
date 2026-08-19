@@ -2373,3 +2373,45 @@ dialog.info a {
   line-height: 1.35;
   color: var(--muted);
 }
+
+/* ---- music lane --------------------------------------------------------- */
+
+.track.music {
+  height: 26px;
+}
+
+.music-bed {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--surface-3) 0 6px,
+    var(--surface-2) 6px 12px
+  );
+  border: 2px solid var(--line);
+  overflow: hidden;
+}
+
+.music-bed span {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Where the bed steps out of the way of a caption. */
+.music-duck {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  background: var(--violet);
+  opacity: 0.5;
+  pointer-events: none;
+}

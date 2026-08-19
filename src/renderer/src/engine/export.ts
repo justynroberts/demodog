@@ -2,6 +2,7 @@
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
 import { openFrameSource } from './frameSource'
 import type { Composition } from './composition'
+import type { MusicTrack } from './types'
 
 export interface ExportOptions {
   composition: Composition
@@ -329,7 +330,109 @@ async function buildAudio(options: ExportOptions): Promise<MixedAudio | null> {
     else node.start(leadIn - into, 0, duration + into)
   }
 
+  // ---- music -------------------------------------------------------------
+  const music = project.music
+  if (music?.src && music.gain > 0) {
+    const bed = await decodeMusic(music.src, sampleRate)
+    if (bed) {
+      const node = offline.createBufferSource()
+      node.buffer = bed
+      node.loop = music.loop
+      // Two stages rather than one. Fades shape the whole piece and ducking
+      // moves constantly underneath them; automating a single gain with both
+      // means every duck has to know the fade's value at that instant, and one
+      // wrong ramp silences the bed for the rest of the take.
+      const fade = offline.createGain()
+      const duck = offline.createGain()
+      shapeMusicFades(fade, music, total)
+      shapeDucking(duck, music, options, leadIn, total)
+      node.connect(fade).connect(duck).connect(offline.destination)
+      // Music runs under the whole piece, cards included: it is what plays
+      // while a title card is on screen and nothing else is.
+      // Same rule as the preview: an offset that does not exist in this track
+      // is ignored rather than clamped to its end, which would play as silence.
+      const from =
+        music.startAt > 0 && music.startAt < bed.duration - 0.05 ? music.startAt : 0
+      node.start(0, from, total)
+    }
+  }
+
   return { buffer: await offline.startRendering(), sampleRate }
+}
+
+/** Decoded on its own context, since the mixdown's is offline. */
+async function decodeMusic(src: string, sampleRate: number): Promise<AudioBuffer | null> {
+  const context = new AudioContext({ sampleRate })
+  try {
+    const response = await fetch(src)
+    return await context.decodeAudioData(await response.arrayBuffer())
+  } catch {
+    // A bed that cannot be read must not take the export down with it.
+    return null
+  } finally {
+    void context.close()
+  }
+}
+
+/** In from silence, out to silence, across the whole piece. */
+function shapeMusicFades(gain: GainNode, music: MusicTrack, total: number): void {
+  const level = music.gain
+  gain.gain.setValueAtTime(music.fadeIn > 0 ? 0 : level, 0)
+  if (music.fadeIn > 0) {
+    gain.gain.linearRampToValueAtTime(level, Math.min(music.fadeIn, total))
+  }
+  if (music.fadeOut > 0 && total > music.fadeOut) {
+    gain.gain.setValueAtTime(level, total - music.fadeOut)
+    gain.gain.linearRampToValueAtTime(0, total)
+  }
+}
+
+/**
+ * Drops the bed while anything is being said.
+ *
+ * The speech is already described: a caption cue states that words occupy this
+ * span. So ducking is scheduled from the transcript rather than detected from
+ * the audio — exact, free, and still right after a line is retimed or deleted.
+ *
+ * Overlapping and near-adjacent cues are merged first. Without that the bed
+ * pumps between every sentence, which is more distracting than not ducking.
+ */
+function shapeDucking(
+  gain: GainNode,
+  music: MusicTrack,
+  options: ExportOptions,
+  leadIn: number,
+  total: number
+): void {
+  const under = Math.pow(10, -Math.abs(music.duckDb) / 20)
+  gain.gain.setValueAtTime(1, 0)
+  if (music.duckDb <= 0) return
+
+  const attack = Math.max(0.02, music.duckAttack)
+  const release = Math.max(0.02, music.duckRelease)
+  const captions = options.composition.project.captions ?? []
+
+  const spans: { from: number; to: number }[] = []
+  for (const cue of [...captions].sort((a, b) => a.start - b.start)) {
+    if (cue.end <= options.start || cue.start >= options.end) continue
+    // Onto the mixdown's clock: trimmed to the export range, shifted past the
+    // intro card.
+    const from = leadIn + Math.max(0, cue.start - options.start)
+    const to = leadIn + Math.min(options.end - options.start, cue.end - options.start)
+    const last = spans[spans.length - 1]
+    // Close enough to be one breath rather than two.
+    if (last && from - last.to < attack + release) last.to = Math.max(last.to, to)
+    else spans.push({ from, to })
+  }
+
+  for (const span of spans) {
+    const down = Math.max(0, span.from - attack)
+    const up = Math.min(total, span.to + release)
+    gain.gain.setValueAtTime(1, down)
+    gain.gain.linearRampToValueAtTime(under, Math.min(span.from, total))
+    gain.gain.setValueAtTime(under, Math.min(span.to, total))
+    gain.gain.linearRampToValueAtTime(1, up)
+  }
 }
 
 async function encodeAudio(

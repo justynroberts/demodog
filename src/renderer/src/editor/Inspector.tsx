@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { api } from '../api'
 import { BACKGROUND_PRESETS, OUTPUT_PRESETS, mergeSettings } from '../engine/defaults'
-import { Group, Segmented, Slider, Toggle } from '../ui/controls'
+import { Group, Segmented, Slider, Toggle, formatTime } from '../ui/controls'
 import { CAPTION_FONTS, captionsFromCues } from '../engine/captions'
 import type { Caption } from '../engine/captions'
 import { DEFAULT_INTRO } from '../engine/titles'
@@ -1161,6 +1161,87 @@ function CameraTab({
           onChange={(v) => patch('audio', { micGain: v })}
           format={(v) => `${Math.round(v * 100)}%`}
         />
+      </Group>
+
+      <Group title="Music">
+        <p className="hint" style={{ marginTop: 0 }}>
+          Plays under the whole piece, title cards included, and gets out of the
+          way whenever there is a caption.
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          <button
+            className="btn small"
+            onClick={() => {
+              void api.pickAudio().then((src) => {
+                if (src) patch('music', { src })
+              })
+            }}
+          >
+            {project.music.src ? 'Change track…' : 'Add music…'}
+          </button>
+          {project.music.src && (
+            <button className="btn small ghost" onClick={() => patch('music', { src: null })}>
+              Remove
+            </button>
+          )}
+        </div>
+        {project.music.src && (
+          <>
+            <p className="hint mono" style={{ marginTop: 0 }}>
+              {project.music.src.split('/').pop()}
+            </p>
+            <Slider
+              label="Level"
+              value={project.music.gain}
+              min={0}
+              max={1}
+              step={0.01}
+              onChange={(v) => patch('music', { gain: v })}
+              format={(v) => `${Math.round(v * 100)}%`}
+            />
+            <Slider
+              label="Duck under speech"
+              value={project.music.duckDb}
+              min={0}
+              max={30}
+              step={1}
+              onChange={(v) => patch('music', { duckDb: v })}
+              format={(v) => (v === 0 ? 'Off' : `−${Math.round(v)} dB`)}
+            />
+            <Slider
+              label="Fade in"
+              value={project.music.fadeIn}
+              min={0}
+              max={8}
+              step={0.1}
+              onChange={(v) => patch('music', { fadeIn: v })}
+              format={(v) => (v === 0 ? 'Cut' : `${v.toFixed(1)}s`)}
+            />
+            <Slider
+              label="Fade out"
+              value={project.music.fadeOut}
+              min={0}
+              max={8}
+              step={0.1}
+              onChange={(v) => patch('music', { fadeOut: v })}
+              format={(v) => (v === 0 ? 'Cut' : `${v.toFixed(1)}s`)}
+            />
+            <Slider
+              label="Start at"
+              value={project.music.startAt}
+              min={0}
+              max={120}
+              step={1}
+              onChange={(v) => patch('music', { startAt: v })}
+              format={(v) => (v === 0 ? 'Beginning' : formatTime(v))}
+            />
+            <Toggle
+              label="Repeat if it runs out"
+              checked={project.music.loop}
+              onChange={(v) => patch('music', { loop: v })}
+            />
+          </>
+        )}
       </Group>
     </>
   )

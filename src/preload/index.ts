@@ -61,6 +61,8 @@ const api = {
     out: string
     seconds: number
     plain: boolean
+    /** Settings merged over the defaults, from DEMODOG_BENCH_PROJECT. */
+    project?: unknown
   } | null> => ipcRenderer.invoke('bench:config'),
   benchFinish: (path: string, data: ArrayBuffer): Promise<void> =>
     ipcRenderer.invoke('bench:finish', path, data),
@@ -109,6 +111,7 @@ const api = {
   },
 
   pickImage: (): Promise<string | null> => ipcRenderer.invoke('dialog:image'),
+  pickAudio: (): Promise<string | null> => ipcRenderer.invoke('dialog:audio'),
 
   /**
    * A named event, with numeric parameters only.

@@ -17,7 +17,7 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -206,6 +206,83 @@ try {
           'the marks have moved by different amounts, so the audio drifts rather than sitting at a fixed offset'
         )
       }
+    }
+  }
+
+  // ---- music, and its ducking ---------------------------------------------
+  //
+  // The bed's level is computed twice — as Web Audio automation for the export
+  // and directly for the preview's volume — and two implementations of one
+  // shape drift. verify:music compares the models; this compares the file the
+  // exporter actually wrote, which is the only place a wrong ramp is audible.
+  //
+  // The bed is 300 Hz and the fixture's narration pips are 1 kHz, so a
+  // band-pass measures one without the other.
+  const bed = join(FIXTURE, 'music.m4a')
+  if (existsSync(bed)) {
+    const musicOut = join(work, 'music.mp4')
+    const settings = join(work, 'project.json')
+    await writeFile(
+      settings,
+      JSON.stringify({
+        music: {
+          src: bed,
+          gain: 0.9,
+          fadeIn: 0.1,
+          fadeOut: 0.1,
+          loop: true,
+          duckDb: 18,
+          duckAttack: 0.2,
+          duckRelease: 0.3,
+          startAt: 0
+        },
+        captions: [{ id: 'c1', start: 3, end: 5, text: 'speaking here' }]
+      })
+    )
+
+    const music = await run('npx', ['electron', '.'], {
+      timeout: 300_000,
+      env: {
+        ...process.env,
+        DEMODOG_BENCH: FIXTURE,
+        DEMODOG_BENCH_OUT: musicOut,
+        DEMODOG_BENCH_SECONDS: '8',
+        DEMODOG_BENCH_PROJECT: settings
+      }
+    })
+    check(music.code !== 'timeout' && existsSync(musicOut), 'an export with music finishes')
+
+    if (existsSync(musicOut)) {
+      const level = async (from, seconds) => {
+        const { out } = await run('ffmpeg', [
+          '-ss', String(from), '-t', String(seconds), '-i', musicOut,
+          '-af', 'bandpass=f=300:width_type=h:w=40,volumedetect', '-f', 'null', '/dev/null'
+        ])
+        const match = /mean_volume:\s*(-?[\d.]+)/.exec(out)
+        return match ? Number(match[1]) : NaN
+      }
+      const before = await level(1.0, 1.0)
+      const during = await level(3.4, 1.2)
+      const after = await level(6.0, 1.0)
+
+      check(
+        Number.isFinite(before) && before > -35,
+        `the music bed reaches the export (${before.toFixed(1)} dB at 300 Hz)`,
+        'no 300 Hz content — the bed was not mixed in at all'
+      )
+      // Within a few dB of the 18 asked for. Exact equality would be measuring
+      // the band-pass rather than the ducking.
+      const drop = before - during
+      check(
+        drop > 12,
+        `it ducks under a caption (${drop.toFixed(1)} dB down, asked for 18)`,
+        `before ${before.toFixed(1)} dB, during ${during.toFixed(1)} dB`
+      )
+      check(
+        Math.abs(after - before) < 4,
+        `and comes back afterwards (${after.toFixed(1)} dB)`,
+        `before ${before.toFixed(1)} dB, after ${after.toFixed(1)} dB`
+      )
     }
   }
 

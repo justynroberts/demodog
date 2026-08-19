@@ -160,7 +160,20 @@ export function defaultProject(
     keystrokes: { enabled: false, position: 'bottom', duration: 1.4 },
     // Short enough to read as polish rather than as a transition.
     fade: { in: 0.4, out: 0.6 },
-    audio: { systemGain: 1, micGain: 1 }
+    audio: { systemGain: 1, micGain: 1 },
+    music: {
+      src: null,
+      // Quiet by default. Music under a demo is furniture, not the point, and
+      // the commonest mistake is having it compete with the narration.
+      gain: 0.18,
+      fadeIn: 1.2,
+      fadeOut: 2,
+      loop: true,
+      duckDb: 12,
+      duckAttack: 0.25,
+      duckRelease: 0.6,
+      startAt: 0
+    }
   }
 }
 

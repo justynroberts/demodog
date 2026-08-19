@@ -213,6 +213,37 @@ export interface KeystrokeSettings {
   duration: number
 }
 
+/**
+ * A bed of music under the whole piece, cards included.
+ *
+ * Kept separate from the recording's own audio because it is authored rather
+ * than captured: it starts before the recording does, survives the trim, and
+ * has to duck out of the way of anything spoken over it.
+ */
+export interface MusicTrack {
+  src: string | null
+  /** Its level before ducking, 0–1.5. */
+  gain: number
+  fadeIn: number
+  fadeOut: number
+  /** Repeat when the track is shorter than the piece. */
+  loop: boolean
+  /**
+   * How far the music drops while someone is speaking, in dB. 0 turns it off.
+   *
+   * Driven by the caption cues rather than by listening to the audio, which is
+   * the whole reason it can be exact: a cue *is* a statement that words are
+   * being said between these two times. It also stays correct when a line is
+   * retimed or deleted, and costs nothing to compute.
+   */
+  duckDb: number
+  /** Seconds to fall out of the way, and to come back. */
+  duckAttack: number
+  duckRelease: number
+  /** Seconds into the file to begin, for skipping an intro. */
+  startAt: number
+}
+
 export interface Project {
   /** Shown before the recording starts and after it ends. */
   intro: TitleCard
@@ -231,6 +262,7 @@ export interface Project {
   keystrokes: KeystrokeSettings
   fade: FadeSettings
   audio: { systemGain: number; micGain: number }
+  music: MusicTrack
 }
 
 // ---------------------------------------------------------------------------

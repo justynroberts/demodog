@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { Recording, ZoomSegment } from '../engine/types'
 import type { Caption } from '../engine/captions'
 import type { TitleCard } from '../engine/titles'
+import type { MusicTrack } from '../engine/types'
 
 interface Props {
   recording: Recording
@@ -18,6 +19,7 @@ interface Props {
   onSelectCaption: (id: string | null) => void
   intro: TitleCard
   outro: TitleCard
+  music: MusicTrack
 }
 
 type DragMode = 'move' | 'start' | 'end'
@@ -32,7 +34,7 @@ const LABEL_WIDTH = 52
  */
 export default function Timeline(props: Props): ReactNode {
   const { recording, segments, selected, time, trim, onSeek, onSelect, onChange } = props
-  const { captions, selectedCaption, onSelectCaption, intro, outro } = props
+  const { captions, selectedCaption, onSelectCaption, intro, outro, music } = props
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(1000)
   const duration = Math.max(recording.duration, 0.001)
@@ -264,6 +266,32 @@ export default function Timeline(props: Props): ReactNode {
               <span>{outro.title || 'Outro'}</span>
             </div>
           )}
+        </div>
+      )}
+
+      {music.src && (
+        <div className="track music" onPointerDown={scrub}>
+          <span className="track-label">Music</span>
+          {/* The bed runs under the whole piece, cards included, so it spans
+              the lane end to end. The notches are where it ducks for speech —
+              worth seeing, because ducking you cannot see is indistinguishable
+              from a level that is simply wrong. */}
+          <div className="music-bed" style={{ left: 0, right: 0 }}>
+            <span style={{ paddingLeft: LABEL_WIDTH + 6 }}>
+              {music.src.split('/').pop()}
+            </span>
+          </div>
+          {music.duckDb > 0 &&
+            captions.map((caption) => {
+              const left = toX(caption.start)
+              return (
+                <span
+                  key={`duck-${caption.id}`}
+                  className="music-duck"
+                  style={{ left, width: Math.max(2, toX(caption.end) - left) }}
+                />
+              )
+            })}
         </div>
       )}
 

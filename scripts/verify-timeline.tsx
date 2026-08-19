@@ -37,8 +37,21 @@ const card = (enabled: boolean, seconds: number, title: string): never =>
     fade: 0.4
   }) as never
 
+const noMusic = {
+  src: null,
+  gain: 0.2,
+  fadeIn: 1,
+  fadeOut: 1,
+  loop: true,
+  duckDb: 12,
+  duckAttack: 0.25,
+  duckRelease: 0.5,
+  startAt: 0
+} as never
+
 const common = {
   recording,
+  music: noMusic,
   segments: [],
   selected: null,
   trim: { start: 0, end: 10 },
