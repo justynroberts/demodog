@@ -1,0 +1,156 @@
+{
+  "name": "demodog",
+  "version": "1.6.1",
+  "description": "Screen recorder with automatic zoom, smoothed cursor and camera picture-in-picture",
+  "author": "Justyn Roberts",
+  "license": "MIT",
+  "private": true,
+  "main": "./out/main/index.js",
+  "scripts": {
+    "native": "./native/build.sh",
+    "postinstall": "./native/build.sh",
+    "dev": "npm run native && electron-vite dev",
+    "build": "npm run native && electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
+    "fixture": "node scripts/make-fixture.mjs",
+    "verify": "npm run verify:engine && npm run verify:titles && npm run verify:music && npm run verify:timeline && npm run verify:export",
+    "dist": "DEMODOG_UNIVERSAL=1 npm run build && electron-builder --mac --publish never && node scripts/fix-update-metadata.mjs",
+    "icon": "./scripts/make-icon.sh",
+    "zoom-report": "mkdir -p node_modules/.cache && esbuild scripts/zoom-report.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/zoom-report.mjs --log-level=warning && node node_modules/.cache/zoom-report.mjs",
+    "verify:engine": "mkdir -p node_modules/.cache && esbuild scripts/verify-engine.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/verify.mjs --log-level=warning && node node_modules/.cache/verify.mjs",
+    "verify:export": "npm run build && node scripts/verify-export.mjs",
+    "dist:arm64": "npm run build && electron-builder --mac --arm64 --publish never",
+    "release": "node scripts/release.mjs",
+    "verify:timeline": "mkdir -p node_modules/.cache && esbuild scripts/verify-timeline.tsx --bundle --platform=node --format=cjs --jsx=automatic --outfile=node_modules/.cache/verify-timeline.cjs --log-level=warning && node node_modules/.cache/verify-timeline.cjs",
+    "verify:titles": "mkdir -p node_modules/.cache && esbuild scripts/verify-titles.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/verify-titles.mjs --log-level=warning && node node_modules/.cache/verify-titles.mjs",
+    "verify:music": "mkdir -p node_modules/.cache && esbuild scripts/verify-music.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/verify-music.cjs --log-level=warning && node node_modules/.cache/verify-music.cjs",
+    "author": "node scripts/author.mjs",
+    "walkthrough": "node scripts/walkthrough.mjs",
+    "mcp": "node mcp/server.mjs"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "mp4-muxer": "^5.2.2",
+    "mp4box": "^2.4.1"
+  },
+  "devDependencies": {
+    "@electron/notarize": "^3.1.1",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^2.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11"
+  },
+  "build": {
+    "appId": "com.fintonlabs.demodog",
+    "productName": "DemoDog",
+    "files": [
+      "out/**/*",
+      "!**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/demodog-recorder",
+        "to": "bin/demodog-recorder"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "extendInfo": {
+        "NSCameraUsageDescription": "DemoDog records your camera for picture-in-picture overlays.",
+        "NSMicrophoneUsageDescription": "DemoDog records your microphone narration.",
+        "NSScreenCaptureUsageDescription": "DemoDog records your screen.",
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "DemoDog take",
+            "CFBundleTypeRole": "Editor",
+            "LSHandlerRank": "Owner",
+            "LSTypeIsPackage": true,
+            "LSItemContentTypes": [
+              "com.fintonlabs.demodog.take"
+            ],
+            "CFBundleTypeExtensions": [
+              "demodog"
+            ],
+            "CFBundleTypeIconFile": "icon.icns"
+          }
+        ],
+        "UTExportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "com.fintonlabs.demodog.take",
+            "UTTypeDescription": "DemoDog take",
+            "UTTypeConformsTo": [
+              "com.apple.package"
+            ],
+            "UTTypeIconFile": "icon.icns",
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "demodog"
+              ]
+            }
+          }
+        ],
+        "NSSpeechRecognitionUsageDescription": "DemoDog transcribes the narration in your recordings on this Mac, to caption them."
+      },
+      "icon": "resources/icon.icns",
+      "identity": "Justyn Roberts (2H574B6N62)",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": false
+    },
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "dmg": {
+      "title": "${productName}",
+      "contents": [
+        {
+          "x": 140,
+          "y": 200,
+          "type": "file"
+        },
+        {
+          "x": 400,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "afterPack": "scripts/after-pack.js",
+    "afterSign": "scripts/notarize.js",
+    "afterAllArtifactBuild": "scripts/staple-dmg.js",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "justynroberts",
+        "repo": "demodog"
+      }
+    ]
+  }
+}

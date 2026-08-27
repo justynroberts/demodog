@@ -1,0 +1,1692 @@
+<!doctype html>
+<!-- MIT License - Copyright (c) fintonlabs.com -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DemoDog — the screen recorder that edits itself</title>
+    <meta
+      name="description"
+      content="A macOS screen recorder that comes back with the zooms already placed, the cursor smoothed and your camera in the corner. Free, MIT, notarised by Apple."
+    />
+    <meta property="og:title" content="DemoDog — the screen recorder that edits itself" />
+    <meta
+      property="og:description"
+      content="Record. It comes back edited: zooms placed from what you did, a cursor redrawn from scratch, captions transcribed on your own Mac."
+    />
+    <meta property="og:image" content="editor.png" />
+    <meta name="theme-color" content="#edede8" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Anton&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,300..800&family=Spline+Sans+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <!--
+      The stored choice has to land before first paint, or the page flashes the
+      wrong theme on every load. Inline and blocking on purpose.
+    -->
+    <script>
+      window.__hostTheme = document.documentElement.getAttribute('data-theme')
+      try {
+        var t = localStorage.getItem('demodog-site-theme')
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t)
+      } catch (e) {}
+    </script>
+    <style>
+      /* MIT License - Copyright (c) fintonlabs.com */
+
+      /* ======================================================================
+         DemoDog — product page. Archetype: Poster.
+         Picks recorded in DESIGN.md under "Landing page".
+         ====================================================================== */
+
+      :root {
+        --bg: #edede8;
+        --surface: #ffffff;
+        --surface-2: #f5f5f0;
+        --text: #0a0a0b;
+        --muted: #5e5e58;
+        --line: #0a0a0b;
+        --line-soft: #c9c9c2;
+
+        --lime: #c4e020;
+        --lime-ink: #0a0a0b;
+        --violet: #4b2fe3;
+        --violet-ink: #ffffff;
+
+        --stage: #16161a;
+        --grid: rgba(10, 10, 11, 0.075);
+        --wash-a: rgba(196, 224, 32, 0.5);
+        --wash-b: rgba(75, 47, 227, 0.22);
+
+        /* Anton carries the headlines: one weight, heavily condensed, built to
+           be set large. Bricolage keeps everything it is good at — the UI, the
+           body copy — where a condensed poster face would be unreadable. */
+        --font-display: 'Anton', 'Haettenschweiler', 'Arial Narrow Bold', 'SF Pro Display',
+          system-ui, sans-serif;
+        --font-ui: 'Bricolage Grotesque', 'SF Pro Display', -apple-system, system-ui, sans-serif;
+        --font-mono: 'Spline Sans Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+        /* Dramatic 1.5 scale — the app's chrome runs a compressed 1.29, and a
+           reading surface wants the opposite. */
+        --t-xs: 12px;
+        --t-sm: 14px;
+        --t-md: 17px;
+        --t-lg: 25px;
+        --t-xl: 38px;
+        --t-2xl: 57px;
+
+        --border: 2px solid var(--line);
+        --border-thick: 3px solid var(--line);
+        --shadow-hard: 6px 6px 0 var(--line);
+        --shadow-hard-sm: 4px 4px 0 var(--line);
+        --snap: cubic-bezier(0.2, 1.5, 0.4, 1);
+        --measure: 1180px;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          --bg: #0c0c0e;
+          --surface: #151518;
+          --surface-2: #1d1d21;
+          --text: #f2f2ee;
+          --muted: #9a9a95;
+          --line: #3a3a40;
+          --line-soft: #2a2a2f;
+          --lime: #d6f534;
+          --lime-ink: #0a0a0b;
+          --violet: #7c63ff;
+          --violet-ink: #0a0a0b;
+          --stage: #0a0a0c;
+          --grid: rgba(242, 242, 238, 0.06);
+          --wash-a: rgba(214, 245, 52, 0.16);
+          --wash-b: rgba(124, 99, 255, 0.22);
+        }
+      }
+
+      :root[data-theme='dark'] {
+        --bg: #0c0c0e;
+        --surface: #151518;
+        --surface-2: #1d1d21;
+        --text: #f2f2ee;
+        --muted: #9a9a95;
+        --line: #3a3a40;
+        --line-soft: #2a2a2f;
+        --lime: #d6f534;
+        --lime-ink: #0a0a0b;
+        --violet: #7c63ff;
+        --violet-ink: #0a0a0b;
+        --stage: #0a0a0c;
+        --grid: rgba(242, 242, 238, 0.06);
+        --wash-a: rgba(214, 245, 52, 0.16);
+        --wash-b: rgba(124, 99, 255, 0.22);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-ui);
+        font-size: var(--t-md);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+      }
+
+      /* The display face. Anton has a single weight and no variable axes, so
+         asking for 800 only invites a synthesised fake-bold; and being narrow
+         and tall it wants the lines closer and the letters slightly apart,
+         which is the opposite of what the wide grotesque wanted. */
+      h1,
+      .band h2,
+      .sec-head h2,
+      .down h2 {
+        font-family: var(--font-display);
+        font-weight: 400;
+        line-height: 0.92;
+        letter-spacing: 0.005em;
+      }
+
+      .band h2,
+      .sec-head h2,
+      .down h2 {
+        text-wrap: balance;
+      }
+
+      /* Small headings stay on the UI face, where legibility beats character. */
+      h3,
+      .info-body h2 {
+        font-family: var(--font-ui);
+        line-height: 1.15;
+        letter-spacing: -0.025em;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .wrap {
+        width: 100%;
+        max-width: var(--measure);
+        margin: 0 auto;
+        padding: 0 28px;
+      }
+
+      /* ---- buttons -------------------------------------------------------- */
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 15px 26px;
+        border: var(--border-thick);
+        border-radius: 0;
+        background: var(--surface);
+        color: var(--text);
+        font: 700 var(--t-md) / 1 var(--font-ui);
+        letter-spacing: -0.01em;
+        text-decoration: none;
+        cursor: pointer;
+        box-shadow: var(--shadow-hard);
+        transition:
+          transform 0.13s var(--snap),
+          box-shadow 0.13s var(--snap),
+          background 0.13s ease;
+      }
+
+      .btn:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 8px 8px 0 var(--line);
+      }
+
+      .btn:active {
+        transform: translate(6px, 6px);
+        box-shadow: 0 0 0 var(--line);
+      }
+
+      .btn:focus-visible {
+        outline: 3px solid var(--violet);
+        outline-offset: 3px;
+      }
+
+      .btn-lime {
+        background: var(--lime);
+        color: var(--lime-ink);
+      }
+
+      .btn-sm {
+        padding: 10px 16px;
+        font-size: var(--t-sm);
+        box-shadow: var(--shadow-hard-sm);
+      }
+
+      .btn-sm:hover {
+        box-shadow: 6px 6px 0 var(--line);
+      }
+
+      /* ---- nav ------------------------------------------------------------ */
+
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        background: var(--bg);
+        border-bottom: var(--border);
+      }
+
+      .nav-in {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        height: 66px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        text-decoration: none;
+        font-family: var(--font-display);
+        font-weight: 400;
+        font-size: 26px;
+        letter-spacing: 0.01em;
+      }
+
+      .brand .mark {
+        width: 34px;
+        height: 34px;
+        padding: 4px;
+        border: var(--border);
+        background: var(--surface);
+        transition: transform 0.18s var(--snap);
+      }
+
+      .brand:hover .mark {
+        transform: rotate(-7deg) scale(1.08);
+      }
+
+      .mark svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: var(--text);
+      }
+
+      .nav-spacer {
+        flex: 1;
+      }
+
+      .nav-link {
+        font-size: var(--t-sm);
+        font-weight: 600;
+        text-decoration: none;
+        padding: 6px 2px;
+        border-bottom: 2px solid transparent;
+        transition: border-color 0.14s ease;
+      }
+
+      .nav-link:hover {
+        border-bottom-color: var(--violet);
+      }
+
+      @media (max-width: 720px) {
+        .nav-link.hide-sm {
+          display: none;
+        }
+      }
+
+      .icon-btn {
+        display: grid;
+        place-items: center;
+        width: 38px;
+        height: 38px;
+        padding: 0;
+        border: var(--border);
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+        box-shadow: var(--shadow-hard-sm);
+        transition:
+          transform 0.13s var(--snap),
+          box-shadow 0.13s var(--snap);
+      }
+
+      .icon-btn:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 6px 6px 0 var(--line);
+      }
+
+      .icon-btn:active {
+        transform: translate(4px, 4px);
+        box-shadow: 0 0 0 var(--line);
+      }
+
+      .icon-btn:focus-visible {
+        outline: 3px solid var(--violet);
+        outline-offset: 3px;
+      }
+
+      .icon-btn svg {
+        width: 19px;
+        height: 19px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      /* ---- hero ----------------------------------------------------------- */
+
+      .hero {
+        position: relative;
+        padding: clamp(56px, 9vw, 116px) 0 0;
+        overflow: hidden;
+        border-bottom: var(--border);
+      }
+
+      /* Two decorative layers: a coarse grid for structure, and a slow wash so
+         the poster field is not flat. Both are behind everything and ignore
+         pointer events. */
+      .hero::before,
+      .hero::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .hero::before {
+        background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+        background-size: 56px 56px;
+        mask-image: linear-gradient(180deg, #000 0%, transparent 88%);
+      }
+
+      .hero::after {
+        background:
+          radial-gradient(58% 42% at 12% 0%, var(--wash-a), transparent 70%),
+          radial-gradient(52% 46% at 92% 12%, var(--wash-b), transparent 72%);
+        animation: drift 26s ease-in-out infinite alternate;
+      }
+
+      @keyframes drift {
+        to {
+          transform: translate3d(2.5%, 1.5%, 0) scale(1.08);
+        }
+      }
+
+      .hero-in {
+        position: relative;
+        z-index: 1;
+      }
+
+      /* The mark sits alongside the headline at poster size, in the same
+         bordered tile it wears everywhere else in the app. */
+      .hero-lead {
+        display: flex;
+        align-items: flex-start;
+        gap: clamp(18px, 2.6vw, 34px);
+      }
+
+      .hero-words {
+        min-width: 0;
+      }
+
+      .hero-mark {
+        flex: 0 0 auto;
+        display: block;
+        width: clamp(74px, 10vw, 136px);
+        height: clamp(74px, 10vw, 136px);
+        padding: clamp(9px, 1.1vw, 15px);
+        margin-top: 4px;
+        border: var(--border-thick);
+        background: var(--surface);
+        box-shadow: var(--shadow-hard);
+        transition: transform 0.22s var(--snap);
+      }
+
+      .hero-mark:hover {
+        transform: rotate(-6deg) scale(1.05);
+      }
+
+      .hero-mark svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        fill: var(--text);
+      }
+
+      /* Stacked, the tile above the words reads better than a cramped column
+         pair — and the headline gets the full width back. */
+      @media (max-width: 700px) {
+        .hero-lead {
+          flex-direction: column;
+          gap: 22px;
+        }
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 6px 13px;
+        border: var(--border);
+        background: var(--surface);
+        font: 600 var(--t-xs) / 1 var(--font-mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        box-shadow: var(--shadow-hard-sm);
+      }
+
+      .eyebrow .dot {
+        width: 8px;
+        height: 8px;
+        background: var(--lime);
+        border: 1.5px solid var(--line);
+      }
+
+      h1 {
+        margin: 26px 0 0;
+        /* Anton sets much narrower, so the same measure takes more type and the
+           same impact takes more size. */
+        font-size: clamp(52px, 10.4vw, 132px);
+        max-width: 17ch;
+        /* Deliberately *not* balanced. Left to wrap it falls into a descending
+           staircase that ends on "edited." alone, which is the word the whole
+           headline is for; balancing it evens the lines and buries the point in
+           the middle of the last one. */
+        text-wrap: wrap;
+      }
+
+      /* The stop belongs to the highlighted word; on a narrow screen it
+         otherwise wraps and lands alone on a line of its own. */
+      .nb {
+        white-space: nowrap;
+      }
+
+      h1 .accent {
+        display: inline-block;
+        position: relative;
+        padding: 0 0.12em;
+        color: var(--lime-ink);
+        background: var(--lime);
+        box-shadow: 5px 5px 0 var(--line);
+        transform: rotate(-1.4deg);
+        /* Clearance for the stop, which otherwise sits on the hard shadow.
+           Fixed rather than em-relative: it has to clear 5px, and at hero size
+           an em would open a visible gap instead. */
+        margin-right: 7px;
+      }
+
+      .lede {
+        margin: 30px 0 0;
+        max-width: 44ch;
+        font-size: clamp(18px, 2.1vw, 23px);
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .cta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 14px;
+        margin: 34px 0 0;
+      }
+
+      .cta-note {
+        font: 400 var(--t-sm) / 1.5 var(--font-mono);
+        color: var(--muted);
+      }
+
+      /* The screenshot is the product, so it is given a real frame and pushed
+         past the fold rather than being tucked into a column. */
+      .shot {
+        position: relative;
+        margin: clamp(44px, 6vw, 76px) auto clamp(52px, 6vw, 84px);
+        max-width: 1240px;
+        padding: 0 28px;
+      }
+
+      .shot-frame {
+        border: var(--border-thick);
+        background: var(--stage);
+        box-shadow: 14px 14px 0 var(--line);
+        overflow: hidden;
+        line-height: 0;
+      }
+
+      .shot-frame img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .shot-cap {
+        position: absolute;
+        top: -14px;
+        right: 44px;
+        padding: 7px 13px;
+        border: var(--border);
+        background: var(--violet);
+        color: var(--violet-ink);
+        font: 600 var(--t-xs) / 1 var(--font-mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        transform: rotate(1.6deg);
+      }
+
+      /* ---- the idea band -------------------------------------------------- */
+
+      .band {
+        border-bottom: var(--border);
+        background: var(--violet);
+        color: var(--violet-ink);
+        padding: clamp(56px, 8vw, 104px) 0;
+      }
+
+      .band h2 {
+        font-size: clamp(34px, 5.6vw, 70px);
+        max-width: 22ch;
+      }
+
+      .band-grid {
+        display: grid;
+        gap: clamp(26px, 4vw, 56px);
+        grid-template-columns: 1fr;
+        align-items: start;
+      }
+
+      @media (min-width: 900px) {
+        .band-grid {
+          grid-template-columns: 1.15fr 1fr;
+        }
+      }
+
+      .band p {
+        font-size: var(--t-md);
+        line-height: 1.65;
+        opacity: 0.92;
+      }
+
+      .band p + p {
+        margin-top: 15px;
+      }
+
+      .band .tag {
+        display: inline-block;
+        margin-bottom: 18px;
+        padding: 6px 12px;
+        border: 2px solid currentColor;
+        font: 600 var(--t-xs) / 1 var(--font-mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      /* ---- section furniture ---------------------------------------------- */
+
+      .sec {
+        padding: clamp(56px, 8vw, 104px) 0;
+        border-bottom: var(--border);
+      }
+
+      .sec-head {
+        max-width: 46ch;
+        margin-bottom: clamp(32px, 4vw, 54px);
+      }
+
+      .sec-head h2 {
+        font-size: clamp(33px, 5.2vw, 62px);
+      }
+
+      .sec-head p {
+        margin-top: 16px;
+        color: var(--muted);
+        font-size: var(--t-md);
+      }
+
+      .kicker {
+        display: block;
+        margin-bottom: 14px;
+        font: 600 var(--t-xs) / 1 var(--font-mono);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      /* ---- features ------------------------------------------------------- */
+
+      /* A ruled table rather than floating cards: the cells share their borders,
+         which is the brutalist reading of a grid. */
+      .feats {
+        display: grid;
+        grid-template-columns: 1fr;
+        border: var(--border);
+        background: var(--surface);
+      }
+
+      @media (min-width: 680px) {
+        .feats {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      @media (min-width: 1020px) {
+        .feats {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+
+      .feat {
+        padding: 26px 24px 28px;
+        border-top: var(--border);
+        border-left: var(--border);
+        transition: background 0.16s ease;
+      }
+
+      .feat:hover {
+        background: var(--surface-2);
+      }
+
+      /* Only the interior rules should show; the container already draws the
+         outside. */
+      .feats > .feat:nth-child(-n + 1) {
+        border-top: 0;
+      }
+
+      @media (min-width: 680px) {
+        .feats > .feat:nth-child(-n + 2) {
+          border-top: 0;
+        }
+        .feats > .feat:nth-child(odd) {
+          border-left: 0;
+        }
+      }
+
+      @media (min-width: 1020px) {
+        .feats > .feat:nth-child(-n + 3) {
+          border-top: 0;
+        }
+        .feats > .feat:nth-child(odd) {
+          border-left: var(--border);
+        }
+        .feats > .feat:nth-child(3n + 1) {
+          border-left: 0;
+        }
+      }
+
+      .feat-ico {
+        display: grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        margin-bottom: 16px;
+        border: var(--border);
+        background: var(--lime);
+        color: var(--lime-ink);
+        transition: transform 0.18s var(--snap);
+      }
+
+      .feat:hover .feat-ico {
+        transform: rotate(-8deg) scale(1.1);
+      }
+
+      .feat-ico svg {
+        width: 21px;
+        height: 21px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.9;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .feat h3 {
+        font-size: var(--t-md);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        line-height: 1.25;
+      }
+
+      .feat p {
+        margin-top: 9px;
+        font-size: var(--t-sm);
+        line-height: 1.6;
+        color: var(--muted);
+      }
+
+      /* ---- steps ---------------------------------------------------------- */
+
+      .steps {
+        display: grid;
+        gap: clamp(26px, 3.4vw, 44px);
+        grid-template-columns: 1fr;
+        counter-reset: step;
+      }
+
+      @media (min-width: 860px) {
+        .steps {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+
+      .step {
+        position: relative;
+        padding-top: 22px;
+        border-top: var(--border-thick);
+      }
+
+      .step::before {
+        counter-increment: step;
+        content: counter(step, decimal-leading-zero);
+        display: block;
+        margin-bottom: 12px;
+        font: 700 var(--t-lg) / 1 var(--font-mono);
+        color: var(--violet);
+      }
+
+      .step h3 {
+        font-size: var(--t-lg);
+        font-weight: 800;
+      }
+
+      .step p {
+        margin-top: 11px;
+        color: var(--muted);
+        font-size: var(--t-sm);
+        line-height: 1.65;
+      }
+
+      .step-shot {
+        margin-top: clamp(34px, 4.5vw, 58px);
+      }
+
+      /* ---- automation ----------------------------------------------------- */
+
+      .auto-grid {
+        display: grid;
+        gap: clamp(28px, 4vw, 52px);
+        grid-template-columns: 1fr;
+        align-items: start;
+      }
+
+      /* A grid item's default minimum is its content's min-content width, so
+         the <pre> pushed the whole column — and with it the page — wider than
+         the viewport instead of scrolling inside its own box. */
+      .auto-grid > * {
+        min-width: 0;
+      }
+
+      @media (min-width: 940px) {
+        .auto-grid {
+          grid-template-columns: 1fr 1.15fr;
+        }
+      }
+
+      .auto-grid h3 {
+        font-size: var(--t-lg);
+        font-weight: 800;
+      }
+
+      .auto-grid p {
+        margin-top: 13px;
+        color: var(--muted);
+        font-size: var(--t-sm);
+        line-height: 1.65;
+      }
+
+      /* Inline code in the prose only. Unscoped, this also matched the <code>
+         inside the terminal's <pre> and drew a pale chip behind every line of
+         it — invisible in dark, where the chip is dark too, and obvious in
+         light. Hence the child combinator, and the reset below it. */
+      .auto-grid p > code {
+        padding: 2px 6px;
+        border: 1.5px solid var(--line-soft);
+        background: var(--surface-2);
+        color: var(--text);
+        font: 600 0.92em var(--font-mono);
+      }
+
+      .code pre code {
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+      }
+
+      .tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 20px;
+      }
+
+      .tools span {
+        padding: 7px 11px;
+        border: var(--border);
+        background: var(--surface);
+        font: 400 var(--t-xs) / 1 var(--font-mono);
+        box-shadow: var(--shadow-hard-sm);
+      }
+
+      /* Two classes rather than !important, so it simply outranks `.auto-grid p`
+         instead of opting out of the cascade. */
+      .auto-grid .auto-note {
+        margin-top: 22px;
+        padding-top: 18px;
+        border-top: var(--border);
+      }
+
+      /* The code panel keeps one ground in both themes — it is a terminal, and
+         a terminal that flips to paper stops reading as one. Its colours are
+         therefore literals, not tokens. */
+      .code {
+        border: var(--border-thick);
+        background: #16161a;
+        box-shadow: var(--shadow-hard);
+        overflow: hidden;
+      }
+
+      .code-bar {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 11px 14px;
+        border-bottom: 2px solid #2c2c33;
+        color: #8b8b93;
+        font: 400 var(--t-xs) / 1 var(--font-mono);
+      }
+
+      .code-bar span {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #3a3a42;
+      }
+
+      .code-bar span:first-child {
+        background: #c4e020;
+        margin-right: 2px;
+      }
+
+      .code pre {
+        margin: 0;
+        padding: 18px 16px 20px;
+        overflow-x: auto;
+        color: #e7e7e2;
+        font: 400 13px / 1.62 var(--font-mono);
+        tab-size: 2;
+      }
+
+      .code .c {
+        color: #8b8b93;
+      }
+
+      .code .k {
+        color: #a9b6ff;
+      }
+
+      .code .s {
+        color: #d6f534;
+      }
+
+      .code .n {
+        color: #ffab70;
+      }
+
+      /* ---- specs strip ---------------------------------------------------- */
+
+      .specs {
+        display: grid;
+        grid-template-columns: 1fr;
+        border: var(--border);
+        background: var(--surface);
+      }
+
+      .spec {
+        padding: 22px 20px;
+        border-top: var(--border);
+      }
+
+      .spec:first-child {
+        border-top: 0;
+      }
+
+      /* Side by side only once they are actually side by side — stacked, a
+         left rule draws down the outside of the strip and nothing between. */
+      @media (min-width: 900px) {
+        .specs {
+          grid-template-columns: repeat(5, 1fr);
+        }
+
+        .spec {
+          border-top: 0;
+          border-left: var(--border);
+        }
+
+        .spec:first-child {
+          border-left: 0;
+        }
+      }
+
+      .spec dt {
+        font: 600 var(--t-xs) / 1 var(--font-mono);
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .spec dd {
+        margin: 9px 0 0;
+        font-size: var(--t-md);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      /* ---- download ------------------------------------------------------- */
+
+      .down {
+        padding: clamp(60px, 9vw, 116px) 0;
+        border-bottom: var(--border);
+        background: var(--lime);
+        color: var(--lime-ink);
+        text-align: center;
+      }
+
+      .down h2 {
+        font-size: clamp(38px, 6.8vw, 86px);
+      }
+
+      .down p {
+        margin: 20px auto 0;
+        max-width: 48ch;
+        font-size: var(--t-md);
+        line-height: 1.6;
+      }
+
+      .down .cta {
+        justify-content: center;
+      }
+
+      /* On its own line: centred, the note sits where the button's hard shadow
+         lands and the two collide. */
+      .down .cta-note {
+        flex-basis: 100%;
+        text-align: center;
+        margin-top: 4px;
+      }
+
+      /* The band's colours are fixed in both themes, so the button inside it
+         must be too — theme-flipping tokens here put a dark button with light
+         text on a lime field, which reads as a hole rather than a control. */
+      .down .btn {
+        border-color: var(--lime-ink);
+        background: #ffffff;
+        color: var(--lime-ink);
+        box-shadow: 6px 6px 0 var(--lime-ink);
+      }
+
+      .down .btn:hover {
+        box-shadow: 8px 8px 0 var(--lime-ink);
+      }
+
+      .down .btn:active {
+        box-shadow: 0 0 0 var(--lime-ink);
+      }
+
+      .down .cta-note {
+        color: rgba(10, 10, 11, 0.68);
+      }
+
+      /* ---- footer --------------------------------------------------------- */
+
+      .foot {
+        padding: 40px 0 52px;
+      }
+
+      .foot-in {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px;
+        font-size: var(--t-sm);
+        color: var(--muted);
+      }
+
+      .foot a {
+        font-weight: 700;
+        color: var(--violet);
+        text-decoration: none;
+        border-bottom: 2px solid transparent;
+      }
+
+      .foot a:hover {
+        border-bottom-color: var(--violet);
+      }
+
+      /* ---- info dialog ---------------------------------------------------- */
+
+      dialog.info {
+        width: min(420px, calc(100vw - 32px));
+        padding: 0;
+        border: var(--border-thick);
+        border-radius: 0;
+        background: var(--surface);
+        color: var(--text);
+        box-shadow: var(--shadow-hard);
+      }
+
+      dialog.info::backdrop {
+        background: rgba(10, 10, 11, 0.55);
+      }
+
+      .info-body {
+        padding: 28px 26px 24px;
+      }
+
+      .info-body h2 {
+        font-size: var(--t-xl);
+        font-weight: 800;
+      }
+
+      .info-body p {
+        margin-top: 14px;
+        font-size: var(--t-sm);
+        line-height: 1.65;
+        color: var(--muted);
+      }
+
+      .info-rule {
+        height: 2px;
+        margin: 22px 0;
+        background: var(--line);
+      }
+
+      .info-mark {
+        /* A bare span is inline, and an inline box ignores width and height —
+           the mark in the nav only sizes because it is a flex item. */
+        display: block;
+        width: 56px;
+        height: 56px;
+        padding: 6px;
+        margin-bottom: 18px;
+        border: var(--border);
+        background: var(--surface-2);
+      }
+
+      /* ---- motion --------------------------------------------------------- */
+
+      /* The signature gesture, shared with the app: a short snap-slide with a
+         slight overshoot, staggered across siblings. */
+      .rise {
+        opacity: 0;
+        transform: translateY(22px);
+      }
+
+      .rise.in {
+        opacity: 1;
+        transform: none;
+        transition:
+          opacity 0.5s ease,
+          transform 0.5s var(--snap);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+        .rise {
+          opacity: 1;
+          transform: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- The mark, defined once and referenced wherever it appears. -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <symbol id="dd-mark" viewBox="0 0 359.92 281.61">
+        <path fill-rule="evenodd" d="M35.92,36.07 L31.73,40.44 L28.58,44.07 L27.87,45.07 L25.39,48.07 L24.73,49.00 L22.30,52.07 L18.69,57.07 L18.10,58.07 L16.61,60.07 L16.08,61.07 L15.38,62.07 L14.81,63.07 L13.48,65.07 L12.98,66.07 L12.31,67.07 L11.18,69.07 L10.15,71.07 L9.73,72.06 L9.18,73.07 L6.73,78.57 L4.95,83.07 L4.73,83.50 L3.73,86.28 L2.94,89.07 L2.53,90.07 L2.18,92.07 L1.93,93.07 L1.59,94.07 L1.12,97.07 L0.46,100.07 L0.23,102.07 L0.11,104.07 L0.00,108.07 L0.04,111.07 L0.18,114.07 L0.47,117.07 L0.91,119.07 L1.40,122.07 L2.07,124.07 L2.55,126.07 L3.08,127.07 L3.35,128.07 L4.60,131.07 L5.15,132.07 L5.59,133.07 L6.73,134.90 L8.25,137.07 L10.73,140.00 L11.68,141.07 L12.73,142.09 L14.73,143.88 L16.73,145.38 L19.79,147.07 L21.99,148.07 L24.73,149.08 L28.73,150.19 L29.73,150.38 L30.73,150.46 L32.73,150.56 L35.73,150.51 L37.73,150.37 L38.73,150.24 L39.44,150.07 L42.73,149.23 L43.73,148.78 L45.73,148.11 L48.01,147.07 L49.73,146.20 L50.73,145.60 L53.73,143.53 L54.73,142.66 L56.73,140.59 L57.38,141.07 L57.52,142.07 L57.62,146.07 L57.68,158.07 L57.77,164.07 L57.77,183.07 L57.69,191.07 L57.81,199.07 L57.74,207.07 L57.78,210.07 L57.92,212.07 L58.76,219.07 L59.55,223.07 L60.88,228.07 L62.18,232.07 L62.73,233.36 L63.35,235.07 L63.86,236.07 L64.24,237.07 L64.79,238.07 L65.19,239.07 L66.21,241.07 L67.31,243.07 L67.98,244.07 L68.46,245.07 L69.19,246.07 L70.48,248.07 L72.71,251.07 L75.15,254.07 L76.96,256.07 L81.07,260.07 L81.73,260.79 L85.73,264.54 L87.73,266.22 L90.23,268.07 L92.73,269.72 L94.73,271.19 L95.73,271.70 L96.73,272.37 L97.73,272.79 L98.73,273.40 L99.73,273.79 L100.73,274.31 L102.56,275.07 L103.73,275.63 L104.73,276.00 L105.73,276.50 L106.73,276.82 L107.73,277.28 L113.73,279.36 L116.73,280.21 L120.73,280.92 L122.73,281.21 L125.73,281.40 L130.73,281.52 L141.73,281.57 L209.73,281.61 L228.73,281.57 L230.73,281.48 L233.73,281.17 L238.73,280.36 L239.73,280.25 L240.63,280.07 L242.73,279.50 L243.73,279.30 L248.73,277.85 L252.73,276.36 L253.73,275.86 L254.73,275.49 L255.73,274.94 L256.73,274.62 L258.73,273.62 L261.73,271.98 L262.73,271.49 L263.73,270.83 L264.73,270.35 L265.73,269.59 L268.05,268.07 L271.73,265.24 L274.73,262.77 L277.73,260.09 L279.79,258.07 L282.70,255.07 L283.73,253.89 L285.10,252.07 L287.92,248.07 L288.73,246.90 L289.22,246.07 L289.98,245.07 L290.41,244.07 L291.10,243.07 L291.55,242.07 L292.19,241.07 L292.62,240.07 L293.21,239.07 L293.60,238.07 L294.18,237.07 L294.57,236.07 L295.12,235.07 L295.73,233.30 L296.31,232.07 L296.66,231.07 L297.17,230.07 L298.48,226.07 L299.73,221.24 L300.87,215.07 L300.99,214.07 L301.24,211.07 L301.40,208.07 L301.46,202.07 L301.46,171.07 L301.54,151.07 L301.59,148.07 L301.85,141.07 L301.81,140.07 L302.73,139.09 L303.73,139.84 L305.73,141.56 L306.73,142.20 L308.73,143.32 L310.73,144.32 L312.73,145.17 L315.73,146.21 L319.18,147.07 L320.73,147.30 L323.73,147.48 L326.73,147.45 L328.73,147.29 L330.73,146.96 L332.73,146.50 L334.73,145.88 L337.73,144.64 L339.73,143.59 L340.73,142.94 L341.73,142.38 L344.71,140.07 L346.91,138.07 L348.87,136.07 L350.73,134.00 L351.73,132.76 L352.91,131.07 L354.73,127.91 L355.73,125.86 L356.06,125.07 L356.34,124.07 L356.87,123.07 L357.33,121.07 L358.06,119.07 L358.72,116.07 L359.00,115.07 L359.30,113.07 L359.80,108.07 L359.89,107.07 L359.92,105.07 L359.78,103.07 L359.22,98.07 L358.88,96.07 L358.05,92.07 L357.39,90.07 L356.95,88.07 L356.53,87.07 L355.98,85.07 L355.49,84.07 L354.84,82.07 L354.34,81.07 L353.99,80.07 L351.79,75.07 L349.27,70.07 L348.68,69.07 L348.17,68.07 L347.51,67.07 L347.01,66.07 L345.19,63.07 L344.45,62.07 L343.97,61.07 L343.25,60.07 L340.73,56.18 L337.85,52.07 L333.99,47.07 L328.73,40.88 L323.25,35.07 L315.73,27.77 L312.68,25.07 L308.73,21.82 L306.73,20.35 L304.73,18.70 L300.73,15.62 L296.73,12.94 L293.73,11.03 L292.73,10.49 L291.73,9.75 L288.73,8.02 L285.73,6.54 L284.73,6.12 L283.73,5.58 L282.73,5.21 L281.73,4.70 L279.85,4.07 L278.73,3.57 L272.73,1.72 L269.73,1.00 L267.73,0.62 L265.73,0.32 L263.73,0.10 L261.73,0.00 L259.73,0.00 L256.73,0.17 L253.73,0.54 L248.73,1.64 L245.73,2.61 L242.73,3.76 L241.73,4.28 L240.73,4.69 L239.73,5.27 L238.73,5.71 L237.73,6.38 L236.73,6.94 L234.73,8.37 L233.73,9.00 L229.80,12.07 L228.73,12.97 L225.45,16.07 L219.71,22.07 L218.63,23.07 L217.73,23.60 L216.73,23.68 L212.73,23.72 L156.73,23.69 L142.73,23.60 L141.73,23.48 L141.12,23.07 L140.73,22.69 L138.52,20.07 L135.84,17.07 L134.83,16.07 L132.73,14.07 L130.42,12.07 L127.73,9.88 L124.73,7.78 L123.73,7.28 L122.73,6.59 L120.73,5.48 L118.73,4.49 L117.73,4.14 L116.73,3.62 L115.73,3.27 L114.73,2.82 L111.73,1.71 L109.73,1.21 L107.73,0.82 L105.73,0.51 L101.73,0.14 L98.73,0.12 L94.73,0.38 L90.73,1.01 L87.73,1.69 L83.73,2.83 L82.73,3.24 L81.73,3.50 L80.73,3.89 L78.73,4.72 L77.73,5.27 L76.73,5.64 L75.73,6.20 L74.73,6.58 L72.73,7.58 L68.73,9.70 L67.73,10.37 L66.73,10.89 L65.73,11.54 L64.73,12.04 L60.73,14.76 L57.73,16.95 L56.73,17.70 L54.73,19.37 L53.73,20.14 L52.73,20.80 L50.73,22.45 L48.54,24.07 L44.73,27.47 L36.73,35.29Z M88.73,67.22 L90.97,65.07 L93.21,63.07 L94.73,61.74 L95.73,60.97 L96.73,60.35 L98.73,58.88 L99.73,58.35 L100.73,57.70 L101.73,57.19 L102.73,56.55 L103.70,56.07 L104.73,55.47 L105.72,55.07 L106.73,54.50 L111.73,52.47 L112.73,52.00 L115.73,50.97 L121.73,49.98 L127.73,49.61 L132.73,49.53 L157.73,49.47 L174.73,49.55 L226.73,49.49 L229.73,49.52 L232.73,49.64 L236.73,49.91 L238.10,50.07 L242.73,50.97 L246.73,52.06 L249.60,53.07 L251.73,53.96 L255.73,55.92 L258.73,57.67 L259.73,58.34 L260.73,58.88 L261.73,59.53 L263.73,60.93 L264.73,61.73 L270.73,67.39 L271.73,68.44 L273.95,71.07 L275.95,74.07 L276.48,75.07 L277.79,77.07 L278.30,78.07 L278.91,79.07 L280.21,82.07 L280.45,83.07 L280.86,84.07 L281.73,86.84 L282.20,88.07 L283.35,92.07 L284.02,95.07 L284.32,97.07 L284.63,101.07 L284.69,104.07 L284.65,118.07 L284.72,130.07 L284.71,142.07 L284.61,156.07 L284.76,180.07 L284.68,191.07 L284.69,204.07 L284.58,207.07 L284.30,210.07 L284.03,212.07 L283.17,217.07 L282.18,221.07 L281.73,222.13 L281.13,224.07 L280.66,225.07 L280.01,227.07 L279.48,228.07 L279.14,229.07 L278.58,230.07 L278.17,231.07 L277.56,232.07 L277.12,233.07 L276.50,234.07 L276.03,235.07 L275.73,235.57 L274.76,237.07 L271.52,241.07 L268.73,244.70 L266.76,247.07 L265.73,248.15 L264.73,249.10 L261.73,251.68 L258.35,254.07 L256.73,255.09 L255.73,255.61 L254.73,256.24 L253.73,256.71 L252.73,257.38 L251.73,257.82 L250.73,258.45 L249.73,258.85 L248.73,259.43 L247.73,259.76 L246.73,260.23 L245.73,260.64 L244.73,260.96 L243.73,261.41 L241.73,261.94 L240.73,262.34 L239.73,262.59 L234.73,263.55 L229.73,264.21 L227.73,264.32 L221.73,264.37 L203.73,264.20 L186.73,264.38 L170.73,264.31 L133.73,264.39 L130.73,264.34 L128.73,264.22 L124.73,263.84 L121.73,263.38 L120.62,263.07 L117.73,262.46 L116.73,262.04 L114.73,261.45 L113.73,260.98 L111.73,260.22 L110.73,259.76 L109.73,259.43 L108.73,258.89 L107.73,258.54 L104.73,257.09 L102.81,256.07 L99.73,254.23 L97.73,252.69 L94.73,250.06 L93.73,249.09 L89.11,244.07 L86.61,241.07 L84.73,238.59 L83.64,237.07 L83.08,236.07 L82.41,235.07 L81.92,234.07 L81.73,233.82 L80.22,231.07 L79.79,230.07 L79.26,229.07 L78.96,228.07 L78.48,227.07 L77.90,225.07 L77.48,224.07 L76.73,221.23 L76.30,220.07 L75.43,216.07 L74.93,212.07 L74.69,208.07 L74.58,200.07 L74.63,182.07 L74.55,167.07 L74.66,154.07 L74.57,130.07 L74.66,120.07 L74.64,103.07 L74.68,101.07 L74.83,99.07 L75.02,97.07 L75.30,95.07 L75.77,93.07 L76.35,90.07 L76.73,89.03 L77.20,87.07 L77.53,86.07 L78.00,85.07 L78.30,84.07 L78.81,83.07 L79.51,81.07 L80.05,80.07 L80.42,79.07 L81.04,78.07 L81.47,77.07 L82.14,76.07 L82.58,75.07 L83.73,73.26 L85.73,70.61 L86.73,69.37 L87.91,68.07Z M111.38,140.07 L109.63,142.07 L108.73,143.44 L108.38,144.07 L107.99,145.07 L107.49,146.07 L106.67,149.07 L106.49,150.07 L106.45,152.07 L106.66,154.07 L106.92,155.07 L107.31,157.07 L107.56,158.07 L108.02,159.07 L108.39,160.07 L109.43,162.07 L109.73,162.51 L110.73,163.83 L111.85,165.07 L113.73,166.58 L114.73,167.28 L116.73,168.40 L119.73,169.33 L120.73,169.56 L122.73,169.73 L124.73,169.75 L126.73,169.62 L127.73,169.48 L130.73,168.62 L131.73,168.25 L133.73,167.14 L134.73,166.47 L136.28,165.07 L136.73,164.59 L137.24,164.07 L138.02,163.07 L139.28,161.07 L140.26,159.07 L140.66,158.07 L141.22,156.07 L141.39,155.07 L141.54,154.07 L141.62,152.07 L141.51,150.07 L141.35,149.07 L140.83,147.07 L140.06,145.07 L138.96,143.07 L138.30,142.07 L137.49,141.07 L136.57,140.07 L135.50,139.07 L133.73,137.70 L132.73,137.25 L131.73,136.62 L130.73,136.26 L129.73,135.73 L128.73,135.44 L127.73,135.24 L125.73,134.89 L124.73,134.79 L122.73,134.84 L118.73,135.58 L115.73,136.75 L112.73,138.82 L111.73,139.73Z M223.00,140.07 L221.26,142.07 L220.04,144.07 L219.56,145.07 L219.16,146.07 L218.84,147.07 L218.33,149.07 L218.17,150.07 L218.14,152.07 L218.25,154.07 L218.53,156.07 L219.13,158.07 L219.50,159.07 L220.46,161.07 L221.08,162.07 L222.65,164.07 L223.66,165.07 L224.90,166.07 L226.73,167.37 L227.73,167.83 L228.73,168.39 L231.73,169.33 L232.73,169.54 L234.73,169.74 L236.73,169.78 L237.73,169.75 L239.73,169.55 L240.73,169.30 L242.73,168.62 L244.73,167.66 L246.73,166.41 L248.73,164.61 L249.73,163.52 L250.85,162.07 L251.31,161.07 L251.89,160.07 L252.22,159.07 L252.43,158.07 L253.08,156.07 L253.29,154.07 L253.34,152.07 L253.28,150.07 L253.18,149.07 L253.00,148.07 L252.03,145.07 L251.46,144.07 L251.07,143.07 L250.73,142.54 L249.73,141.11 L248.73,139.93 L247.73,139.02 L245.73,137.55 L243.73,136.51 L242.73,136.18 L241.73,135.74 L240.73,135.50 L237.73,135.00 L236.73,134.93 L234.73,134.95 L233.73,135.03 L230.73,135.48 L229.73,135.77 L227.73,136.52 L225.73,137.63 L223.73,139.36Z M158.55,183.07 L157.73,184.12 L156.44,186.07 L155.63,188.07 L155.32,189.07 L155.20,190.07 L155.18,191.07 L155.38,193.07 L156.44,196.07 L157.46,198.07 L159.43,201.07 L161.73,203.74 L163.05,205.07 L164.73,206.49 L168.73,209.42 L171.73,211.31 L172.49,212.07 L172.85,213.07 L172.81,214.07 L172.86,219.07 L173.00,225.07 L172.99,231.07 L173.09,232.07 L173.44,233.07 L173.73,233.46 L174.73,234.57 L175.73,235.33 L176.73,235.75 L177.73,235.90 L179.73,235.94 L180.73,235.87 L181.73,235.66 L182.73,235.19 L183.73,234.46 L184.85,233.07 L185.24,232.07 L185.39,230.07 L185.44,227.07 L185.32,219.07 L185.35,216.07 L185.48,213.07 L185.84,212.07 L186.73,211.16 L187.73,210.62 L188.73,209.93 L189.73,209.34 L192.73,207.13 L194.73,205.48 L197.37,203.07 L198.73,201.53 L199.84,200.07 L200.73,198.51 L201.04,198.07 L201.50,197.07 L202.06,196.07 L202.97,193.07 L203.10,192.07 L203.15,191.07 L203.05,189.07 L202.09,186.07 L200.93,184.07 L200.09,183.07 L198.73,181.79 L197.58,181.07 L196.73,180.63 L194.73,179.70 L193.73,179.46 L191.73,178.78 L190.73,178.62 L186.73,178.27 L183.73,178.16 L178.73,178.16 L174.73,178.25 L170.73,178.45 L167.73,178.77 L166.73,178.99 L165.73,179.33 L163.73,179.85 L162.73,180.35 L161.73,180.72 L161.08,181.07 L159.73,181.98 L158.73,182.89Z" />
+      </symbol>
+    </svg>
+
+    <header class="nav">
+      <div class="wrap nav-in">
+        <a class="brand" href="#top">
+          <span class="mark"><svg><use href="#dd-mark" /></svg></span>
+          DemoDog
+        </a>
+        <span class="nav-spacer"></span>
+        <a class="nav-link hide-sm" href="#features">Features</a>
+        <a class="nav-link hide-sm" href="#how">How it works</a>
+        <a class="nav-link hide-sm" href="#automate">Automation</a>
+        <a class="nav-link hide-sm" href="https://github.com/justynroberts/demodog">GitHub</a>
+        <button class="icon-btn" id="theme" aria-label="Switch theme" title="Theme: system">
+          <svg id="theme-icon" viewBox="0 0 24 24"></svg>
+        </button>
+        <button class="icon-btn" id="info-open" aria-label="About this app">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9.5" />
+            <path d="M12 11v5.5M12 7.6v.5" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="wrap hero-in">
+          <div class="hero-lead">
+            <span class="hero-mark rise" aria-hidden="true"><svg><use href="#dd-mark" /></svg></span>
+            <div class="hero-words">
+              <span class="eyebrow rise"><span class="dot"></span> macOS · free · MIT</span>
+              <h1 class="rise">
+                Record it once. It comes back <span class="nb"><span class="accent">edited</span>.</span>
+              </h1>
+            </div>
+          </div>
+          <p class="lede rise">
+            A screen recorder that reconstructs the presentation afterwards — zooms placed from what
+            you actually did, a cursor redrawn from scratch, and your camera in the corner.
+          </p>
+          <div class="cta rise">
+            <a class="btn btn-lime" href="https://github.com/justynroberts/demodog/releases/latest">
+              <svg
+                width="19"
+                height="19"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3v12M6.5 10.5 12 16l5.5-5.5M4 20h16" />
+              </svg>
+              Download for macOS
+            </a>
+            <a class="btn" href="https://github.com/justynroberts/demodog">View on GitHub</a>
+            <span class="cta-note">v1.6.1 · universal · signed &amp; notarised</span>
+          </div>
+        </div>
+
+        <div class="shot rise">
+          <span class="shot-cap">The editor, on opening</span>
+          <div class="shot-frame">
+            <img
+              src="editor.png"
+              width="1600"
+              height="913"
+              alt="The DemoDog editor: a preview stage with zoom shots already placed on the timeline below, and the settings panel open on the right."
+            />
+          </div>
+        </div>
+      </section>
+
+      <section class="band">
+        <div class="wrap band-grid">
+          <div class="rise">
+            <span class="tag">The idea</span>
+            <h2>The recording contains no cursor.</h2>
+          </div>
+          <div class="rise">
+            <p>
+              DemoDog captures the screen with the pointer switched off, and records what your mouse
+              and keyboard did as a separate stream on the same clock. The cursor you see afterwards
+              is drawn at render time from that stream.
+            </p>
+            <p>
+              Which is why it can be smoothed, resized, restyled or hidden after the fact — and why
+              the zoom knows where to look. Burn a cursor into the pixels and none of that is
+              possible; you just end up with two of them.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec" id="features">
+        <div class="wrap">
+          <div class="sec-head rise">
+            <span class="kicker">What it does</span>
+            <h2>Everything a demo needs, already done.</h2>
+            <p>
+              Stop recording and the editor is open with the work finished. Change anything you
+              disagree with; leave the rest.
+            </p>
+          </div>
+
+          <div class="feats">
+            <div class="feat rise">
+              <span class="feat-ico">
+                <svg viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="6.5" />
+                  <path d="m16 16 5 5M8.5 11h5M11 8.5v5" />
+                </svg>
+              </span>
+              <h3>Zooms itself</h3>
+              <p>
+                Shots are placed from what you did — clicked, scrolled, switched apps. Each is a
+                block on the timeline you can drag, resize, re-level or delete.
+              </p>
+            </div>
+
+            <div class="feat rise">
+              <span class="feat-ico">
+                <svg viewBox="0 0 24 24"><path d="M5 3l6 17 2.5-6.5L20 11z" /></svg>
+              </span>
+              <h3>Redraws the cursor</h3>
+              <p>
+                Smoothed forwards and backwards so it never lags its own clicks. Size, style, shape
+                and click effect are all yours afterwards.
+              </p>
+            </div>
+
+            <div class="feat rise">
+              <span class="feat-ico">
+                <svg viewBox="0 0 24 24">
+                  <rect x="2.5" y="6" width="12.5" height="12" rx="2.5" />
+                  <path d="m15 12 6-3.5v11L15 16" />
+                </svg>
+              </span>
+              <h3>Camera picture-in-picture</h3>
+              <p>
+                A bubble that moves aside when the pointer nears it. Shape, size, position and
+                framing all change after the take, not during it.
+              </p>
+            </div>
+
+            <div class="feat rise">
+              <span class="feat-ico">
+                <svg viewBox="0 0 24 24">
+                  <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+                  <path d="M6.5 14h5M14 14h3.5" />
+                </svg>
+              </span>
+              <h3>Captions, on this Mac</h3>
+              <p>
+                Transcribe your narration offline — nothing is uploaded — then edit the lines in
+                place so a misheard name is fixed rather than redone.
+              </p>
+            </div>
+
+            <div class="feat rise">
+              <span class="feat-ico">
+                <svg viewBox="0 0 24 24">
+                  <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
+                  <path d="M7 10h10M7 14h6" />
+                </svg>
+              </span>
+              <h3>Intro and outro cards</h3>
+              <p>
+                A title, a subtitle and a logo either side of the take. Extra time rather than
+                separate clips, so they scrub, fade and export like everything else.
+              </p>
+            </div>
+
+            <div class="feat rise">
+              <span class="feat-ico">
+                <svg viewBox="0 0 24 24">
+                  <path d="M9 18V6l10-2v12" />
+                  <circle cx="6.5" cy="18" r="2.5" />
+                  <circle cx="16.5" cy="16" r="2.5" />
+                </svg>
+              </span>
+              <h3>A music bed</h3>
+              <p>
+                Drop in an MP3, WAV or M4A. Optional ducking steps it back under your narration and
+                brings it up again after.
+              </p>
+            </div>
+
+            <div class="feat rise">
+              <span class="feat-ico">
+                <svg viewBox="0 0 24 24">
+                  <rect x="2.5" y="4.5" width="19" height="13" rx="2" />
+                  <path d="M8 20.5h8" />
+                </svg>
+              </span>
+              <h3>A window or a whole display</h3>
+              <p>
+                Pick either. A window is captured on its own, wherever it sits and whatever happens
+                to be in front of it.
+              </p>
+            </div>
+
+            <div class="feat rise">
+              <span class="feat-ico">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 3v11M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Z" />
+                  <path d="M5.5 11a6.5 6.5 0 0 0 13 0M9 21h6" />
+                </svg>
+              </span>
+              <h3>System audio and microphone</h3>
+              <p>
+                Both, with no extra driver and no virtual audio device to install first. Levels are
+                adjustable afterwards.
+              </p>
+            </div>
+
+            <div class="feat rise">
+              <span class="feat-ico">
+                <svg viewBox="0 0 24 24">
+                  <path d="M4 7.5h16M4 12h16M4 16.5h10" />
+                  <circle cx="17.5" cy="16.5" r="2.5" />
+                </svg>
+              </span>
+              <h3>Sticky settings</h3>
+              <p>
+                However you left the look — background, camera, zoom feel, titles, music — is how
+                the next recording opens. Nothing to name or save.
+              </p>
+            </div>
+
+            <div class="feat rise">
+              <span class="feat-ico">
+                <svg viewBox="0 0 24 24">
+                  <path d="M13 2.5 4 13.5h6.5L11 21.5l9-11h-6.5z" />
+                </svg>
+              </span>
+              <h3>Exports fast</h3>
+              <p>
+                A 26-second take is an MP4 in under eight seconds, and most of that is the encoder
+                finishing rather than anything DemoDog is doing.
+              </p>
+            </div>
+
+            <div class="feat rise">
+              <span class="feat-ico">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 3.2 4.5 6v6c0 4.3 3.1 7.6 7.5 8.8 4.4-1.2 7.5-4.5 7.5-8.8V6z" />
+                  <path d="m8.8 12 2.3 2.3 4.1-4.4" />
+                </svg>
+              </span>
+              <h3>Private by default</h3>
+              <p>
+                No account, no telemetry, no uploads. The only network request it makes is checking
+                GitHub for a newer version.
+              </p>
+            </div>
+
+            <div class="feat rise">
+              <span class="feat-ico">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 3.5v9M8.3 7.2 12 3.5l3.7 3.7" />
+                  <path d="M4.5 14v4.5a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V14" />
+                </svg>
+              </span>
+              <h3>Updates itself</h3>
+              <p>
+                It finds new versions, downloads them in the background and asks before restarting.
+                Never mid-recording.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec" id="how">
+        <div class="wrap">
+          <div class="sec-head rise">
+            <span class="kicker">How it works</span>
+            <h2>Three steps, and one of them is optional.</h2>
+          </div>
+
+          <div class="steps">
+            <div class="step rise">
+              <h3>Pick a source</h3>
+              <p>
+                A display or a single window, with live thumbnails so you can tell them apart. Add a
+                camera and a microphone if you want them. Press <strong>Let's Start</strong>, arrange
+                your windows, then start when you are ready.
+              </p>
+            </div>
+            <div class="step rise">
+              <h3>Do the demo</h3>
+              <p>
+                A 3-2-1 countdown appears over the screen you are capturing. Stop from anywhere with
+                <strong>⌘⇧2</strong> — no hunting for a window, no stray click at the end of the
+                take.
+              </p>
+            </div>
+            <div class="step rise">
+              <h3>Adjust, or don't</h3>
+              <p>
+                The editor opens already edited. Change the shots, the cursor, the camera, the
+                captions and the titles — or export it as it stands, because it is meant to be
+                right the first time.
+              </p>
+            </div>
+          </div>
+
+          <div class="shot step-shot rise" style="padding: 0; max-width: none">
+            <div class="shot-frame">
+              <img
+                src="recorder.png"
+                width="1600"
+                height="913"
+                alt="The DemoDog recorder: a list of displays and windows to capture on the left, with camera, audio and capture settings on the right."
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec" id="automate">
+        <div class="wrap">
+          <div class="sec-head rise">
+            <span class="kicker">Automation</span>
+            <h2>Or don't record it at all.</h2>
+            <p>
+              A take is only a video, a stream of input events on a shared clock, and some geometry
+              — and nothing in the engine cares whether a person produced them. So a browser driven
+              by Playwright, plus a list of what it clicked and when, becomes a take and gets the
+              automatic zoom, the smoothed cursor, the click animation and the captions for free.
+            </p>
+          </div>
+
+          <div class="auto-grid">
+            <div class="rise">
+              <h3>Give a model the keys</h3>
+              <p>
+                <code>npm run mcp</code> starts an MCP server on the loopback interface with a
+                generated key, so a model running on your own machine can build a walkthrough,
+                revise it over several turns and export it when it is happy.
+              </p>
+              <div class="tools">
+                <span>create_walkthrough</span>
+                <span>update_walkthrough</span>
+                <span>export_walkthrough</span>
+                <span>list_walkthroughs</span>
+              </div>
+              <p class="auto-note">
+                No camera and no speech: narration is captions. Everything else the editor does, a
+                scripted take gets too.
+              </p>
+            </div>
+
+            <div class="rise">
+              <div class="code">
+                <div class="code-bar"><span></span><span></span><span></span>walkthrough.json</div>
+                <pre><code><span class="c">// what the browser did, and when</span>
+{
+  <span class="k">"video"</span>: <span class="s">"run.webm"</span>,
+  <span class="k">"fps"</span>: <span class="n">30</span>,
+  <span class="k">"actions"</span>: [
+    { <span class="k">"t"</span>: <span class="n">1.2</span>, <span class="k">"type"</span>: <span class="s">"click"</span>,  <span class="k">"x"</span>: <span class="n">310</span>, <span class="k">"y"</span>: <span class="n">345</span> },
+    { <span class="k">"t"</span>: <span class="n">3.0</span>, <span class="k">"type"</span>: <span class="s">"scroll"</span>, <span class="k">"x"</span>: <span class="n">640</span>, <span class="k">"y"</span>: <span class="n">500</span> },
+    { <span class="k">"t"</span>: <span class="n">5.0</span>, <span class="k">"type"</span>: <span class="s">"click"</span>,  <span class="k">"x"</span>: <span class="n">890</span>, <span class="k">"y"</span>: <span class="n">345</span> }
+  ]
+}</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="wrap">
+          <div class="sec-head rise">
+            <span class="kicker">The details</span>
+            <h2>No account, no subscription, no catch.</h2>
+          </div>
+          <dl class="specs rise">
+            <div class="spec">
+              <dt>Requires</dt>
+              <dd>macOS 14+</dd>
+            </div>
+            <div class="spec">
+              <dt>Architecture</dt>
+              <dd>Intel &amp; Apple silicon</dd>
+            </div>
+            <div class="spec">
+              <dt>Signing</dt>
+              <dd>Notarised by Apple</dd>
+            </div>
+            <div class="spec">
+              <dt>Licence</dt>
+              <dd>MIT, open source</dd>
+            </div>
+            <div class="spec">
+              <dt>Price</dt>
+              <dd>Free</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="down">
+        <div class="wrap">
+          <h2 class="rise">Go and make a good demo.</h2>
+          <p class="rise">
+            Download the disk image, drag it to Applications, and allow Screen Recording the first
+            time you record. That is the whole setup.
+          </p>
+          <div class="cta rise">
+            <a class="btn" href="https://github.com/justynroberts/demodog/releases/latest">
+              Download DemoDog 1.6.1
+            </a>
+            <span class="cta-note">universal .dmg · about 180 MB</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap foot-in">
+        <span>DemoDog — MIT licensed.</span>
+        <span class="nav-spacer"></span>
+        <a href="https://github.com/justynroberts/demodog">Source</a>
+        <a href="https://github.com/justynroberts/demodog/releases">Releases</a>
+        <a href="https://www.fintonlabs.com" target="_blank" rel="noopener">Made by FintonLabs</a>
+      </div>
+    </footer>
+
+    <dialog class="info" id="info">
+      <div class="info-body">
+        <span class="mark info-mark"><svg><use href="#dd-mark" /></svg></span>
+        <h2>DemoDog</h2>
+        <p>
+          Screen recording with automatic zoom, a reconstructed cursor and camera picture-in-picture
+          — version 1.6.1.
+        </p>
+        <div class="info-rule"></div>
+        <p>
+          Made by <strong>FintonLabs</strong>.
+          <a
+            href="https://www.fintonlabs.com"
+            target="_blank"
+            rel="noopener"
+            style="font-weight: 700; color: var(--violet)"
+            >www.fintonlabs.com</a
+          >
+        </p>
+        <div style="margin-top: 22px">
+          <button class="btn btn-sm" id="info-close">Close</button>
+        </div>
+      </div>
+    </dialog>
+    <script>
+      /* MIT License - Copyright (c) fintonlabs.com */
+      ;(function () {
+        // ---- theme: system, then light, then dark ---------------------------
+        var SUN =
+          '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4 17 7M7 17l-1.6 1.6"/>'
+        var MOON = '<path d="M20 13.6A8.2 8.2 0 0 1 10.4 4a8.4 8.4 0 1 0 9.6 9.6Z"/>'
+        var AUTO =
+          '<circle cx="12" cy="12" r="8.6"/><path d="M12 3.4v17.2a8.6 8.6 0 0 0 0-17.2Z" fill="currentColor" stroke="none"/>'
+
+        var order = ['system', 'light', 'dark']
+        var icons = { system: AUTO, light: SUN, dark: MOON }
+
+        // Whatever was on the root before the boot script ran. "System"
+        // restores that rather than removing the attribute outright: embedded
+        // somewhere that stamps its own theme onto the root, stripping it would
+        // drop the page out of the theme its surroundings are in.
+        var host = window.__hostTheme
+        var btn = document.getElementById('theme')
+        var icon = document.getElementById('theme-icon')
+
+        function stored() {
+          try {
+            return localStorage.getItem('demodog-site-theme') || 'system'
+          } catch (e) {
+            return 'system'
+          }
+        }
+
+        function apply(mode) {
+          if (mode === 'system') {
+            if (host) document.documentElement.setAttribute('data-theme', host)
+            else document.documentElement.removeAttribute('data-theme')
+          } else {
+            document.documentElement.setAttribute('data-theme', mode)
+          }
+          icon.innerHTML = icons[mode]
+          btn.title = 'Theme: ' + mode
+          try {
+            if (mode === 'system') localStorage.removeItem('demodog-site-theme')
+            else localStorage.setItem('demodog-site-theme', mode)
+          } catch (e) {}
+        }
+
+        apply(stored())
+        btn.addEventListener('click', function () {
+          apply(order[(order.indexOf(stored()) + 1) % order.length])
+        })
+
+        // ---- entrances ------------------------------------------------------
+        // Staggered within a section rather than across the page, so a long
+        // scroll does not accumulate a delay nobody asked for.
+        var items = [].slice.call(document.querySelectorAll('.rise'))
+        if (!('IntersectionObserver' in window)) {
+          items.forEach(function (el) {
+            el.classList.add('in')
+          })
+        } else {
+          var io = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return
+                var siblings = [].slice.call(
+                  entry.target.parentElement.querySelectorAll(':scope > .rise')
+                )
+                var i = siblings.indexOf(entry.target)
+                entry.target.style.transitionDelay = Math.min(i, 8) * 55 + 'ms'
+                entry.target.classList.add('in')
+                io.unobserve(entry.target)
+              })
+            },
+            { rootMargin: '0px 0px -8% 0px', threshold: 0.08 }
+          )
+          items.forEach(function (el) {
+            io.observe(el)
+          })
+        }
+
+        // ---- info dialog ----------------------------------------------------
+        var info = document.getElementById('info')
+        document.getElementById('info-open').addEventListener('click', function () {
+          info.showModal()
+        })
+        document.getElementById('info-close').addEventListener('click', function () {
+          info.close()
+        })
+        // Clicking the backdrop lands on the dialog itself, not on its contents.
+        info.addEventListener('click', function (e) {
+          if (e.target === info) info.close()
+        })
+      })()
+    </script>
+  </body>
+</html>
