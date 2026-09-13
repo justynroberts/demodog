@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.6.2 — 2026-09-13
 
 - **Better hands.** The pointing hand was a blob, the open hand a mitten, and
   the grabbing hand a rounded square — silhouettes with nothing inside them,
