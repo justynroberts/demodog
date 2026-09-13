@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.6.3 — 2026-09-13
 
 - **The update prompt could crash instead of appearing.** The updater was handed
   the studio window once, at launch, and kept it. Close that window and reopen
