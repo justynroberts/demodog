@@ -4,6 +4,21 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- **Better hands.** The pointing hand was a blob, the open hand a mitten, and
+  the grabbing hand a rounded square — silhouettes with nothing inside them,
+  which is why none of them read as a hand at the size a cursor is actually
+  seen. All three are redrawn with separate fingers: the pointing hand has its
+  middle, ring and little finger curled at stepped heights beneath a raised
+  index, the open hand spreads four fingers and a thumb, and the grabbing hand
+  is a row of knuckles. The gaps between fingers are drawn in the keyline
+  colour over the fill, so they survive both the dark and light pointer styles.
+  The arrow's tail is a little shorter and broader, closer to the macOS one.
+- **More shapes to choose from.** Open hand, grabbing hand and vertical resize
+  were drawn but could not be picked — only the recorder could ever select them,
+  and it rarely can. They are now in **Cursor → Shape**.
+
 ## 1.6.1 — 2026-08-26
 
 **The first public release.**

@@ -25,17 +25,22 @@ export type CursorShape =
 /** Height of each shape in the 32-unit authoring space. */
 const UNIT = 32
 
+type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+
 interface ShapeDef {
   /** Draws the outline; the caller handles fill and stroke. */
-  path: (ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D) => void
+  path: (ctx: Ctx) => void
+  /**
+   * Interior linework drawn in the keyline colour over the fill — the gaps
+   * between fingers. A hand is only readable as a hand at 20px because of
+   * these; as a bare silhouette it is a mitten, or a blob.
+   */
+  detail?: (ctx: Ctx) => void
   /** Hotspot offset from the drawing origin, in authoring units. */
   hotspot: { x: number; y: number }
 }
 
-function poly(
-  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
-  points: [number, number][]
-): void {
+function poly(ctx: Ctx, points: [number, number][]): void {
   ctx.beginPath()
   ctx.moveTo(points[0][0], points[0][1])
   for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1])
@@ -48,42 +53,52 @@ const SHAPES: Record<CursorShape, ShapeDef> = {
     path: (ctx) =>
       poly(ctx, [
         [0, 0],
-        [0, 23.2],
-        [5.6, 17.8],
-        [9.0, 25.7],
-        [12.7, 24.1],
-        [9.2, 16.4],
-        [15.7, 16.4]
+        [0, 22.6],
+        [5.4, 17.5],
+        [8.8, 25.2],
+        [12.6, 23.6],
+        [9.2, 16.1],
+        [16.2, 16.1]
       ])
   },
 
   pointingHand: {
-    hotspot: { x: 5.5, y: 0 },
+    // Hotspot on the fingertip, where the click actually lands.
+    hotspot: { x: 8.0, y: 1.0 },
     path: (ctx) => {
-      // Index finger raised over a closed fist.
+      // Index finger raised; middle, ring and little finger curled beneath
+      // it at stepped heights; thumb tucked against the palm on the left.
       ctx.beginPath()
-      ctx.moveTo(4.2, 14.0)
-      ctx.lineTo(4.2, 3.4)
-      ctx.quadraticCurveTo(4.2, 0.6, 6.8, 0.6)
-      ctx.quadraticCurveTo(9.3, 0.6, 9.3, 3.4)
-      ctx.lineTo(9.3, 12.2)
-      ctx.lineTo(9.3, 10.4)
-      ctx.quadraticCurveTo(9.3, 8.6, 11.3, 8.6)
-      ctx.quadraticCurveTo(13.2, 8.6, 13.2, 10.4)
-      ctx.lineTo(13.2, 12.0)
-      ctx.quadraticCurveTo(13.2, 10.2, 15.1, 10.2)
-      ctx.quadraticCurveTo(17.0, 10.2, 17.0, 12.0)
-      ctx.lineTo(17.0, 13.4)
-      ctx.quadraticCurveTo(17.0, 11.8, 18.7, 11.8)
-      ctx.quadraticCurveTo(20.4, 11.8, 20.4, 13.6)
-      ctx.lineTo(20.4, 21.4)
-      ctx.quadraticCurveTo(20.4, 28.6, 13.6, 28.6)
-      ctx.lineTo(10.6, 28.6)
-      ctx.quadraticCurveTo(5.2, 28.6, 3.4, 23.4)
-      ctx.lineTo(0.9, 18.2)
-      ctx.quadraticCurveTo(0.2, 16.4, 1.9, 15.5)
-      ctx.quadraticCurveTo(3.4, 14.8, 4.2, 16.4)
+      ctx.moveTo(6.0, 14.8)
+      ctx.lineTo(6.0, 2.8)
+      ctx.quadraticCurveTo(6.0, 0.8, 8.0, 0.8)
+      ctx.quadraticCurveTo(10.0, 0.8, 10.0, 2.8)
+      ctx.lineTo(10.0, 10.9)
+      ctx.quadraticCurveTo(10.0, 9.0, 11.9, 9.0)
+      ctx.quadraticCurveTo(13.8, 9.0, 13.8, 10.9)
+      ctx.lineTo(13.8, 12.0)
+      ctx.quadraticCurveTo(13.8, 10.2, 15.6, 10.2)
+      ctx.quadraticCurveTo(17.4, 10.2, 17.4, 12.0)
+      ctx.lineTo(17.4, 13.6)
+      ctx.quadraticCurveTo(17.4, 11.9, 19.0, 11.9)
+      ctx.quadraticCurveTo(20.6, 11.9, 20.6, 13.6)
+      ctx.lineTo(20.6, 21.5)
+      ctx.bezierCurveTo(20.6, 26.8, 17.4, 29.6, 13.0, 29.6)
+      ctx.lineTo(11.4, 29.6)
+      ctx.bezierCurveTo(8.2, 29.6, 6.6, 28.2, 5.3, 25.8)
+      ctx.lineTo(1.6, 19.0)
+      ctx.quadraticCurveTo(0.6, 17.0, 2.2, 16.0)
+      ctx.quadraticCurveTo(3.9, 15.1, 5.2, 16.6)
+      ctx.lineTo(6.0, 17.6)
       ctx.closePath()
+    },
+    detail: (ctx) => {
+      ctx.moveTo(10.0, 11.4)
+      ctx.lineTo(10.0, 15.6)
+      ctx.moveTo(13.8, 12.4)
+      ctx.lineTo(13.8, 15.8)
+      ctx.moveTo(17.4, 14.0)
+      ctx.lineTo(17.4, 16.0)
     }
   },
 
@@ -144,44 +159,73 @@ const SHAPES: Record<CursorShape, ShapeDef> = {
   },
 
   openHand: {
-    hotspot: { x: 11, y: 11 },
+    hotspot: { x: 13, y: 15 },
     path: (ctx) => {
+      // Four fingers up at natural stepped heights, thumb angled out left.
       ctx.beginPath()
-      ctx.moveTo(2.6, 14.4)
-      ctx.quadraticCurveTo(2.6, 11.4, 5.4, 11.4)
-      ctx.lineTo(5.4, 5.2)
-      ctx.quadraticCurveTo(5.4, 2.6, 7.8, 2.6)
-      ctx.quadraticCurveTo(10.2, 2.6, 10.2, 5.2)
-      ctx.lineTo(10.2, 3.2)
-      ctx.quadraticCurveTo(10.2, 0.6, 12.6, 0.6)
-      ctx.quadraticCurveTo(15.0, 0.6, 15.0, 3.2)
-      ctx.lineTo(15.0, 5.4)
-      ctx.quadraticCurveTo(15.0, 2.8, 17.3, 2.8)
-      ctx.quadraticCurveTo(19.6, 2.8, 19.6, 5.4)
-      ctx.lineTo(19.6, 8.0)
-      ctx.quadraticCurveTo(19.6, 5.8, 21.7, 5.8)
-      ctx.quadraticCurveTo(23.8, 5.8, 23.8, 8.2)
-      ctx.lineTo(23.8, 19.0)
-      ctx.quadraticCurveTo(23.8, 28.4, 15.2, 28.4)
-      ctx.lineTo(12.6, 28.4)
-      ctx.quadraticCurveTo(7.4, 28.4, 5.6, 23.6)
+      ctx.moveTo(7.2, 13.4)
+      ctx.lineTo(7.2, 5.0)
+      ctx.quadraticCurveTo(7.2, 3.2, 8.9, 3.2)
+      ctx.quadraticCurveTo(10.6, 3.2, 10.6, 5.0)
+      ctx.lineTo(10.6, 2.8)
+      ctx.quadraticCurveTo(10.6, 1.0, 12.4, 1.0)
+      ctx.quadraticCurveTo(14.2, 1.0, 14.2, 2.8)
+      ctx.lineTo(14.2, 4.0)
+      ctx.quadraticCurveTo(14.2, 2.2, 15.9, 2.2)
+      ctx.quadraticCurveTo(17.6, 2.2, 17.6, 4.0)
+      ctx.lineTo(17.6, 7.0)
+      ctx.quadraticCurveTo(17.6, 5.2, 19.2, 5.2)
+      ctx.quadraticCurveTo(20.8, 5.2, 20.8, 7.0)
+      ctx.lineTo(20.8, 19.6)
+      ctx.bezierCurveTo(20.8, 25.4, 17.6, 28.6, 13.2, 28.6)
+      ctx.lineTo(11.8, 28.6)
+      ctx.bezierCurveTo(8.6, 28.6, 6.9, 27.0, 5.6, 24.6)
+      ctx.lineTo(1.4, 16.4)
+      ctx.quadraticCurveTo(0.6, 14.6, 2.2, 13.8)
+      ctx.quadraticCurveTo(3.8, 13.1, 5.0, 14.6)
+      ctx.lineTo(7.2, 17.2)
       ctx.closePath()
+    },
+    detail: (ctx) => {
+      ctx.moveTo(10.6, 5.6)
+      ctx.lineTo(10.6, 12.6)
+      ctx.moveTo(14.2, 4.6)
+      ctx.lineTo(14.2, 12.4)
+      ctx.moveTo(17.6, 7.6)
+      ctx.lineTo(17.6, 12.6)
     }
   },
 
   closedHand: {
-    hotspot: { x: 11, y: 11 },
+    hotspot: { x: 13, y: 16 },
     path: (ctx) => {
+      // A fist seen from above: a row of four knuckles, thumb folded in.
       ctx.beginPath()
-      ctx.moveTo(3.4, 13.6)
-      ctx.quadraticCurveTo(3.4, 9.4, 7.6, 9.4)
-      ctx.lineTo(18.4, 9.4)
-      ctx.quadraticCurveTo(22.6, 9.4, 22.6, 13.6)
-      ctx.lineTo(22.6, 18.8)
-      ctx.quadraticCurveTo(22.6, 27.0, 14.6, 27.0)
-      ctx.lineTo(12.2, 27.0)
-      ctx.quadraticCurveTo(6.4, 27.0, 4.8, 21.8)
+      ctx.moveTo(5.6, 11.0)
+      ctx.quadraticCurveTo(5.6, 8.4, 7.5, 8.4)
+      ctx.quadraticCurveTo(9.4, 8.4, 9.4, 10.2)
+      ctx.quadraticCurveTo(9.4, 7.4, 11.3, 7.4)
+      ctx.quadraticCurveTo(13.2, 7.4, 13.2, 9.6)
+      ctx.quadraticCurveTo(13.2, 7.2, 15.1, 7.2)
+      ctx.quadraticCurveTo(17.0, 7.2, 17.0, 9.6)
+      ctx.quadraticCurveTo(17.0, 8.0, 18.9, 8.0)
+      ctx.quadraticCurveTo(20.8, 8.0, 20.8, 10.6)
+      ctx.lineTo(20.8, 19.8)
+      ctx.bezierCurveTo(20.8, 24.8, 17.8, 27.6, 13.4, 27.6)
+      ctx.lineTo(12.0, 27.6)
+      ctx.bezierCurveTo(8.6, 27.6, 6.9, 26.2, 5.6, 23.8)
+      ctx.lineTo(3.0, 18.8)
+      ctx.quadraticCurveTo(2.2, 16.9, 3.8, 16.1)
+      ctx.quadraticCurveTo(5.1, 15.5, 5.6, 16.6)
       ctx.closePath()
+    },
+    detail: (ctx) => {
+      ctx.moveTo(9.4, 10.6)
+      ctx.lineTo(9.4, 13.4)
+      ctx.moveTo(13.2, 10.0)
+      ctx.lineTo(13.2, 13.0)
+      ctx.moveTo(17.0, 10.0)
+      ctx.lineTo(17.0, 13.0)
     }
   }
 }
@@ -254,6 +298,14 @@ export function drawCursor(
 
   ctx.fillStyle = fill
   ctx.fill()
+
+  if (def.detail) {
+    ctx.beginPath()
+    def.detail(ctx)
+    ctx.strokeStyle = stroke
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+  }
 
   ctx.restore()
 }

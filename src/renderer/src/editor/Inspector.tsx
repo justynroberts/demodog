@@ -794,9 +794,12 @@ function CursorTab({ project, patch }: { project: Project; patch: Patcher }): Re
           <option value="auto">Auto (as recorded)</option>
           <option value="arrow">Arrow</option>
           <option value="pointingHand">Pointing hand</option>
+          <option value="openHand">Open hand</option>
+          <option value="closedHand">Grabbing hand</option>
           <option value="iBeam">Text I-beam</option>
           <option value="crosshair">Crosshair</option>
-          <option value="resizeLeftRight">Resize</option>
+          <option value="resizeLeftRight">Resize ↔</option>
+          <option value="resizeUpDown">Resize ↕</option>
         </select>
         <div style={{ height: 12 }} />
         <Slider

@@ -143,7 +143,16 @@ export interface CursorSettings {
    * has deprecated the only API that reports the system cursor, so in practice
    * that is nearly always an arrow — hence the override.
    */
-  shape: 'auto' | 'arrow' | 'pointingHand' | 'iBeam' | 'crosshair' | 'resizeLeftRight'
+  shape:
+    | 'auto'
+    | 'arrow'
+    | 'pointingHand'
+    | 'openHand'
+    | 'closedHand'
+    | 'iBeam'
+    | 'crosshair'
+    | 'resizeLeftRight'
+    | 'resizeUpDown'
   /** 1 = true recorded size at output scale. */
   size: number
   /** 0 = raw recorded path, 1 = heavily smoothed glide. */
