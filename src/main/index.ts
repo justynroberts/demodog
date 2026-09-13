@@ -21,7 +21,15 @@ import { analyticsEnabled, setAnalyticsEnabled, track } from './analytics'
 import { sendBugReport } from './bugreport'
 import { clearQuarantine } from './quarantine'
 import { mkdir, writeFile, readFile, stat } from 'node:fs/promises'
-import { createReadStream, createWriteStream, existsSync, readFileSync, WriteStream } from 'node:fs'
+import {
+  appendFileSync,
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  WriteStream
+} from 'node:fs'
 import { Readable } from 'node:stream'
 import {
   RecorderProcess,
@@ -56,6 +64,32 @@ protocol.registerSchemesAsPrivileged([
     }
   }
 ])
+
+/**
+ * Anything the main process fails to catch, written down.
+ *
+ * Without a handler Electron shows the raw stack in a modal "Uncaught Exception"
+ * box — which tells a user nothing and tells us nothing either, since it is
+ * never seen by anyone who could fix it. That is how the updater's destroyed-
+ * window crash was found: one user happened to screenshot it.
+ *
+ * Here it goes to a log the bug report attaches, and the app carries on, which
+ * is what it did after that box was dismissed anyway.
+ */
+function recordCrash(kind: string, error: unknown): void {
+  const detail = error instanceof Error ? (error.stack ?? error.message) : String(error)
+  const line = `${new Date().toISOString()} ${app.getVersion()} ${kind}: ${detail}\n`
+  try {
+    mkdirSync(app.getPath('logs'), { recursive: true })
+    appendFileSync(join(app.getPath('logs'), 'main-errors.log'), line)
+  } catch {
+    // Nowhere left to report a failure to report.
+  }
+  console.error(`[crash] ${kind}: ${detail}`)
+}
+
+process.on('uncaughtException', (error) => recordCrash('uncaughtException', error))
+process.on('unhandledRejection', (reason) => recordCrash('unhandledRejection', reason))
 
 let splashWindow: BrowserWindow | null = null
 let splashShownAt = 0

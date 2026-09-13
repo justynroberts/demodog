@@ -28,7 +28,7 @@ capture helper is Swift, compiled with plain `swiftc`, no Xcode project.
 
 ```bash
 npm run fixture      # writes a synthetic take to ~/Movies/DemoDog/fixture
-npm run verify       # 87 checks: the engine, then a real export of that take
+npm run verify       # 110 checks: the engine, the updater, then a real export
 ```
 
 The fixture is a video with numbered targets at *known* coordinates, an event
@@ -43,6 +43,7 @@ can only show that *something* moved; this shows it moved to the right place.
 DEMODOG_OPEN=~/Movies/DemoDog/fixture npm run dev   # boot straight into the editor
 npm run verify:engine        # just the numerical zoom/cursor checks
 npm run verify:export        # just the end-to-end export check
+npm run verify:updater       # just the update prompt, in real Electron
 npm run zoom-report -- <take dir>   # what the auto-zoom does to real material
 ```
 
@@ -51,6 +52,13 @@ real and decodes the result to confirm the frames actually differ. A frozen
 export shipped in 0.1.0 with every engine check passing, because the fault was
 in the reader that turns a time into a source frame and nothing downstream of it
 was covered.
+
+`verify:updater` exists for the same reason. The update prompt once crashed for
+anyone who had closed the window and reopened it from the Dock — it held on to
+the destroyed window — and nothing checked it, because that only happens days
+into a session, at the moment an update lands. It stages that in real Electron
+with real windows and fakes only the dialog and the install. A broken updater is
+worse than any other bug: it is the one that stops the fix from arriving.
 
 ## The one design decision everything follows from
 

@@ -64,44 +64,153 @@ const RECHECK_INTERVAL = 2 * 60 * 60 * 1000
 /** Never check more often than this, however many times focus changes. */
 const MIN_GAP = 20 * 60 * 1000
 
-let busy = false
+/**
+ * Everything the restart prompt touches outside itself.
+ *
+ * Injected rather than imported so the prompt can be run in real Electron with
+ * real windows but without a real dialog, a real install or a real download —
+ * which is what `npm run verify:updater` does. The crash this exists to prevent
+ * was invisible to every other check: it only happens after a window has been
+ * closed and remade, days into a session, at the moment an update lands.
+ */
+export interface PromptDeps {
+  getWindow: () => BrowserWindow | null
+  showMessageBox: (
+    win: BrowserWindow | null,
+    options: Electron.MessageBoxOptions
+  ) => Promise<Electron.MessageBoxReturnValue>
+  focusApp: () => void
+  quitAndInstall: () => void
+  openExternal: (url: string) => void
+  revealLog: () => void
+  note: (message: string) => void
+  later: (fn: () => void, ms: number) => void
+}
 
 /** The studio window if there is a live one; null if it was closed. */
-function live(getWindow: () => BrowserWindow | null): BrowserWindow | null {
+export function live(getWindow: () => BrowserWindow | null): BrowserWindow | null {
   const win = getWindow()
   return win && !win.isDestroyed() ? win : null
 }
 
 /**
- * A dialog attached to the window when there is one, and free-standing when
- * there is not — with the app brought forward either way, since a prompt
- * nobody can see is the same as no prompt.
+ * Builds the `update-downloaded` handler.
+ *
+ * The window is asked for each time, never captured. It used to be handed over
+ * once at launch; close that window and reopen from the Dock — ordinary for an
+ * app left running for days — and the updater held a destroyed window. When an
+ * update finished downloading, `isMinimized()` threw "Object has been
+ * destroyed", the prompt never appeared, and `busy` stayed set so it never
+ * would for the rest of the session.
+ *
+ * Anything that throws while putting the prompt up — synchronously or not —
+ * is logged and releases `busy`, so one failure cannot silence every later
+ * update.
  */
-function ask(
-  getWindow: () => BrowserWindow | null,
-  options: Electron.MessageBoxOptions
-): Promise<Electron.MessageBoxReturnValue> {
-  const win = live(getWindow)
-  if (win) {
-    if (win.isMinimized()) win.restore()
-    win.show()
-    win.focus()
-    return dialog.showMessageBox(win, options)
+export function createUpdatePrompt(deps: PromptDeps): (info: { version: string }) => void {
+  let busy = false
+
+  /**
+   * A dialog attached to the window when there is one, free-standing when
+   * there is not, with the app brought forward either way — a prompt nobody can
+   * see is the same as no prompt.
+   */
+  const ask = (
+    options: Electron.MessageBoxOptions
+  ): Promise<Electron.MessageBoxReturnValue> => {
+    const win = live(deps.getWindow)
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    } else {
+      deps.focusApp()
+    }
+    return deps.showMessageBox(win, options)
   }
-  app.focus({ steal: true })
-  return dialog.showMessageBox(options)
+
+  const failed = (error: unknown): void => {
+    busy = false
+    deps.note(`could not show the restart prompt: ${String(error)}`)
+  }
+
+  return (info) => {
+    if (busy) return
+    busy = true
+
+    let prompt: Promise<Electron.MessageBoxReturnValue>
+    try {
+      prompt = ask({
+        type: 'info',
+        message: `DemoDog ${info.version} is ready to install`,
+        detail:
+          'DemoDog will close, swap itself for the new version, and reopen. ' +
+          'It stays closed for about ten seconds in the middle — that gap is ' +
+          'the installer working, not a crash.\n\nAnything you have recorded ' +
+          'is saved and will still be there afterwards.',
+        buttons: ['Restart now', 'Later', "What's new"],
+        defaultId: 0,
+        cancelId: 1
+      })
+    } catch (error) {
+      failed(error)
+      return
+    }
+
+    prompt
+      .then((result) => {
+        busy = false
+        if (result.response === 0) {
+          deps.note('user chose to restart; calling quitAndInstall')
+          try {
+            // Nothing is torn down first, deliberately: quitAndInstall asks the
+            // app to quit by itself, which gives Squirrel the moment it needs.
+            // Destroying windows first once ended the process before the
+            // install had begun, and ShipIt was never launched at all.
+            deps.quitAndInstall()
+          } catch (error) {
+            deps.note(`quitAndInstall threw: ${String(error)}`)
+          }
+          // Still here long after a genuine install would have finished: say
+          // so, with a way out, rather than leave a button that did nothing.
+          // The window is looked up again here too — it may be gone by now.
+          deps.later(() => {
+            deps.note('still running after quitAndInstall')
+            try {
+              void ask({
+                type: 'warning',
+                message: 'The update could not be installed',
+                detail:
+                  `DemoDog is still running ${info.version} rather than restarting, so ` +
+                  'the update did not take effect.\n\nDownloading it by hand always ' +
+                  'works, and takes about a minute.',
+                buttons: ['Download it manually', 'Show me the log', 'Not now'],
+                defaultId: 0,
+                cancelId: 2
+              })
+                .then((choice) => {
+                  if (choice.response === 0) {
+                    deps.openExternal('https://github.com/justynroberts/demodog/releases/latest')
+                  } else if (choice.response === 1) {
+                    deps.revealLog()
+                  }
+                })
+                .catch((error) => deps.note(`could not show the install warning: ${String(error)}`))
+            } catch (error) {
+              deps.note(`could not show the install warning: ${String(error)}`)
+            }
+          }, 25000)
+        } else if (result.response === 2) {
+          deps.openExternal(
+            `https://github.com/justynroberts/demodog/releases/tag/v${info.version}`
+          )
+        }
+      })
+      .catch(failed)
+  }
 }
 
-/**
- * `getWindow` is asked each time, never captured.
- *
- * It used to take the window itself. The studio window can be closed and a new
- * one made from the Dock while the app keeps running for days, so by the time an
- * update arrived the updater was holding a destroyed window: `isMinimized()`
- * threw "Object has been destroyed", the restart prompt never appeared, and
- * `busy` was left set so it never would for the rest of that session. The focus
- * check was attached to that same dead window, so it had stopped firing too.
- */
+/** Checks for, downloads and offers updates for the installed app. */
 export function setupUpdates(
   getWindow: () => BrowserWindow | null,
   isRecording: () => boolean
@@ -114,92 +223,22 @@ export function setupUpdates(
   // The restart is the user's call, so never install behind their back.
   autoUpdater.autoInstallOnAppQuit = false
 
-  autoUpdater.on('update-downloaded', (info) => {
-    if (busy) return
-    busy = true
-    // Brought forward first (inside `ask`). A dialog behind another app is
-    // invisible, and an update waiting on an answer nobody can see is
-    // indistinguishable from one that failed. That is how this was reported.
-    ask(getWindow, {
-        type: 'info',
-        message: `DemoDog ${info.version} is ready to install`,
-        detail:
-          'DemoDog will close, swap itself for the new version, and reopen. ' +
-          'It stays closed for about ten seconds in the middle — that gap is ' +
-          'the installer working, not a crash.\n\nAnything you have recorded ' +
-          'is saved and will still be there afterwards.',
-        buttons: ['Restart now', 'Later', "What's new"],
-        defaultId: 0,
-        cancelId: 1
-      })
-      .then((result) => {
-        busy = false
-        if (result.response === 0) {
-          note('user chose to restart; calling quitAndInstall')
-          try {
-            // `isSilent` false so any installer failure is visible, and
-            // `isForceRunAfter` true because the whole promise to the user was
-            // that it comes back.
-            // Nothing is torn down first, deliberately.
-            //
-            // This used to destroy every window before calling quitAndInstall,
-            // added to fix a Restart button that "did nothing" — which turned
-            // out to be a dialog hidden behind the app window, an unrelated
-            // problem since fixed properly. What the teardown may have done
-            // instead is end the process before Squirrel's install had begun:
-            // on a machine where updates never installed, the log stops right
-            // after the handover, the app exits, and ShipIt is never launched
-            // at all — not refused, never attempted.
-            //
-            // quitAndInstall asks the app to quit by itself, which gives
-            // Squirrel the moment it needs. Failure is caught by the warning
-            // below rather than pre-empted by force.
-            autoUpdater.quitAndInstall(false, true)
-          } catch (error) {
-            note(`quitAndInstall threw: ${String(error)}`)
-          }
-          // If the app is still here a moment later, the install did not take
-          // and saying so beats a button that silently did nothing.
-          // Long enough to be a real failure. Installing genuinely takes
-          // around ten seconds, and warning inside that window would call a
-          // working update broken.
-          setTimeout(() => {
-            note('still running after quitAndInstall')
-            void ask(getWindow, {
-                type: 'warning',
-                message: 'The update could not be installed',
-                detail:
-                  `DemoDog is still running ${info.version} rather than restarting, so ` +
-                  'the update did not take effect.\n\nDownloading it by hand always ' +
-                  'works, and takes about a minute.',
-                // A way out, not a diagnosis. Telling someone to read a log file
-                // is telling them to give up politely; the point of this dialog
-                // is that they end up on the new version either way.
-                buttons: ['Download it manually', 'Show me the log', 'Not now'],
-                defaultId: 0,
-                cancelId: 2
-              })
-              .then((choice) => {
-                if (choice.response === 0) {
-                  void shell.openExternal(
-                    'https://github.com/justynroberts/demodog/releases/latest'
-                  )
-                } else if (choice.response === 1) {
-                  shell.showItemInFolder(logPath)
-                }
-              })
-          }, 25000)
-        } else if (result.response === 2) {
-          void shell.openExternal(
-            `https://github.com/justynroberts/demodog/releases/tag/v${info.version}`
-          )
-        }
-      })
-      .catch((error) => {
-        busy = false
-        note(`could not show the restart prompt: ${String(error)}`)
-      })
-  })
+  autoUpdater.on(
+    'update-downloaded',
+    createUpdatePrompt({
+      getWindow,
+      showMessageBox: (win, options) =>
+        win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options),
+      focusApp: () => app.focus({ steal: true }),
+      // `isSilent` false so an installer failure is visible; `isForceRunAfter`
+      // true because the promise to the user was that it comes back.
+      quitAndInstall: () => autoUpdater.quitAndInstall(false, true),
+      openExternal: (url) => void shell.openExternal(url),
+      revealLog: () => shell.showItemInFolder(logPath),
+      note,
+      later: (fn, ms) => void setTimeout(fn, ms)
+    })
+  )
 
   // Failures are silent on purpose: being offline, or behind a proxy that
   // blocks GitHub, is not something to interrupt someone about. It is logged

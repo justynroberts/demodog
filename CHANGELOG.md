@@ -22,6 +22,19 @@ is where finished work waits.
   takes effect from the next update onwards. If the prompt does not appear,
   quitting DemoDog and opening it again always gets it — a fresh launch has a
   fresh window.
+- **The update prompt is now tested before every release.** Nothing in the
+  checks went near the updater, which is how that crash reached people: it only
+  happens days into a session, after a window has been closed and reopened, at
+  the moment an update lands. `npm run verify:updater` stages exactly that in
+  real Electron with real windows — closed and reopened, a dead reference, no
+  window at all, a prompt that fails to open, a restart that does not take — and
+  the release script will not publish unless it passes. It was checked against
+  the original bug put back in, and fails on it.
+- **Crashes are written down instead of shown.** Anything the app fails to
+  catch used to put up a raw "Uncaught Exception" stack that meant nothing to
+  the person looking at it and never reached anyone who could fix it. It now
+  goes to `main-errors.log`, and **Report a bug** attaches that log alongside the
+  updater's.
 
 ## 1.6.2 — 2026-09-13
 

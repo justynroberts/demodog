@@ -83,6 +83,14 @@ export async function collectDiagnostics(note: string): Promise<{ zip: string; b
     await writeFile(join(folder, 'updater.log'), text.slice(-200_000), 'utf8')
   }
 
+  // Everything the main process failed to catch. Empty on a healthy install,
+  // and the first thing to read on one that is not.
+  const errorLog = join(app.getPath('logs'), 'main-errors.log')
+  if (existsSync(errorLog)) {
+    const text = await readFile(errorLog, 'utf8')
+    await writeFile(join(folder, 'main-errors.log'), text.slice(-200_000), 'utf8')
+  }
+
   // The most recent take's metadata — geometry, frame rate, clock offsets and
   // the frame-status counts that say why a capture produced no video. Not the
   // recording: just the numbers describing it.
