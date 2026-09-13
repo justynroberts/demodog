@@ -4,6 +4,25 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- **The update prompt could crash instead of appearing.** The updater was handed
+  the studio window once, at launch, and kept it. Close that window and reopen
+  DemoDog from the Dock — ordinary use for an app left running for days — and it
+  was holding a destroyed window. When the next update finished downloading it
+  called `isMinimized()` on it, threw "Object has been destroyed", and never
+  showed the restart prompt; worse, it had already marked itself busy, so it
+  would not try again for the rest of that session. The check that runs when you
+  switch back to DemoDog was attached to the same dead window, so that had
+  quietly stopped too. The updater now asks for the current window each time,
+  shows a free-standing prompt if there is none, and listens for focus on the
+  app rather than on one window.
+
+  Copies already running 1.6.2 or earlier still carry the old code, so the fix
+  takes effect from the next update onwards. If the prompt does not appear,
+  quitting DemoDog and opening it again always gets it — a fresh launch has a
+  fresh window.
+
 ## 1.6.2 — 2026-09-13
 
 - **Better hands.** The pointing hand was a blob, the open hand a mitten, and

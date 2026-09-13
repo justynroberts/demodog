@@ -536,7 +536,10 @@ app.whenReady().then(() => {
 
   // Never while a take is in progress: an update dialog stealing focus would be
   // captured into the recording.
-  if (studioWindow) setupUpdates(studioWindow, () => Boolean(recorder))
+  // A getter, not the window: the studio window can be closed and remade from
+  // the Dock while the app runs on, and the updater must reach whichever one
+  // exists when an update lands.
+  setupUpdates(() => studioWindow, () => Boolean(recorder))
 
   globalShortcut.register('CommandOrControl+Shift+2', () => {
     if (recorder) barWindow?.webContents.send('bar:request-stop')

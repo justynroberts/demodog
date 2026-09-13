@@ -66,7 +66,46 @@ const MIN_GAP = 20 * 60 * 1000
 
 let busy = false
 
-export function setupUpdates(window: BrowserWindow, isRecording: () => boolean): void {
+/** The studio window if there is a live one; null if it was closed. */
+function live(getWindow: () => BrowserWindow | null): BrowserWindow | null {
+  const win = getWindow()
+  return win && !win.isDestroyed() ? win : null
+}
+
+/**
+ * A dialog attached to the window when there is one, and free-standing when
+ * there is not — with the app brought forward either way, since a prompt
+ * nobody can see is the same as no prompt.
+ */
+function ask(
+  getWindow: () => BrowserWindow | null,
+  options: Electron.MessageBoxOptions
+): Promise<Electron.MessageBoxReturnValue> {
+  const win = live(getWindow)
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+    return dialog.showMessageBox(win, options)
+  }
+  app.focus({ steal: true })
+  return dialog.showMessageBox(options)
+}
+
+/**
+ * `getWindow` is asked each time, never captured.
+ *
+ * It used to take the window itself. The studio window can be closed and a new
+ * one made from the Dock while the app keeps running for days, so by the time an
+ * update arrived the updater was holding a destroyed window: `isMinimized()`
+ * threw "Object has been destroyed", the restart prompt never appeared, and
+ * `busy` was left set so it never would for the rest of that session. The focus
+ * check was attached to that same dead window, so it had stopped firing too.
+ */
+export function setupUpdates(
+  getWindow: () => BrowserWindow | null,
+  isRecording: () => boolean
+): void {
   // A build running from source has no version to compare against a release,
   // and would offer to "update" a dev tree to the last published dmg.
   if (!app.isPackaged) return
@@ -78,15 +117,10 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
   autoUpdater.on('update-downloaded', (info) => {
     if (busy) return
     busy = true
-    // Brought forward first. The dialog is attached to the window, so if the
-    // app is behind something else it is invisible — and an update that has
-    // downloaded and is waiting on an answer nobody can see is indistinguishable
-    // from an update that failed. That is exactly how this was reported.
-    if (window.isMinimized()) window.restore()
-    window.show()
-    window.focus()
-    void dialog
-      .showMessageBox(window, {
+    // Brought forward first (inside `ask`). A dialog behind another app is
+    // invisible, and an update waiting on an answer nobody can see is
+    // indistinguishable from one that failed. That is how this was reported.
+    ask(getWindow, {
         type: 'info',
         message: `DemoDog ${info.version} is ready to install`,
         detail:
@@ -131,8 +165,7 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
           // working update broken.
           setTimeout(() => {
             note('still running after quitAndInstall')
-            void dialog
-              .showMessageBox(window, {
+            void ask(getWindow, {
                 type: 'warning',
                 message: 'The update could not be installed',
                 detail:
@@ -162,6 +195,10 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
           )
         }
       })
+      .catch((error) => {
+        busy = false
+        note(`could not show the restart prompt: ${String(error)}`)
+      })
   })
 
   // Failures are silent on purpose: being offline, or behind a proxy that
@@ -189,7 +226,10 @@ export function setupUpdates(window: BrowserWindow, isRecording: () => boolean):
   // Coming back to the app is the moment someone is most likely to be about to
   // use it, and the cheapest opportunity to notice a release published while
   // they were elsewhere. Rate limited, since focus changes constantly.
-  window.on('focus', check)
+  //
+  // On the app rather than one window, so a window made later from the Dock
+  // counts too.
+  app.on('browser-window-focus', check)
 }
 
 /** Menu-driven check, which does report when there is nothing to report. */
