@@ -849,18 +849,18 @@ export default function Editor({
       }
       const selectedId = selectedNoteRef.current
       const note = selectedId ? composition.project.annotations?.find((n) => n.id === selectedId) : null
-      if (note && !drawing) {
+      // Only while the mark is on screen, and never during playback. Outside
+      // its time the outline was left behind at half strength, and over the
+      // recording it read as the mark itself refusing to go away.
+      const showing = note ? timeRef.current >= note.start && timeRef.current < note.end : false
+      if (note && !drawing && showing && !playing) {
         const cam = composition.camera.at(timeRef.current)
         const view = {
           viewport: cam.viewport,
           content: composition.content,
           outputHeight: project.output.height
         }
-        const showing = timeRef.current >= note.start && timeRef.current < note.end
         ctx.save()
-        // Fainter when the playhead is outside the mark's time: still findable,
-        // but plainly not on screen at this moment.
-        ctx.globalAlpha = showing ? 1 : 0.45
         ctx.strokeStyle = '#7c63ff'
         ctx.lineWidth = guide
         ctx.setLineDash([guide * 4, guide * 3])
