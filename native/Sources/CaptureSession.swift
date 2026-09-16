@@ -175,7 +175,19 @@ final class CaptureSession: NSObject, SCStreamOutput, SCStreamDelegate {
             ]
         }
 
-        config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(options.fps))
+        // A hair shorter than the frame period, not exactly it.
+        //
+        // ScreenCaptureKit can only deliver on a display refresh, and it refuses
+        // a refresh that comes sooner than this interval after the last frame.
+        // Refresh timing jitters by a fraction of a millisecond, so an interval
+        // of exactly 1/fps is refused on every refresh that lands a hair early —
+        // and that frame arrives a whole refresh late instead: real 30fps takes
+        // showed gaps of 50ms, and the frame after then crowded in at 16.7ms.
+        // Three percent of slack is far less than a refresh at any rate, so this
+        // never lets through a frame sooner than asked for; it only stops on-time
+        // frames being turned away.
+        config.minimumFrameInterval = CMTime(
+            value: 1000, timescale: CMTimeScale(options.fps * 1030))
         config.queueDepth = 8
         config.showsCursor = options.showsCursor
         config.capturesAudio = options.captureSystemAudio

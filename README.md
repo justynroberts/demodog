@@ -25,7 +25,8 @@ and your camera in the corner.
 | **Zooms itself** | Shots are placed from what you actually did — clicked, scrolled, switched apps. Each one is a block on the timeline you can drag, resize, re-level or delete. |
 | **Redraws the cursor** | The recording contains no pointer at all, so the one you see is drawn afterwards: smoothed, resizable, restyled, with a click effect. Nothing is baked in. |
 | **Camera picture-in-picture** | A bubble that follows the take and moves aside when the pointer nears it. Shape, size, position and framing are all changeable after the fact. |
-| **Captions, on this Mac** | Transcribe your narration offline — nothing is uploaded — then edit the lines in place and style them however you like. |
+| **Captions, on this Mac** | Transcribe your narration offline — nothing is uploaded. Lines arrive short enough to read at a glance, and split or merge with a keystroke. |
+| **Point at things, or hide them** | Draw an arrow, a box, a highlight or a focus onto the recording after the fact — or blur and pixelate a password or an email address. They follow the zoom. |
 | **Intro and outro cards** | A title, a subtitle and a logo either side of the take. Extra time rather than separate clips, so they scrub, fade and export like everything else. |
 | **A music bed** | Drop in an MP3, WAV or M4A, with optional ducking so it steps back under your narration and comes up again after. |
 | **Records a window or a display** | Pick either. A window is captured on its own, wherever it sits and whatever is in front of it. |
@@ -108,7 +109,8 @@ hover one and the line underneath says what it is:
 | **Cursor** | Size, smoothing, style, shape, click effects, spotlight |
 | **Camera** | Bubble shape, position, size, framing, sync |
 | **Audio** | Levels for the recording and the microphone, and a music bed under it all |
-| **Captions** | Transcribe the narration, edit the lines, and style them |
+| **Captions** | Transcribe the narration, keep lines short, split and merge them, and style them |
+| **Annotate** | Arrows, boxes, highlights and focus — and blur or pixelate to hide something |
 | **Titles** | Intro and outro cards either side of the recording |
 
 > **Tip — there is nothing to save.** Settings are sticky. Whatever the
@@ -122,11 +124,45 @@ Mac** — nothing is sent anywhere — and becomes timed lines on the timeline.
 Click a line to jump to it and edit the words in place, so a misheard name is
 fixed rather than re-transcribed.
 
+**Lines stay short.** With **Keep lines short** on, a transcript arrives broken
+into captions of at most 42 characters — one line you can take in at a glance
+rather than a paragraph over the recording. Breaks go after a comma or full stop
+where one is close, never leave a word on its own, and fall in the real pause
+between two words. Change the length with **Longest line**; **Shorten … lines
+now** applies it to a transcript you already have.
+
+**Split and merge by hand.** Select a line, put the cursor where it should
+break, and press <kbd>⌘</kbd><kbd>↩</kbd> (or **Split at cursor**). The rest of
+the line is selected next, so a long line breaks up one keystroke at a time.
+**Merge with next** puts two lines back together.
+
 Font, size, weight, colour, position, alignment, outline, shadow, a backing
 plate and a fade at each end are all adjustable, and the styling carries over to
 your next recording along with everything else.
 
-### 7. Music under it all
+### 7. Point at things, or hide them
+
+In **Annotate**, choose a mark and drag on the preview:
+
+| Mark | For |
+|---|---|
+| **Arrow** | Pointing at a button or a field — drag from the tail to the point |
+| **Box** | Drawing a rectangle around something |
+| **Highlight** | A translucent marker over a line of text |
+| **Focus** | Dimming everything except one area |
+| **Blur** / **Pixelate** | Hiding a password, an API key, an email address or a name |
+
+A mark starts at the playhead and lasts three seconds. Drag its ends on the
+**Marks** lane to change that, or use **Start at playhead** and **End at
+playhead**. Colour, thickness and strength are in the tab; **Redraw on preview**
+puts it somewhere else, and <kbd>Delete</kbd> removes it.
+
+Marks are drawn on the recording itself, so they follow the zoom — a box drawn
+around a button stays around that button as the camera moves in. Blur and
+pixelate never fade in or out: whatever they hide is covered from their first
+frame to their last.
+
+### 8. Music under it all
 
 In **Audio**, add an MP3, WAV or M4A as a music bed. Set its level, how it fades
 in and out, and whether it **ducks** — steps back while you are speaking and
@@ -134,7 +170,7 @@ comes up again after. Ducking follows the transcript, so transcribe first if you
 want it; without captions there is nothing for it to duck against. It is
 optional either way, and some demos want the music flat underneath.
 
-### 8. Intro and outro cards
+### 9. Intro and outro cards
 
 In **Titles**, give the recording an opening and a closing card — a title, a
 subtitle and an optional logo, held for as long as you like.
@@ -143,7 +179,7 @@ They are extra time either side of the take rather than separate clips, so they
 scrub, preview, fade and export exactly like the recording. Turn one on and it
 appears on the timeline as its own lane.
 
-### 9. Export
+### 10. Export
 
 **Export MP4**, or <kbd>⌘</kbd><kbd>E</kbd>. Use **Set in** and **Set out**
 first if you only want part of the take. You choose the name and the folder

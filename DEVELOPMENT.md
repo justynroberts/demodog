@@ -28,7 +28,7 @@ capture helper is Swift, compiled with plain `swiftc`, no Xcode project.
 
 ```bash
 npm run fixture      # writes a synthetic take to ~/Movies/DemoDog/fixture
-npm run verify       # 110 checks: the engine, the updater, then a real export
+npm run verify       # the engine, frame timing, captions, annotations, the updater, then a real export
 ```
 
 The fixture is a video with numbered targets at *known* coordinates, an event
@@ -44,6 +44,9 @@ DEMODOG_OPEN=~/Movies/DemoDog/fixture npm run dev   # boot straight into the edi
 npm run verify:engine        # just the numerical zoom/cursor checks
 npm run verify:export        # just the end-to-end export check
 npm run verify:updater       # just the update prompt, in real Electron
+npm run verify:frames        # which recorded frame each exported frame shows
+npm run verify:captions      # splitting, merging and shortening lines
+npm run verify:annotations   # where and when marks are drawn, and what they hide
 npm run zoom-report -- <take dir>   # what the auto-zoom does to real material
 ```
 

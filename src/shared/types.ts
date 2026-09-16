@@ -152,4 +152,10 @@ export interface Cue {
   text: string
   /** 0–1 from the recogniser; low values are worth flagging for a read-through. */
   confidence: number
+  /**
+   * When each word was said, where the recogniser reports it — so a long line
+   * can be broken into short captions at the real pause between two words
+   * rather than at an estimate. Absent on the macOS 26 recogniser.
+   */
+  words?: { start: number; end: number; text: string }[]
 }

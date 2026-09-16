@@ -152,6 +152,29 @@ Call export_walkthrough afterwards to render the mp4.`,
             }
           }
         },
+        annotations: {
+          type: 'array',
+          description:
+            'Marks drawn onto the video: arrow, box, highlight and focus point at something; blur and pixelate hide something (a password, an email address, a customer name). ' +
+            'Coordinates are video pixels, the same space as the actions, and marks follow the zoom. For every kind but arrow, x/y/w/h is a rectangle. ' +
+            'For an arrow, x/y is the tail and x+w/y+h is the point, so aim it at the thing being pointed at. Times are seconds, like captions.',
+          items: {
+            type: 'object',
+            required: ['kind', 'start', 'end', 'x', 'y', 'w', 'h'],
+            properties: {
+              kind: { type: 'string', enum: ['arrow', 'box', 'highlight', 'focus', 'blur', 'pixelate'] },
+              start: { type: 'number' },
+              end: { type: 'number' },
+              x: { type: 'number' },
+              y: { type: 'number' },
+              w: { type: 'number' },
+              h: { type: 'number' },
+              color: { type: 'string', description: 'CSS colour for arrow, box and highlight. Defaults to red, or yellow for highlight.' },
+              width: { type: 'number', description: 'Line thickness for arrow and box, at 1080p. Default 8 for arrows, 6 for boxes.' },
+              amount: { type: 'number', description: 'Blur radius or pixel block size in video pixels (default 14), or how much focus dims the rest, 0–0.9 (default 0.6).' }
+            }
+          }
+        },
         intro: {
           type: 'object',
           description: 'A title card before the recording.',
@@ -187,7 +210,7 @@ Call export_walkthrough afterwards to render the mp4.`,
     name: 'update_walkthrough',
     description: `Revise a walkthrough that already exists. Pass only what changes.
 
-Use this to retime captions, reword narration, add or remove actions, or change the music — then export again. Arrays are replaced wholesale, so send the complete list of actions or captions when changing either.`,
+Use this to retime captions, reword narration, add or remove actions, or change the music — then export again. Arrays are replaced wholesale, so send the complete list of actions, captions or annotations when changing any of them.`,
     inputSchema: {
       type: 'object',
       required: ['name'],
@@ -197,6 +220,7 @@ Use this to retime captions, reword narration, add or remove actions, or change 
         fps: { type: 'number' },
         actions: { type: 'array', items: { type: 'object' } },
         captions: { type: 'array', items: { type: 'object' } },
+        annotations: { type: 'array', items: { type: 'object' } },
         intro: { type: 'object' },
         outro: { type: 'object' },
         music: { type: 'object' }
@@ -242,6 +266,35 @@ function specFromArgs(args, base = {}) {
       text: c.text
     }))
   }
+  if (args.annotations) {
+    // Kept in step with annotationDefaults in the editor.
+    const defaults = {
+      arrow: { color: '#ff3b5c', width: 8, amount: 0, fade: 0.2 },
+      box: { color: '#ff3b5c', width: 6, amount: 0, fade: 0.2 },
+      highlight: { color: '#ffcc00', width: 0, amount: 0, fade: 0.2 },
+      focus: { color: '#000000', width: 0, amount: 0.6, fade: 0.3 },
+      blur: { color: '#000000', width: 0, amount: 14, fade: 0 },
+      pixelate: { color: '#000000', width: 0, amount: 14, fade: 0 }
+    }
+    spec.project.annotations = args.annotations
+      .filter((a) => defaults[a.kind])
+      .map((a, i) => ({
+        id: a.id ?? `mark${i + 1}`,
+        kind: a.kind,
+        start: a.start,
+        end: a.end,
+        x: a.x,
+        y: a.y,
+        w: a.w,
+        h: a.h,
+        ...defaults[a.kind],
+        ...(a.color !== undefined ? { color: a.color } : {}),
+        ...(a.width !== undefined ? { width: a.width } : {}),
+        ...(a.amount !== undefined ? { amount: a.amount } : {}),
+        // Hiding never fades: a fade would show what is hidden, half-strength.
+        ...(a.kind === 'blur' || a.kind === 'pixelate' ? { fade: 0 } : {})
+      }))
+  }
   for (const card of ['intro', 'outro']) {
     if (args[card]) {
       spec.project[card] = { ...(base.project?.[card] ?? {}), enabled: true, ...args[card] }
@@ -271,6 +324,7 @@ async function callTool(name, args) {
       `${creating ? 'Created' : 'Updated'} "${args.name}".\n` +
         `  actions:  ${spec.actions?.length ?? 0}\n` +
         `  captions: ${spec.project?.captions?.length ?? 0}\n` +
+        `  annotations: ${spec.project?.annotations?.length ?? 0}\n` +
         `  spec:     ${path}\n\n` +
         `Call export_walkthrough with name "${args.name}" to render it.`
     )

@@ -4,6 +4,54 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- **Smoother exports.** Recordings came back jerky, and the cause was not the
+  capture but the clock. ScreenCaptureKit can only hand over a frame on a
+  display refresh, so a 30fps take on a 60Hz screen arrives with gaps of 16.7,
+  33.3 and 50ms instead of a steady 33.3 — and the exporter chose frames by
+  those raw times, so the picture advanced unevenly: on real takes about one
+  frame in twenty exported at 60fps, and one in three exported at 30. Each
+  frame is now put back on the beat it was captured to before it is chosen. It
+  moves at most half a frame, so it stays in sync with the sound; a frame that
+  genuinely never arrived is not covered up. On the same real takes the uneven
+  share fell from 32–38% to about 2% at 30fps, which is what the frames missing
+  from the capture itself allow. A 60fps take exported at 30 advanced 1, 3, 2
+  source frames at a time where it should have advanced 2 — floating point was
+  deciding which side of a frame boundary the sample fell on — and now advances
+  exactly 2.
+- **Fewer frames lost at capture.** The capture's minimum frame interval was
+  exactly one frame, and a refresh landing a fraction of a millisecond early
+  was refused, so the frame came one refresh late. It now has 3% of slack,
+  which is less than a refresh at any rate, so it never lets a frame through
+  sooner than asked — it only stops on-time frames being turned away. Not yet
+  measured on a real capture.
+- **Captions short enough to read.** Transcribed lines were whole sentences —
+  up to 90 characters, two dense lines over the recording. With **Keep lines
+  short** on (the default), a transcript arrives in captions of at most 42
+  characters, broken after a comma or full stop where one is close, never
+  ending on a word like "the" and never leaving a word on its own. The breaks
+  fall in the real pause between two words: the recogniser times every word,
+  and building lines used to throw those times away. A transcript you already
+  have can be shortened with one button.
+- **Split and merge lines by hand.** Put the cursor where a line should break
+  and press ⌘↩, or **Split at cursor**; the rest of the line is selected next,
+  so a long line breaks up one keystroke at a time. **Merge with next** is the
+  exact inverse. Split lines touch, so the text never blinks off between them
+  and music ducking does not swell up in a gap that is not really a pause.
+- **Annotate a recording.** A new **Annotate** tab draws arrows, boxes,
+  highlights and a focus that dims everything else — and blurs or pixelates to
+  hide a password, an API key or an email address. Drag on the preview to
+  place one; it starts at the playhead and shows on a new **Marks** lane, where
+  its ends drag. Marks live on the recording itself, so they follow the zoom,
+  and they sit under the cursor so they never cover what it points at. Blur and
+  pixelate never fade, so nothing they hide shows through at either end.
+  Overlapping marks get rows of their own on the lane.
+- **Annotations over MCP.** `create_walkthrough` and `update_walkthrough` take
+  an `annotations` list in video pixels, so a scripted demo can point at things
+  and hide things too. Anything a mark leaves out takes its kind's default, so a
+  blur given no strength still blurs rather than failing open.
+
 ## 1.6.3 — 2026-09-13
 
 - **The update prompt could crash instead of appearing.** The updater was handed

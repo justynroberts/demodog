@@ -1,5 +1,6 @@
 // MIT License - Copyright (c) fintonlabs.com
 import type { Caption, CaptionStyle } from './captions'
+import type { Annotation } from './annotations'
 import type { TitleCard } from './titles'
 import type { CaptureMeta, RawEvent } from '../../../shared/types'
 
@@ -260,6 +261,11 @@ export interface Project {
   /** Timed text drawn over the composition; empty until transcribed. */
   captions: Caption[]
   captionStyle: CaptionStyle
+  /**
+   * Arrows, boxes, highlights and blurs placed after recording. Belongs to one
+   * take, like the captions — never part of a remembered look.
+   */
+  annotations: Annotation[]
 
   output: { width: number; height: number; fps: number }
   background: Background

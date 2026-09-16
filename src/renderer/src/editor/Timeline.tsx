@@ -4,6 +4,7 @@ import type { Recording, ZoomSegment } from '../engine/types'
 import type { Caption } from '../engine/captions'
 import type { TitleCard } from '../engine/titles'
 import type { MusicTrack } from '../engine/types'
+import { ANNOTATION_LABELS, isObscuring, type Annotation } from '../engine/annotations'
 
 interface Props {
   recording: Recording
@@ -20,6 +21,11 @@ interface Props {
   intro: TitleCard
   outro: TitleCard
   music: MusicTrack
+  /** Arrows, boxes and blurs placed after recording. */
+  annotations?: Annotation[]
+  selectedNote?: string | null
+  onSelectNote?: (id: string | null) => void
+  onAnnotationsChange?: (annotations: Annotation[]) => void
 }
 
 type DragMode = 'move' | 'start' | 'end'
@@ -35,6 +41,7 @@ const LABEL_WIDTH = 52
 export default function Timeline(props: Props): ReactNode {
   const { recording, segments, selected, time, trim, onSeek, onSelect, onChange } = props
   const { captions, selectedCaption, onSelectCaption, intro, outro, music } = props
+  const { annotations = [], selectedNote = null, onSelectNote, onAnnotationsChange } = props
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(1000)
   const duration = Math.max(recording.duration, 0.001)
@@ -124,6 +131,66 @@ export default function Timeline(props: Props): ReactNode {
         }
       })
       onChange(next)
+    }
+    const up = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  /**
+   * Marks that overlap in time are given rows of their own.
+   *
+   * A blur and an arrow at the same moment is ordinary, and on a single row
+   * the second block sat exactly over the first: it could not be seen, and
+   * grabbing its handle grabbed the block on top instead.
+   */
+  const noteRows = useMemo(() => {
+    const rows: number[] = []
+    const rowEnds: number[] = []
+    const byStart = [...annotations].sort((a, b) => a.start - b.start)
+    const rowOf = new Map<string, number>()
+    for (const note of byStart) {
+      let row = rowEnds.findIndex((end) => end <= note.start + 1e-6)
+      if (row === -1) {
+        row = rowEnds.length
+        rowEnds.push(note.end)
+      } else rowEnds[row] = note.end
+      rowOf.set(note.id, row)
+      rows.push(row)
+    }
+    return { rowOf, count: Math.max(1, rowEnds.length) }
+  }, [annotations])
+  const NOTE_ROW = 20
+
+  // ---- annotation dragging ----------------------------------------------
+
+  /** The same move and trim as a zoom block, for a mark's time on screen. */
+  const beginNoteDrag = (event: React.PointerEvent, note: Annotation, mode: DragMode): void => {
+    event.stopPropagation()
+    if (event.button !== 0) return
+    onSelectNote?.(note.id)
+
+    const startTime = toTime(event.clientX)
+    const original = { ...note }
+
+    const move = (e: PointerEvent): void => {
+      const delta = toTime(e.clientX) - startTime
+      const next = annotations.map((n) => {
+        if (n.id !== note.id) return n
+        if (mode === 'move') {
+          const length = original.end - original.start
+          const start = Math.min(Math.max(original.start + delta, 0), duration - length)
+          return { ...n, start, end: start + length }
+        }
+        if (mode === 'start') {
+          return { ...n, start: Math.min(Math.max(original.start + delta, 0), n.end - 0.2) }
+        }
+        return { ...n, end: Math.max(Math.min(original.end + delta, duration), n.start + 0.2) }
+      })
+      onAnnotationsChange?.(next)
     }
     const up = (): void => {
       window.removeEventListener('pointermove', move)
@@ -244,6 +311,52 @@ export default function Timeline(props: Props): ReactNode {
           </div>
         ))}
       </div>
+
+      {annotations.length > 0 && (
+        <div
+          className="track notes"
+          style={{ height: noteRows.count * NOTE_ROW + 10 }}
+          onPointerDown={scrub}
+        >
+          <span className="track-label">Marks</span>
+          {annotations.map((note) => (
+            <div
+              key={note.id}
+              className={`note-block${isObscuring(note.kind) ? ' obscure' : ''}${
+                selectedNote === note.id ? ' selected' : ''
+              }`}
+              style={{
+                left: toX(note.start),
+                width: Math.max(14, toX(note.end) - toX(note.start)),
+                top: 5 + (noteRows.rowOf.get(note.id) ?? 0) * NOTE_ROW,
+                height: NOTE_ROW - 3
+              }}
+              title={`${ANNOTATION_LABELS[note.kind]} · ${note.start.toFixed(1)}–${note.end.toFixed(1)}s`}
+              onPointerDown={(e) => {
+                e.stopPropagation()
+                onSeek(toTime(e.clientX))
+                beginNoteDrag(e, note, 'move')
+              }}
+            >
+              <span className="zl">{ANNOTATION_LABELS[note.kind]}</span>
+              <span
+                className="handle l"
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  beginNoteDrag(e, note, 'start')
+                }}
+              />
+              <span
+                className="handle r"
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  beginNoteDrag(e, note, 'end')
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       {(leadIn > 0 || leadOut > 0) && (
         <div className="track cards" onPointerDown={scrub}>

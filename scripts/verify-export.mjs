@@ -286,6 +286,100 @@ try {
     }
   }
 
+  // ---- annotations reach the file -----------------------------------------
+  //
+  // The drawing is checked call by call in verify:annotations; this checks the
+  // pixels of a real export. Two exports with the layout pinned — one with a
+  // pixelate and a blur, one without — compared region by region. Where the
+  // marks are, the picture must change; everywhere else, and at a moment after
+  // the marks have ended, it must not.
+  {
+    const layout = {
+      output: { width: 1728, height: 1080, fps: 30 },
+      frame: { padding: 0.055, fitMode: 'contain', rotate: 0 }
+    }
+    // Same arithmetic as Composition.rebuildLayout for a 2880×1800 source.
+    const pad = 0.055 * 1080
+    const availW = 1728 - pad * 2
+    const availH = 1080 - pad * 2
+    const contentW = availH * 1.6
+    const content = { x: pad + (availW - contentW) / 2, y: pad, scale: contentW / 2880 }
+    /** The middle 60% of a source rectangle, in output pixels, as an ffmpeg crop. */
+    const cropOf = ({ x, y, w, h }) => {
+      const ox = content.x + (x + w * 0.2) * content.scale
+      const oy = content.y + (y + h * 0.2) * content.scale
+      return `crop=${Math.round(w * 0.6 * content.scale)}:${Math.round(h * 0.6 * content.scale)}:${Math.round(ox)}:${Math.round(oy)}`
+    }
+
+    // Over target 3 and target 2 of the fixture; target 4 is left alone as the control.
+    const pixelated = { x: 1240, y: 750, w: 400, h: 300 }
+    const blurred = { x: 2100, y: 350, w: 400, h: 300 }
+    const untouched = { x: 400, y: 1300, w: 400, h: 300 }
+    const mark = (id, kind, r) => ({
+      id, kind, start: 0.3, end: 2.5, ...r, color: '#000000', width: 0, amount: 14, fade: 0
+    })
+
+    const exportWith = async (name, annotations) => {
+      const settings = join(work, `${name}.json`)
+      const file = join(work, `${name}.mp4`)
+      await writeFile(settings, JSON.stringify({ ...layout, annotations }))
+      const result = await run('npx', ['electron', '.'], {
+        timeout: 300_000,
+        env: {
+          ...process.env,
+          DEMODOG_BENCH: FIXTURE,
+          DEMODOG_BENCH_OUT: file,
+          DEMODOG_BENCH_SECONDS: '4',
+          DEMODOG_BENCH_PROJECT: settings,
+          DEMODOG_BENCH_PLAIN: '1'
+        }
+      })
+      return result.code !== 'timeout' && existsSync(file) ? file : null
+    }
+
+    const plain = await exportWith('marks-off', [])
+    const marked = await exportWith('marks-on', [mark('p', 'pixelate', pixelated), mark('b', 'blur', blurred)])
+    check(Boolean(plain && marked), 'an export with blur and pixelate marks finishes')
+
+    if (plain && marked) {
+      const still = async (file, at, name) => {
+        const png = join(work, `${name}.png`)
+        await run('ffmpeg', ['-v', 'error', '-ss', String(at), '-i', file, '-frames:v', '1', '-y', png])
+        return png
+      }
+      /** Mean luma difference between two stills inside one region. */
+      const difference = async (a, b, region) => {
+        const { out } = await run('ffmpeg', [
+          '-i', a, '-i', b, '-filter_complex',
+          `[0][1]blend=all_mode=difference,${cropOf(region)},signalstats,metadata=print:key=lavfi.signalstats.YAVG`,
+          '-f', 'null', '-'
+        ])
+        const match = /lavfi\.signalstats\.YAVG=([\d.]+)/.exec(out)
+        return match ? Number(match[1]) : NaN
+      }
+
+      const during = [await still(plain, 1.2, 'off-1'), await still(marked, 1.2, 'on-1')]
+      const afterwards = [await still(plain, 3.4, 'off-3'), await still(marked, 3.4, 'on-3')]
+
+      const pix = await difference(...during, pixelated)
+      const blur = await difference(...during, blurred)
+      const control = await difference(...during, untouched)
+      const later = Math.max(
+        await difference(...afterwards, pixelated),
+        await difference(...afterwards, blurred)
+      )
+
+      check(pix > 2, `pixelate changes the picture where it was placed (${pix.toFixed(1)} luma)`,
+        'the pixelated region is identical to the unmarked export — the mark never reached the file')
+      check(blur > 2, `blur changes the picture where it was placed (${blur.toFixed(1)} luma)`,
+        'the blurred region is identical to the unmarked export')
+      check(control < 1.5, `nothing changes where there is no mark (${control.toFixed(2)} luma)`,
+        'an unmarked part of the frame differs — the effect is leaking outside its region')
+      check(later < 1.5, `and nothing is hidden once the marks have ended (${later.toFixed(2)} luma)`,
+        'the marked regions still differ after the marks end')
+    }
+  }
+
   // A second pass with the overlays left on, purely to confirm the zoom shots
   // reach the exporter. They live in their own state, and an export that
   // silently rendered with an empty shot list looked completely normal — every

@@ -1,4 +1,11 @@
 // MIT License - Copyright (c) fintonlabs.com
+import {
+  annotationDefaults,
+  outputRect,
+  sourceToOutput,
+  type Annotation,
+  type AnnotationKind
+} from '../engine/annotations'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../api'
@@ -110,6 +117,26 @@ export default function Editor({
   }, [railOpen])
 
   const [picking, setPicking] = useState(false)
+  /**
+   * Armed from the Annotate tab: the next drag on the preview places a mark of
+   * this kind — or redraws the one named in `replace`.
+   */
+  const [annotating, setAnnotating] = useState<{ kind: AnnotationKind; replace?: string } | null>(
+    null
+  )
+  const annotatingRef = useRef(annotating)
+  annotatingRef.current = annotating
+  /** The mark being dragged out, in output pixels. Preview only. */
+  const drawingRef = useRef<{
+    kind: AnnotationKind
+    x0: number
+    y0: number
+    x1: number
+    y1: number
+  } | null>(null)
+  const [selectedNote, setSelectedNote] = useState<string | null>(null)
+  const selectedNoteRef = useRef<string | null>(null)
+  selectedNoteRef.current = selectedNote
   const pickRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const [exported, setExported] = useState<{ path: string; captions: number } | null>(null)
   const [cameraSync, setCameraSync] = useState(0)
@@ -381,6 +408,106 @@ export default function Editor({
     window.addEventListener('pointerup', up)
   }
 
+  /**
+   * Places a mark by dragging on the preview.
+   *
+   * Converted to recording coordinates through the camera as it is at this
+   * instant, exactly as a zoom area is — so a box drawn around a button while
+   * zoomed in still sits around that button when the camera pulls back out.
+   */
+  const beginAnnotate = (event: React.PointerEvent<HTMLCanvasElement>): void => {
+    const armed = annotatingRef.current
+    if (!armed || event.button !== 0) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    event.preventDefault()
+    // Placing a mark on a moving picture would put it on the wrong frame.
+    setPlaying(false)
+
+    const toCanvas = (clientX: number, clientY: number): { x: number; y: number } => {
+      const box = canvas.getBoundingClientRect()
+      return {
+        x: ((clientX - box.left) / box.width) * project.output.width,
+        y: ((clientY - box.top) / box.height) * project.output.height
+      }
+    }
+
+    const from = toCanvas(event.clientX, event.clientY)
+    drawingRef.current = { kind: armed.kind, x0: from.x, y0: from.y, x1: from.x, y1: from.y }
+
+    const move = (e: PointerEvent): void => {
+      const to = toCanvas(e.clientX, e.clientY)
+      if (drawingRef.current) drawingRef.current = { ...drawingRef.current, x1: to.x, y1: to.y }
+    }
+
+    const up = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      const drag = drawingRef.current
+      drawingRef.current = null
+      setAnnotating(null)
+      if (!drag) return
+
+      const dx = drag.x1 - drag.x0
+      const dy = drag.y1 - drag.y0
+      // A click, not a drag: nothing to place.
+      const tooSmall =
+        drag.kind === 'arrow' ? Math.hypot(dx, dy) < 16 : Math.abs(dx) < 10 || Math.abs(dy) < 10
+      if (tooSmall) return
+
+      const cam = composition.camera.at(timeRef.current)
+      const content = composition.content
+      const toSource = (x: number, y: number): { x: number; y: number } => ({
+        x: cam.viewport.x + ((x - content.x) / content.w) * cam.viewport.w,
+        y: cam.viewport.y + ((y - content.y) / content.h) * cam.viewport.h
+      })
+      const a = toSource(drag.x0, drag.y0)
+      const b = toSource(drag.x1, drag.y1)
+      const region =
+        drag.kind === 'arrow'
+          ? { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y }
+          : { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) }
+
+      if (armed.replace) {
+        const id = armed.replace
+        setProject((p) => ({
+          ...p,
+          annotations: (p.annotations ?? []).map((n) => (n.id === id ? { ...n, ...region } : n))
+        }))
+        setSelectedNote(id)
+        return
+      }
+
+      const playhead = Math.max(0, Math.min(timeRef.current, recording.duration - 0.2))
+      const defaults = annotationDefaults(drag.kind)
+      // Started a fade's length early, so the mark is fully on screen at the
+      // very frame it was drawn on. Starting at the playhead meant fading in
+      // from nothing there — an arrow placed and apparently not placed.
+      const start = Math.max(0, playhead - defaults.fade)
+      const note: Annotation = {
+        id: `note-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+        ...defaults,
+        start,
+        end: Math.min(recording.duration, playhead + 3),
+        ...region
+      }
+      setProject((p) => ({ ...p, annotations: [...(p.annotations ?? []), note] }))
+      setSelectedNote(note.id)
+    }
+
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  // One selection at a time, so Delete removes the thing last clicked rather
+  // than whichever of a zoom and a mark happened to be checked first.
+  useEffect(() => {
+    if (selected) setSelectedNote(null)
+  }, [selected])
+  useEffect(() => {
+    if (selectedNote) setSelected(null)
+  }, [selectedNote])
+
   /** Current target level for the camera element. */
   const cameraVolume = useCallback(
     () => Math.min(1, Math.max(0, project.audio.micGain)),
@@ -602,6 +729,75 @@ export default function Editor({
         ctx.strokeRect(x, y, w, h)
         ctx.restore()
       }
+
+      // A mark being dragged out, and the selected mark's outline. Both are
+      // drawn here, after the composition, so neither can reach an export.
+      const guide = Math.max(2, project.output.width / 640)
+      const drawing = drawingRef.current
+      if (drawing) {
+        ctx.save()
+        ctx.strokeStyle = '#7c63ff'
+        ctx.fillStyle = 'rgba(124, 99, 255, 0.16)'
+        ctx.lineWidth = guide * 1.5
+        ctx.setLineDash([guide * 4, guide * 3])
+        if (drawing.kind === 'arrow') {
+          ctx.beginPath()
+          ctx.moveTo(drawing.x0, drawing.y0)
+          ctx.lineTo(drawing.x1, drawing.y1)
+          ctx.stroke()
+          ctx.setLineDash([])
+          ctx.beginPath()
+          ctx.arc(drawing.x1, drawing.y1, guide * 4, 0, Math.PI * 2)
+          ctx.fillStyle = '#7c63ff'
+          ctx.fill()
+        } else {
+          const x = Math.min(drawing.x0, drawing.x1)
+          const y = Math.min(drawing.y0, drawing.y1)
+          const w = Math.abs(drawing.x1 - drawing.x0)
+          const h = Math.abs(drawing.y1 - drawing.y0)
+          ctx.fillRect(x, y, w, h)
+          ctx.strokeRect(x, y, w, h)
+        }
+        ctx.restore()
+      }
+      const selectedId = selectedNoteRef.current
+      const note = selectedId ? composition.project.annotations?.find((n) => n.id === selectedId) : null
+      if (note && !drawing) {
+        const cam = composition.camera.at(timeRef.current)
+        const view = {
+          viewport: cam.viewport,
+          content: composition.content,
+          outputHeight: project.output.height
+        }
+        const showing = timeRef.current >= note.start && timeRef.current < note.end
+        ctx.save()
+        // Fainter when the playhead is outside the mark's time: still findable,
+        // but plainly not on screen at this moment.
+        ctx.globalAlpha = showing ? 1 : 0.45
+        ctx.strokeStyle = '#7c63ff'
+        ctx.lineWidth = guide
+        ctx.setLineDash([guide * 4, guide * 3])
+        if (note.kind === 'arrow') {
+          const tail = sourceToOutput(view, note.x, note.y)
+          const head = sourceToOutput(view, note.x + note.w, note.y + note.h)
+          ctx.beginPath()
+          ctx.moveTo(tail.x, tail.y)
+          ctx.lineTo(head.x, head.y)
+          ctx.stroke()
+          ctx.setLineDash([])
+          ctx.fillStyle = '#7c63ff'
+          for (const p of [tail, head]) {
+            ctx.beginPath()
+            ctx.arc(p.x, p.y, guide * 3, 0, Math.PI * 2)
+            ctx.fill()
+          }
+        } else {
+          const r = outputRect(view, note)
+          const pad = guide * 3
+          ctx.strokeRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2)
+        }
+        ctx.restore()
+      }
     }
     raf = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(raf)
@@ -668,11 +864,23 @@ export default function Editor({
       } else if (event.code === 'ArrowRight') {
         seek(timeRef.current + (event.shiftKey ? 1 : 1 / project.output.fps))
       } else if (event.code === 'Backspace' || event.code === 'Delete') {
+        const noteId = selectedNoteRef.current
+        if (noteId) {
+          event.preventDefault()
+          setProject((p) => ({ ...p, annotations: (p.annotations ?? []).filter((n) => n.id !== noteId) }))
+          setSelectedNote(null)
+          return
+        }
         if (!selectedRef.current) return
         event.preventDefault()
         setSegments((current) => current.filter((s) => s.id !== selectedRef.current))
         setSelected(null)
       } else if (event.code === 'Escape') {
+        // Placing a mark is the first thing Escape abandons.
+        if (annotatingRef.current) {
+          setAnnotating(null)
+          return
+        }
         // Somewhere to go when the panel is in the way and the mouse is not.
         setRailOpen(false)
       } else if (event.code === 'KeyM' && !event.metaKey && !event.ctrlKey) {
@@ -839,10 +1047,10 @@ export default function Editor({
       <div className="stage">
         <canvas
           ref={canvasRef}
-          className={picking ? 'picking' : undefined}
+          className={picking || annotating ? 'picking' : undefined}
           width={project.output.width}
           height={project.output.height}
-          onPointerDown={beginPick}
+          onPointerDown={(e) => (annotatingRef.current ? beginAnnotate(e) : beginPick(e))}
         />
 
         <div className="stage-badge">
@@ -976,6 +1184,10 @@ export default function Editor({
           intro={project.intro}
           outro={project.outro}
           music={project.music}
+          annotations={project.annotations}
+          selectedNote={selectedNote}
+          onSelectNote={setSelectedNote}
+          onAnnotationsChange={(annotations) => setProject((p) => ({ ...p, annotations }))}
         />
       </div>
 
@@ -1017,6 +1229,10 @@ export default function Editor({
         recording={recording}
         cameraSync={cameraSync}
         onCameraSync={setCameraSync}
+        annotating={annotating}
+        onAnnotate={setAnnotating}
+        selectedNote={selectedNote}
+        onSelectNote={setSelectedNote}
       />
     </div>
   )

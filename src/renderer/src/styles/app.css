@@ -2106,6 +2106,154 @@ dialog.info a {
   height: 34px;
 }
 
+/* Marks: arrows, boxes, highlights and focus in lime; blur and pixelate hatched,
+   since they hide rather than point, and that difference should read at a glance. */
+.track.notes {
+  height: 30px;
+}
+
+.note-block {
+  position: absolute;
+  background: var(--lime);
+  border: 2px solid var(--line);
+  border-radius: 2px;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  overflow: hidden;
+  transition: filter 0.12s ease;
+}
+
+.note-block.obscure {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--surface-3) 0 5px,
+    var(--surface) 5px 10px
+  );
+}
+
+.note-block:hover {
+  filter: brightness(1.12);
+}
+
+.note-block.selected {
+  outline: 3px solid var(--violet);
+  outline-offset: 1px;
+}
+
+.note-block .zl {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--lime-ink);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.note-block.obscure .zl {
+  color: var(--text);
+}
+
+.note-block .handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.note-block .handle.l {
+  left: 0;
+}
+
+.note-block .handle.r {
+  right: 0;
+}
+
+.annotate-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.annotate-tools .tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px 6px;
+}
+
+.annotate-tools .tool svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.annotate-tools .tool.armed {
+  background: var(--lime);
+  color: var(--lime-ink);
+}
+
+.note-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.note-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 9px;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.note-row:hover {
+  background: var(--surface-2);
+}
+
+.note-row.selected {
+  background: var(--violet);
+  color: var(--violet-ink);
+}
+
+.swatch-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.swatch-row button {
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--line);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: transform 0.09s var(--snap);
+}
+
+.swatch-row button:hover {
+  transform: translateY(-1px);
+}
+
+.swatch-row button[aria-pressed='true'] {
+  outline: 3px solid var(--violet);
+  outline-offset: 1px;
+}
+
 /* Title cards, shown as the time either side of the recording that they
    actually are. The lane only exists when a card is enabled. */
 .track.cards {

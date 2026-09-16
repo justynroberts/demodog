@@ -45,11 +45,27 @@ enum Transcriber {
     /// the previous window's tail.
     static let overlapSeconds: Double = 4.0
 
+    /// One word and when it was said, on the take's clock.
+    struct Word {
+        var start: Double
+        var end: Double
+        var text: String
+    }
+
     struct Cue {
         var start: Double
         var end: Double
         var text: String
         var confidence: Double
+        /// Kept so a long line can later be broken at the real pause between two
+        /// words. The recogniser gives every word a time and building lines used
+        /// to throw them all away, leaving any later split to guess.
+        var words: [Word] = []
+    }
+
+    /// Word times as they travel in JSON: `[start, end, text]` triples.
+    static func encode(_ words: [Word]) -> [[Any]] {
+        words.map { [$0.start, $0.end, $0.text] }
     }
 
     static func run(audioPath: String, locale: String) async {
@@ -161,8 +177,18 @@ enum Transcriber {
                     // opens by repeating how the first ended. Dropping the whole
                     // line loses what follows the repeat; keeping it reads as a
                     // stutter. Only the repeated words go.
+                    let cut = repeatCut(of: lastText, in: cue.text)
                     cue.text = withoutRepeat(of: lastText, in: cue.text)
                     guard !cue.text.isEmpty else { continue }
+                    // The same words go from the word list, so it still lines up
+                    // with the text. If the two ever disagree on how many words
+                    // there were, the times are dropped rather than left pointing
+                    // at the wrong words — a later split then estimates instead.
+                    if cut > 0 {
+                        let kept = Array(cue.words.dropFirst(min(cut, cue.words.count)))
+                        let tokens = cue.text.split(separator: " ").count
+                        cue.words = kept.count == tokens ? kept : []
+                    }
                     lastEnd = cue.end
 
                     // One line is held back rather than emitted immediately.
@@ -181,6 +207,9 @@ enum Transcriber {
                         if contiguous && combined.count <= 90 {
                             previous.text = combined
                             previous.end = cue.end
+                            previous.words =
+                                previous.words.isEmpty || cue.words.isEmpty
+                                ? [] : previous.words + cue.words
                             pending = previous
                             // Compared against the assembled line, not the
                             // fragment that arrived last. A repeat that skips a
@@ -293,10 +322,18 @@ enum Transcriber {
                 let end = payload["end"] as? Double,
                 let text = payload["text"] as? String
             else { continue }
+            let words: [Word] = (payload["words"] as? [[Any]] ?? []).compactMap { triple in
+                guard triple.count == 3,
+                    let wordStart = triple[0] as? Double,
+                    let wordEnd = triple[1] as? Double,
+                    let wordText = triple[2] as? String
+                else { return nil }
+                return Word(start: shift + wordStart, end: shift + wordEnd, text: wordText)
+            }
             cues.append(
                 Cue(
                     start: shift + start, end: shift + end, text: text,
-                    confidence: payload["confidence"] as? Double ?? 0))
+                    confidence: payload["confidence"] as? Double ?? 0, words: words))
         }
         return WindowResult(cues: cues, status: process.terminationStatus)
     }
@@ -370,7 +407,7 @@ enum Transcriber {
             {
                 emit([
                     "event": "cue", "start": cue.start, "end": cue.end, "text": cue.text,
-                    "confidence": cue.confidence,
+                    "confidence": cue.confidence, "words": encode(cue.words),
                 ])
             }
         } catch {
@@ -387,6 +424,7 @@ enum Transcriber {
             "end": cue.end,
             "text": cue.text,
             "confidence": cue.confidence,
+            "words": encode(cue.words),
         ])
     }
 
@@ -397,6 +435,13 @@ enum Transcriber {
     /// pretty" and "He looks pretty good" come from the same words heard in two
     /// windows. Two words is the shortest run worth trusting; a single repeated
     /// word is usually just English.
+    /// How many leading words `withoutRepeat` would remove, so the word list
+    /// can lose exactly the same ones.
+    static func repeatCut(of previous: String, in text: String) -> Int {
+        let kept = withoutRepeat(of: previous, in: text).split(separator: " ").count
+        return max(0, text.split(separator: " ").count - kept)
+    }
+
     static func withoutRepeat(of previous: String, in text: String) -> String {
         func normalise(_ word: Substring) -> String {
             word.lowercased().trimmingCharacters(in: .punctuationCharacters)
@@ -625,7 +670,31 @@ enum Transcriber {
                 start: shift + first.timestamp,
                 end: shift + last.timestamp + last.duration,
                 text: joined,
-                confidence: confidence)
+                confidence: confidence,
+                words: words.flatMap { segment -> [Word] in
+                    // A segment is usually one word, but not always — "demo
+                    // dog" can come back as a single timed segment. The word
+                    // list has to line up one-to-one with the words of the
+                    // text, or every later check treats it as untrustworthy and
+                    // the whole line loses its times. So a multi-word segment
+                    // shares its time between its words by length.
+                    let parts = segment.substring.split(separator: " ").map(String.init)
+                    guard parts.count > 1 else {
+                        return [
+                            Word(
+                                start: shift + segment.timestamp,
+                                end: shift + segment.timestamp + segment.duration,
+                                text: segment.substring)
+                        ]
+                    }
+                    let total = Double(parts.reduce(0) { $0 + $1.count + 1 })
+                    var at = shift + segment.timestamp
+                    return parts.map { part in
+                        let length = segment.duration * Double(part.count + 1) / max(1, total)
+                        defer { at += length }
+                        return Word(start: at, end: at + length, text: part)
+                    }
+                })
         }
 
         // ---- sentences ------------------------------------------------

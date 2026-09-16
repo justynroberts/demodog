@@ -13,6 +13,13 @@
 /** Either canvas context; the exporter renders offscreen. */
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
+/** One spoken word and when it was said, as the recogniser heard it. */
+export interface CaptionWord {
+  start: number
+  end: number
+  text: string
+}
+
 export interface Caption {
   id: string
   start: number
@@ -20,6 +27,14 @@ export interface Caption {
   text: string
   /** From the recogniser. Low values are worth a read-through before export. */
   confidence?: number
+  /**
+   * When each word was said, where the recogniser reported it.
+   *
+   * Only trusted while it still matches `text` — see `wordsFor`. Editing a
+   * line's wording does not clear it; the mismatch is noticed when it is next
+   * needed, and timing then falls back to an estimate.
+   */
+  words?: CaptionWord[]
 }
 
 export interface CaptionStyle {
@@ -52,6 +67,16 @@ export interface CaptionStyle {
 
   /** Seconds of fade at each end of a cue. */
   fade: number
+
+  /**
+   * Longest a line may be, in characters, before it is broken into shorter
+   * lines. 0 leaves lines as the recogniser grouped them.
+   *
+   * A transcript grouped into whole sentences reads well as a transcript and
+   * badly as captions: two dense lines of text over a screen recording are a
+   * paragraph to read, not a caption to glance at, and that was the complaint.
+   */
+  maxChars: number
 }
 
 export const DEFAULT_CAPTION_STYLE: CaptionStyle = {
@@ -81,7 +106,11 @@ export const DEFAULT_CAPTION_STYLE: CaptionStyle = {
   boxPadding: 18,
   boxRadius: 10,
 
-  fade: 0.12
+  fade: 0.12,
+
+  // About one line at the default size and width. Short enough to take in at a
+  // glance while watching what the screen is doing.
+  maxChars: 42
 }
 
 export const CAPTION_FONTS = [
@@ -236,10 +265,17 @@ export function drawCaption(
  * is a real pause and is left alone.
  */
 export function captionsFromCues(
-  cues: { start: number; end: number; text: string; confidence: number }[]
+  cues: {
+    start: number
+    end: number
+    text: string
+    confidence: number
+    words?: CaptionWord[]
+  }[],
+  options: { maxChars?: number } = {}
 ): Caption[] {
   const sorted = [...cues].sort((a, b) => a.start - b.start)
-  return sorted.map((cue, index) => {
+  const whole = sorted.map((cue, index): Caption => {
     const next = sorted[index + 1]
     const gap = next ? next.start - cue.end : Infinity
 
@@ -258,7 +294,253 @@ export function captionsFromCues(
       start: cue.start,
       end,
       text: cue.text.trim(),
-      confidence: cue.confidence
+      confidence: cue.confidence,
+      ...(cue.words && cue.words.length ? { words: cue.words } : {})
     }
   })
+  return shortenCaptions(whole, options.maxChars ?? 0)
+}
+
+// ---------------------------------------------------------------------------
+// Splitting and merging lines
+
+/** Whitespace-separated words, as the caption would be read. */
+function tokensOf(text: string): string[] {
+  return text.split(/\s+/).filter(Boolean)
+}
+
+const normalise = (text: string): string => tokensOf(text).join(' ').toLowerCase()
+
+/**
+ * When each word of a caption falls.
+ *
+ * The recogniser's own word times when it gave them and the text still says
+ * what it heard. Otherwise an estimate: the caption's span shared out in
+ * proportion to each word's length, since longer words take longer to say.
+ * That is close enough for a break inside one line; the recogniser's times are
+ * better, and are used whenever they are there.
+ */
+export function wordsFor(caption: Caption): { words: CaptionWord[]; heard: boolean } {
+  const tokens = tokensOf(caption.text)
+  if (
+    caption.words &&
+    caption.words.length === tokens.length &&
+    normalise(caption.words.map((w) => w.text).join(' ')) === normalise(caption.text)
+  ) {
+    return { words: caption.words, heard: true }
+  }
+  const weights = tokens.map((token) => token.length + 1)
+  const total = weights.reduce((a, b) => a + b, 0) || 1
+  const span = caption.end - caption.start
+  let at = caption.start
+  const words = tokens.map((text, i) => {
+    const start = at
+    at += (span * weights[i]) / total
+    return { start, end: at, text }
+  })
+  return { words, heard: false }
+}
+
+/** Where a break between two words belongs in time: in the gap between them. */
+function boundaryBetween(before: CaptionWord, after: CaptionWord, caption: Caption): number {
+  const mid = (before.end + after.start) / 2
+  return Math.min(caption.end, Math.max(caption.start, mid))
+}
+
+let splitCounter = 0
+/** A fresh id derived from the one being split, unique for the session. */
+function pieceId(base: string): string {
+  splitCounter += 1
+  return `${base.split('~')[0]}~${Date.now().toString(36)}${splitCounter.toString(36)}`
+}
+
+/** The piece of a caption covering words [from, to). */
+function piece(
+  caption: Caption,
+  words: CaptionWord[],
+  heard: boolean,
+  from: number,
+  to: number,
+  start: number,
+  end: number,
+  id: string
+): Caption {
+  const slice = words.slice(from, to)
+  const next: Caption = {
+    id,
+    start,
+    end,
+    text: slice.map((w) => w.text).join(' ')
+  }
+  if (caption.confidence !== undefined) next.confidence = caption.confidence
+  if (heard) next.words = slice
+  return next
+}
+
+/**
+ * Splits a caption before word `index`, returning the two halves.
+ *
+ * The halves touch — the first ends exactly where the second begins — so the
+ * text never blinks off between them and the music never swells up in a gap
+ * that is not really a pause. The first half keeps the original id, so a
+ * selection on the timeline survives.
+ */
+export function splitCaptionAtWord(
+  caption: Caption,
+  index: number,
+  newId: (base: string) => string = pieceId
+): [Caption, Caption] | null {
+  const { words, heard } = wordsFor(caption)
+  if (index <= 0 || index >= words.length) return null
+  const at = boundaryBetween(words[index - 1], words[index], caption)
+  return [
+    piece(caption, words, heard, 0, index, caption.start, at, caption.id),
+    piece(caption, words, heard, index, words.length, at, caption.end, newId(caption.id))
+  ]
+}
+
+/**
+ * The word a text cursor sits in front of, for "split here".
+ *
+ * A cursor in the middle of a word goes to the nearer end of it, so splitting
+ * never cuts a word in half. Returns the index of the first word of the second
+ * half, or null when the cursor is before the first word or after the last.
+ */
+export function wordIndexAtCursor(text: string, cursor: number): number | null {
+  const spans: { start: number; end: number }[] = []
+  const pattern = /\S+/g
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(text))) spans.push({ start: match.index, end: match.index + match[0].length })
+  if (spans.length < 2) return null
+  for (let i = 0; i < spans.length; i++) {
+    const { start, end } = spans[i]
+    if (cursor <= start) return i === 0 ? null : i
+    if (cursor < end) {
+      const index = cursor - start < end - cursor ? i : i + 1
+      return index <= 0 || index >= spans.length ? null : index
+    }
+  }
+  return null
+}
+
+/** Joins a caption with the one after it. The inverse of a split. */
+export function mergeCaptions(first: Caption, second: Caption): Caption {
+  const a = wordsFor(first)
+  const b = wordsFor(second)
+  const merged: Caption = {
+    id: first.id,
+    start: Math.min(first.start, second.start),
+    end: Math.max(first.end, second.end),
+    text: `${first.text.trim()} ${second.text.trim()}`.trim()
+  }
+  if (first.confidence !== undefined || second.confidence !== undefined) {
+    merged.confidence = ((first.confidence ?? 1) + (second.confidence ?? 1)) / 2
+  }
+  if (a.heard && b.heard) merged.words = [...a.words, ...b.words]
+  return merged
+}
+
+/** A word ending a clause, which is where a line would naturally break. */
+const CLAUSE = /[,;:.!?…—–-]$/
+
+/**
+ * Words that lean on the next one. A line ending "turn on the" leaves the
+ * reader holding a word that means nothing until the next caption arrives.
+ */
+const LEANING = new Set([
+  'a', 'an', 'the', 'to', 'of', 'in', 'on', 'at', 'for', 'with', 'from', 'by', 'and', 'or',
+  'but', 'so', 'if', 'that', 'this', 'these', 'those', 'your', 'my', 'our', 'their', 'its',
+  'is', 'are', 'was', 'be', 'will', 'can', 'we', 'you', 'i', 'it', 'as', 'into', 'onto'
+])
+
+/**
+ * Breaks one caption into lines no longer than `maxChars`.
+ *
+ * Not by filling each line and spilling the rest, which leaves a sentence's
+ * last word alone on screen for a moment — "dog." as a caption of its own,
+ * reading like a transcript with words missing. The number of lines is decided
+ * first, and the words are then shared between them as evenly as the breaks
+ * allow, preferring to break after a comma or full stop, where a reader pauses
+ * anyway.
+ */
+export function shortenCaption(
+  caption: Caption,
+  maxChars: number,
+  newId: (base: string) => string = pieceId
+): Caption[] {
+  if (maxChars <= 0 || caption.text.trim().length <= maxChars) return [caption]
+  const { words, heard } = wordsFor(caption)
+  const n = words.length
+  if (n < 2) return [caption]
+
+  const lengths = words.map((w) => w.text.length)
+  /** Characters in words [from, to), with the spaces between them. */
+  const span = (from: number, to: number): number => {
+    let total = to - from - 1
+    for (let i = from; i < to; i++) total += lengths[i]
+    return total
+  }
+
+  const totalChars = span(0, n)
+  const parts = Math.min(n, Math.max(2, Math.ceil(totalChars / maxChars)))
+  const target = totalChars / parts
+
+  // Best way to put words [0, i) into k lines: cost[k][i].
+  const INF = Number.POSITIVE_INFINITY
+  const cost: number[][] = Array.from({ length: parts + 1 }, () => new Array(n + 1).fill(INF))
+  const from: number[][] = Array.from({ length: parts + 1 }, () => new Array(n + 1).fill(-1))
+  cost[0][0] = 0
+  for (let k = 1; k <= parts; k++) {
+    for (let i = k; i <= n; i++) {
+      for (let j = k - 1; j < i; j++) {
+        if (cost[k - 1][j] === INF) continue
+        const length = span(j, i)
+        let c = cost[k - 1][j] + (length - target) ** 2
+        // A line longer than allowed is only acceptable when a single word is.
+        if (length > maxChars && i - j > 1) c += 1e6
+        // A clause break is worth being a little uneven for.
+        if (i < n && CLAUSE.test(words[i - 1].text)) c -= target * target * 0.25
+        // And a line should not end on a word that needs the next line to mean anything.
+        if (i < n && LEANING.has(words[i - 1].text.toLowerCase())) c += target * target * 0.2
+        // One word on its own is the fragment this exists to avoid.
+        if (i - j === 1 && n > 2) c += target * target
+        if (c < cost[k][i]) {
+          cost[k][i] = c
+          from[k][i] = j
+        }
+      }
+    }
+  }
+
+  const breaks: number[] = []
+  for (let k = parts, i = n; k > 0; k--) {
+    const j = from[k][i]
+    if (j < 0) return [caption]
+    if (j > 0) breaks.unshift(j)
+    i = j
+  }
+
+  const pieces: Caption[] = []
+  let startWord = 0
+  let startTime = caption.start
+  for (let b = 0; b <= breaks.length; b++) {
+    const endWord = b < breaks.length ? breaks[b] : n
+    const endTime =
+      b < breaks.length ? boundaryBetween(words[endWord - 1], words[endWord], caption) : caption.end
+    const id = b === 0 ? caption.id : newId(caption.id)
+    pieces.push(piece(caption, words, heard, startWord, endWord, startTime, endTime, id))
+    startWord = endWord
+    startTime = endTime
+  }
+  return pieces
+}
+
+/** Shortens every caption that runs past `maxChars`, leaving the rest alone. */
+export function shortenCaptions(
+  captions: Caption[],
+  maxChars: number,
+  newId: (base: string) => string = pieceId
+): Caption[] {
+  if (maxChars <= 0) return captions
+  return captions.flatMap((caption) => shortenCaption(caption, maxChars, newId))
 }

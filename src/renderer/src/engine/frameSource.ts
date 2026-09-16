@@ -1,4 +1,5 @@
 // MIT License - Copyright (c) fintonlabs.com
+import { frameIndexAt, regulariseTimes } from './frameTiming'
 import {
   createFile,
   DataStream,
@@ -112,7 +113,10 @@ class DecodingFrameSource implements FrameSource {
     // order frames actually arrive in.
     const presentation = samples.map((s) => s.cts / s.timescale).sort((a, b) => a - b)
     this.baseTime = presentation[0] ?? 0
-    this.times = presentation.map((cts) => cts - this.baseTime)
+    // On the beat they were captured to, rather than wherever the display
+    // refresh let them land — see `regulariseTimes`. This only decides *which*
+    // frame is shown when; frames are still handed out strictly in order.
+    this.times = regulariseTimes(presentation.map((cts) => cts - this.baseTime))
 
     this.decoder = new VideoDecoder({
       output: (frame) => {
@@ -285,16 +289,7 @@ class DecodingFrameSource implements FrameSource {
    * frames may be held.
    */
   private indexAt(t: number): number {
-    const times = this.times
-    if (t <= times[0]) return 0
-    let lo = 0
-    let hi = times.length - 1
-    while (lo < hi) {
-      const mid = (lo + hi + 1) >> 1
-      if (times[mid] <= t) lo = mid
-      else hi = mid - 1
-    }
-    return lo
+    return frameIndexAt(this.times, t)
   }
 
   async frameAt(t: number): Promise<CanvasImageSource | null> {

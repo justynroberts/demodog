@@ -1,4 +1,5 @@
 // MIT License - Copyright (c) fintonlabs.com
+import { drawMarks, drawObscured } from './annotations'
 import { CameraSolver } from './camera'
 import { drawCaption } from './captions'
 import { drawTitleCard, introProgress, outroProgress } from './titles'
@@ -205,6 +206,14 @@ export class Composition {
       x: content.x + ((px - cam.viewport.x) / cam.viewport.w) * content.w,
       y: content.y + ((py - cam.viewport.y) / cam.viewport.h) * content.h
     })
+
+    // Annotations, in the recording's own coordinates so they ride the zoom.
+    // Hiding comes straight after the screen pixels it hides; the marks go on
+    // top of those; and all of it is still under the frame's clip and under
+    // the cursor, which must never be covered by the thing it points at.
+    const view = { viewport: cam.viewport, content, outputHeight: output.height }
+    drawObscured(ctx, t, this.project.annotations, sources.screen, view)
+    drawMarks(ctx, t, this.project.annotations, view)
 
     const cursor = this.cursorTrack.at(t)
     const cursorOut = toOutput(cursor.x, cursor.y)

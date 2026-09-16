@@ -120,6 +120,7 @@ export function defaultProject(
     outro: { ...DEFAULT_OUTRO },
     captions: [],
     captionStyle: { ...DEFAULT_CAPTION_STYLE },
+    annotations: [],
     cursor: {
       visible: true,
       style: 'dark',
@@ -327,7 +328,13 @@ export const OUTPUT_PRESETS: { id: string; name: string; width: number; height: 
  */
 const LOOK_KEY = 'demodog-last-look'
 
-/** Everything that describes a look, and nothing that belongs to one take. */
+/**
+ * Everything that describes a look, and nothing that belongs to one take.
+ *
+ * Captions, zoom segments and annotations are deliberately absent: an arrow
+ * pointing at a button in one recording has no business turning up in the
+ * next.
+ */
 const LOOK_KEYS = [
   'background',
   'frame',

@@ -27,6 +27,10 @@ npm run walkthrough -- walkthrough.json
   ],
   "project": {
     "captions": [{ "id": "c1", "start": 0.8, "end": 2.6, "text": "Start a trial here." }],
+    "annotations": [
+      { "kind": "arrow", "start": 1.0, "end": 3.0, "x": 180, "y": 460, "w": 120, "h": -100 },
+      { "kind": "blur", "start": 0, "end": 6, "x": 900, "y": 40, "w": 260, "h": 32 }
+    ],
     "intro": { "enabled": true, "seconds": 1.5, "title": "Getting started" },
     "music": { "src": "~/Music/bed.mp3", "gain": 0.2, "duckDb": 12 }
   }
@@ -35,6 +39,13 @@ npm run walkthrough -- walkthrough.json
 
 Coordinates are in the video's own pixels; times are seconds from its first
 frame. Both come straight out of an automation tool.
+
+Annotations use the same coordinates and follow the zoom. `arrow`, `box`,
+`highlight` and `focus` point at something; `blur` and `pixelate` hide it — an
+email address, an API key, a customer's name. For an arrow, `x`/`y` is the tail
+and `x + w`/`y + h` is the point. Anything left out (`color`, `width`, `amount`)
+takes that kind's default, and blur and pixelate never fade, so what they cover
+is hidden from their first frame to their last.
 
 `npm run author` stops after building the take, if you would rather open it in
 the app and adjust it by hand before exporting.

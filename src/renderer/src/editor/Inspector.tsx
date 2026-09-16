@@ -9,8 +9,21 @@ import {
   mergeSettings
 } from '../engine/defaults'
 import { Group, Segmented, Slider, Toggle, formatTime } from '../ui/controls'
-import { CAPTION_FONTS, captionsFromCues } from '../engine/captions'
+import {
+  CAPTION_FONTS,
+  captionsFromCues,
+  mergeCaptions,
+  shortenCaptions,
+  splitCaptionAtWord,
+  wordIndexAtCursor
+} from '../engine/captions'
 import type { Caption } from '../engine/captions'
+import {
+  ANNOTATION_COLORS,
+  ANNOTATION_LABELS,
+  type Annotation,
+  type AnnotationKind
+} from '../engine/annotations'
 import { DEFAULT_INTRO } from '../engine/titles'
 import type { CursorSettings, Project, Recording, ZoomSegment } from '../engine/types'
 
@@ -29,12 +42,18 @@ interface Props {
   /** True while a drag on the preview will choose a zoom area. */
   picking: boolean
   onPick: () => void
+  /** Armed from the Annotate tab: the next drag on the preview places this kind of mark. */
+  annotating: { kind: AnnotationKind; replace?: string } | null
+  onAnnotate: (armed: { kind: AnnotationKind; replace?: string } | null) => void
+  /** The mark selected on the timeline or in the list, if any. */
+  selectedNote: string | null
+  onSelectNote: (id: string | null) => void
   /** The caption clicked on the timeline, if any. */
   selectedCaption: string | null
   onSelectCaption: (id: string | null) => void
 }
 
-type Tab = 'style' | 'zoom' | 'cursor' | 'camera' | 'audio' | 'text' | 'titles'
+type Tab = 'style' | 'zoom' | 'cursor' | 'camera' | 'audio' | 'text' | 'annotate' | 'titles'
 
 /**
  * The inspector's tabs.
@@ -108,6 +127,17 @@ const TABS: { id: Tab; name: string; hint: string; icon: ReactNode }[] = [
     )
   },
   {
+    id: 'annotate',
+    name: 'Annotate',
+    hint: 'Arrows, boxes and highlights — and blur or pixelate to hide something.',
+    icon: (
+      <>
+        <rect x="3" y="4" width="12" height="10" rx="1.5" />
+        <path d="M13 12l7.5 7.5M20.5 19.5h-4.5M20.5 19.5V15" />
+      </>
+    )
+  },
+  {
     id: 'titles',
     name: 'Titles',
     hint: 'Intro and outro cards, shown before and after the recording.',
@@ -141,6 +171,11 @@ export default function Inspector(props: Props): ReactNode {
     onChange({ ...project, [key]: { ...(project[key] as object), ...value } as Project[K] })
 
   const described = TABS.find((t) => t.id === (hovered ?? tab)) ?? TABS[0]
+
+  // A mark picked on the timeline opens the tab that edits it.
+  useEffect(() => {
+    if (props.selectedNote) setTab('annotate')
+  }, [props.selectedNote])
 
   return (
     <aside className="inspector">
@@ -191,6 +226,7 @@ export default function Inspector(props: Props): ReactNode {
         {tab === 'camera' && <CameraTab {...props} patch={patch} />}
         {tab === 'audio' && <AudioTab project={project} patch={patch} />}
         {tab === 'text' && <CaptionsTab {...props} set={set} patch={patch} />}
+        {tab === 'annotate' && <AnnotateTab {...props} set={set} />}
         {tab === 'titles' && <TitlesTab project={project} patch={patch} />}
       </div>
     </aside>
@@ -200,6 +236,236 @@ export default function Inspector(props: Props): ReactNode {
 // ---------------------------------------------------------------------------
 
 type Setter = <K extends keyof Project>(key: K, value: Project[K]) => void
+
+const TOOL_ICONS: Record<AnnotationKind, ReactNode> = {
+  arrow: <path d="M5 19L18 6M18 6h-7M18 6v7" />,
+  box: <rect x="4" y="6" width="16" height="12" rx="2" />,
+  highlight: (
+    <>
+      <rect x="4" y="8" width="16" height="8" rx="1.5" />
+      <path d="M7 12h10" />
+    </>
+  ),
+  focus: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="12" cy="12" r="4" />
+    </>
+  ),
+  blur: (
+    <>
+      <circle cx="8" cy="9" r="2.5" />
+      <circle cx="15.5" cy="8" r="2" />
+      <circle cx="12" cy="15.5" r="3" />
+    </>
+  ),
+  pixelate: (
+    <>
+      <rect x="4" y="4" width="7" height="7" />
+      <rect x="13" y="13" width="7" height="7" />
+      <path d="M13 4h7v7M4 13h7v7" />
+    </>
+  )
+}
+
+const ANNOTATION_KINDS: AnnotationKind[] = ['arrow', 'box', 'highlight', 'focus', 'blur', 'pixelate']
+
+/**
+ * Marks placed on the recording after the fact.
+ *
+ * Choosing a kind arms the preview: the next drag there places it, starting at
+ * the playhead. Timing is adjusted on the Marks lane or here; the region is
+ * redrawn rather than dragged, which is one precise gesture instead of eight
+ * fiddly handles.
+ */
+function AnnotateTab({
+  project,
+  set,
+  time,
+  recording,
+  annotating,
+  onAnnotate,
+  selectedNote,
+  onSelectNote
+}: Props & { set: Setter }): ReactNode {
+  const notes = project.annotations ?? []
+  const current = notes.find((note) => note.id === selectedNote) ?? null
+  const update = (id: string, changes: Partial<Annotation>): void =>
+    set(
+      'annotations',
+      notes.map((note) => (note.id === id ? { ...note, ...changes } : note))
+    )
+  const armedLabel = annotating ? ANNOTATION_LABELS[annotating.kind].toLowerCase() : ''
+
+  return (
+    <>
+      <Group title="Add a mark" span>
+        <div className="annotate-tools">
+          {ANNOTATION_KINDS.map((kind) => {
+            const armed = annotating?.kind === kind && !annotating.replace
+            return (
+              <button
+                key={kind}
+                className={`btn tool${armed ? ' armed' : ''}`}
+                aria-pressed={armed}
+                onClick={() => onAnnotate(armed ? null : { kind })}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  {TOOL_ICONS[kind]}
+                </svg>
+                <span>{ANNOTATION_LABELS[kind]}</span>
+              </button>
+            )
+          })}
+        </div>
+        <p className="hint">
+          {annotating
+            ? annotating.replace
+              ? `Drag on the preview to redraw the ${armedLabel}. Esc to cancel.`
+              : `Drag on the preview to place the ${armedLabel}. Esc to cancel.`
+            : 'Choose one, then drag on the preview. It starts at the playhead and lasts three seconds — drag its ends on the Marks lane to change that.'}
+        </p>
+        <p className="hint">
+          Blur and pixelate never fade in or out, so what they hide is covered from their first
+          frame to their last.
+        </p>
+      </Group>
+
+      {notes.length > 0 && (
+        <Group title={`${notes.length} ${notes.length === 1 ? 'mark' : 'marks'}`} span>
+          <div className="note-list">
+            {notes.map((note) => (
+              <button
+                key={note.id}
+                className={`note-row${note.id === selectedNote ? ' selected' : ''}`}
+                onClick={() => onSelectNote(note.id)}
+              >
+                <span>{ANNOTATION_LABELS[note.kind]}</span>
+                <span className="mono">
+                  {note.start.toFixed(1)}–{note.end.toFixed(1)}s
+                </span>
+              </button>
+            ))}
+          </div>
+        </Group>
+      )}
+
+      {current && (
+        <Group title={`Selected ${ANNOTATION_LABELS[current.kind].toLowerCase()}`} span>
+          <Slider
+            label="Starts"
+            min={0}
+            max={Math.max(0.1, current.end - 0.2)}
+            step={0.05}
+            value={current.start}
+            onChange={(v) => update(current.id, { start: v })}
+            format={(v) => `${v.toFixed(2)}s`}
+          />
+          <Slider
+            label="Ends"
+            min={current.start + 0.2}
+            max={recording.duration}
+            step={0.05}
+            value={current.end}
+            onChange={(v) => update(current.id, { end: v })}
+            format={(v) => `${v.toFixed(2)}s`}
+          />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              className="btn small"
+              onClick={() =>
+                update(current.id, { start: Math.max(0, Math.min(time, current.end - 0.2)) })
+              }
+            >
+              Start at playhead
+            </button>
+            <button
+              className="btn small"
+              onClick={() =>
+                update(current.id, {
+                  end: Math.min(recording.duration, Math.max(time, current.start + 0.2))
+                })
+              }
+            >
+              End at playhead
+            </button>
+          </div>
+
+          {(current.kind === 'arrow' || current.kind === 'box' || current.kind === 'highlight') && (
+            <>
+              <span className="label">Colour</span>
+              <div className="swatch-row">
+                {ANNOTATION_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    aria-label={color}
+                    aria-pressed={current.color.toLowerCase() === color}
+                    style={{ background: color }}
+                    onClick={() => update(current.id, { color })}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+          {(current.kind === 'arrow' || current.kind === 'box') && (
+            <Slider
+              label="Thickness"
+              min={2}
+              max={20}
+              step={1}
+              value={current.width}
+              onChange={(v) => update(current.id, { width: Math.round(v) })}
+              format={(v) => `${Math.round(v)}px`}
+            />
+          )}
+          {current.kind === 'focus' && (
+            <Slider
+              label="Dim the rest"
+              min={0.2}
+              max={0.85}
+              step={0.05}
+              value={current.amount}
+              onChange={(v) => update(current.id, { amount: v })}
+              format={(v) => `${Math.round(v * 100)}%`}
+            />
+          )}
+          {(current.kind === 'blur' || current.kind === 'pixelate') && (
+            <Slider
+              label={current.kind === 'blur' ? 'Blur' : 'Block size'}
+              min={4}
+              max={40}
+              step={1}
+              value={current.amount}
+              onChange={(v) => update(current.id, { amount: Math.round(v) })}
+              format={(v) => `${Math.round(v)}px`}
+            />
+          )}
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              className="btn small"
+              onClick={() => onAnnotate({ kind: current.kind, replace: current.id })}
+            >
+              Redraw on preview
+            </button>
+            <button
+              className="btn small"
+              onClick={() => {
+                set(
+                  'annotations',
+                  notes.filter((note) => note.id !== current.id)
+                )
+                onSelectNote(null)
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </Group>
+      )}
+    </>
+  )
+}
 type Patcher = <K extends keyof Project>(key: K, value: Partial<Project[K]>) => void
 
 /**
@@ -1295,7 +1561,13 @@ function CaptionsTab({
         set(
           'captions',
           captionsFromCues(
-            cues.map((cue) => ({ ...cue, start: cue.start + shift, end: cue.end + shift }))
+            cues.map((cue) => ({
+              ...cue,
+              start: cue.start + shift,
+              end: cue.end + shift,
+              words: cue.words?.map((w) => ({ ...w, start: w.start + shift, end: w.end + shift }))
+            })),
+            { maxChars: style.maxChars }
           )
         )
       }
@@ -1313,6 +1585,52 @@ function CaptionsTab({
     )
 
   const current = captions.find((caption) => caption.id === selectedCaption) ?? null
+  const currentIndex = current ? captions.indexOf(current) : -1
+  const following = currentIndex >= 0 ? (captions[currentIndex + 1] ?? null) : null
+
+  /**
+   * Where the text cursor is in the selected line, kept as state so the Split
+   * button can say whether a split there is possible before it is pressed.
+   */
+  const textRef = useRef<HTMLTextAreaElement>(null)
+  const [caret, setCaret] = useState(0)
+  const splitIndex = current ? wordIndexAtCursor(current.text, caret) : null
+
+  /** Splits the selected line at the cursor and moves on to the second half. */
+  const splitAtCursor = (): void => {
+    if (!current) return
+    // Read from the field itself at the moment of splitting. State follows the
+    // cursor through selection events, but the field is the authority.
+    const at = textRef.current?.selectionStart ?? caret
+    const index = wordIndexAtCursor(current.text, at)
+    if (index === null) return
+    const halves = splitCaptionAtWord(current, index)
+    if (!halves) return
+    set(
+      'captions',
+      captions.flatMap((caption) => (caption.id === current.id ? halves : [caption]))
+    )
+    // The rest of the line is what is left to break up, so that is where the
+    // cursor goes next: splitting a long line becomes one keystroke per break.
+    onSelectCaption(halves[1].id)
+    setCaret(0)
+    requestAnimationFrame(() => {
+      textRef.current?.focus()
+      textRef.current?.setSelectionRange(0, 0)
+    })
+  }
+
+  /** Joins the selected line with the one after it. */
+  const mergeWithNext = (): void => {
+    if (!current || !following) return
+    const merged = mergeCaptions(current, following)
+    set(
+      'captions',
+      captions
+        .filter((caption) => caption.id !== following.id)
+        .map((caption) => (caption.id === current.id ? merged : caption))
+    )
+  }
 
   /** A new line at the playhead, ready to type into. */
   const addLine = (): void => {
@@ -1321,7 +1639,14 @@ function CaptionsTab({
     // that is already there.
     const next = captions.find((caption) => caption.start > start)
     const end = Math.min(next ? next.start : start + 2.5, recording.duration)
-    const line: Caption = { id: `manual-${Math.round(start * 1000)}`, start, end, text: 'New line' }
+    // Unique even when two lines are added at the same playhead, which the
+    // start time alone was not — and the music lane keys its notches by id.
+    const line: Caption = {
+      id: `manual-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      start,
+      end,
+      text: 'New line'
+    }
     set(
       'captions',
       [...captions, line].sort((a, b) => a.start - b.start)
@@ -1388,6 +1713,43 @@ function CaptionsTab({
             </div>
           </>
         )}
+        <div style={{ height: 6 }} />
+        <Toggle
+          label="Keep lines short"
+          checked={style.maxChars > 0}
+          onChange={(v) => patch('captionStyle', { maxChars: v ? 42 : 0 })}
+        />
+        {style.maxChars > 0 && (
+          <>
+            <Slider
+              label="Longest line"
+              min={16}
+              max={90}
+              step={1}
+              value={style.maxChars}
+              onChange={(v) => patch('captionStyle', { maxChars: Math.round(v) })}
+              format={(v) => `${Math.round(v)} characters`}
+            />
+            {captions.some((caption) => caption.text.length > style.maxChars) && (
+              <button
+                className="btn small"
+                onClick={() => {
+                  set('captions', shortenCaptions(captions, style.maxChars))
+                  onSelectCaption(null)
+                }}
+              >
+                {(() => {
+                  const long = captions.filter((caption) => caption.text.length > style.maxChars).length
+                  return `Shorten ${long} long ${long === 1 ? 'line' : 'lines'} now`
+                })()}
+              </button>
+            )}
+            <p className="hint">
+              New transcripts arrive in lines this short. Breaks go after a comma or full stop
+              where one is close, and never leave a word on its own.
+            </p>
+          </>
+        )}
         {error && (
           <p className="hint" style={{ color: 'var(--danger)' }}>
             {error}
@@ -1398,11 +1760,46 @@ function CaptionsTab({
       {current && (
         <Group title="Selected line" span>
           <textarea
+            ref={textRef}
             className="caption-text"
             value={current.text}
             rows={3}
-            onChange={(e) => updateCaption(current.id, { text: e.target.value })}
+            onChange={(e) => {
+              setCaret(e.target.selectionStart)
+              updateCaption(current.id, { text: e.target.value })
+            }}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
+            onKeyUp={(e) => setCaret(e.currentTarget.selectionStart)}
+            onMouseUp={(e) => setCaret(e.currentTarget.selectionStart)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                splitAtCursor()
+              }
+            }}
           />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              className="btn small"
+              disabled={splitIndex === null}
+              title="Split this line where the text cursor is (⌘↩)"
+              onClick={splitAtCursor}
+            >
+              Split at cursor
+            </button>
+            <button
+              className="btn small"
+              disabled={!following}
+              title="Join this line with the one after it"
+              onClick={mergeWithNext}
+            >
+              Merge with next
+            </button>
+          </div>
+          <p className="hint" style={{ marginTop: 0 }}>
+            Put the cursor where the line should break and press ⌘↩. The rest of the line is
+            selected next, so a long line breaks up one keystroke at a time.
+          </p>
           <span className="label">
             {current.start.toFixed(2)}s → {current.end.toFixed(2)}s
           </span>

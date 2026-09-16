@@ -357,11 +357,25 @@ export function transcribe(
           continue
         }
         if (message.event === 'cue') {
+          // Word times arrive as [start, end, text] triples to keep the lines
+          // short; anything malformed is dropped rather than trusted.
+          const words = Array.isArray(message.words)
+            ? (message.words as unknown[])
+                .filter(
+                  (w): w is [number, number, string] =>
+                    Array.isArray(w) &&
+                    Number.isFinite(Number(w[0])) &&
+                    Number.isFinite(Number(w[1])) &&
+                    typeof w[2] === 'string'
+                )
+                .map(([start, end, text]) => ({ start: Number(start), end: Number(end), text }))
+            : undefined
           cues.push({
             start: Number(message.start),
             end: Number(message.end),
             text: String(message.text),
-            confidence: Number(message.confidence)
+            confidence: Number(message.confidence),
+            ...(words && words.length ? { words } : {})
           })
         } else if (message.event === 'progress') {
           const of = Number(message.of)
