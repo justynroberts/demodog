@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.7.0 — 2026-09-16
 
 - **Smoother exports.** Recordings came back jerky, and the cause was not the
   capture but the clock. ScreenCaptureKit can only hand over a frame on a
