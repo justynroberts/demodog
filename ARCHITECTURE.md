@@ -93,6 +93,16 @@ Built by `native/build.sh` with plain `swiftc` (no Xcode project). Subcommands:
 | `events.jsonl` | cursor samples, clicks, scrolls, app switches, shortcuts |
 | `meta.json` | geometry, frame rate, and the clock offsets |
 
+The editor adds a fourth, `edits.json`: captions, annotations, every zoom shot,
+the trim and the camera sync, written a moment after each change (and on close)
+by `take:save-edits`, which writes beside a temporary name and renames. It is
+never written for a take that has only been opened. Automatic shots are saved
+with `zoomKey`, the zoom settings they came from, and are regenerated only when
+those settings differ — so an automatic shot deleted by hand stays deleted.
+`editsFromDisk` reads it item by item and clamps every time into the take, and
+a headless export (`DEMODOG_BENCH`) ignores it, so a scripted render is exactly
+what it was handed.
+
 **Timebase.** Every event carries `h`, a reading of the monotonic host clock
 (`CMClockGetHostTimeClock`). `meta.firstFrameHost` is the same clock at the
 first video frame. The renderer converts with `t = h - firstFrameHost`. Never

@@ -35,7 +35,8 @@ function toRecording(
     cameraURL: camera ? api.mediaURL(camera.path) : undefined,
     cameraOffset,
     duration: meta.duration,
-    source: { width: meta.capture.width, height: meta.capture.height }
+    source: { width: meta.capture.width, height: meta.capture.height },
+    edits: result.edits
   }
 }
 
@@ -121,7 +122,9 @@ export default function StudioApp(): ReactNode {
       </header>
 
       {mode === 'editor' && recording ? (
-        <Editor recording={recording} bench={bench} />
+        // Keyed by take, so opening another one starts a fresh editor with that
+        // take's own saved edits rather than carrying the last one's over.
+        <Editor key={recording.dir} recording={recording} bench={bench} />
       ) : (
         <SetupScreen onRecording={() => setMode('recording')} />
       )}

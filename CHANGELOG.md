@@ -47,6 +47,23 @@ is where finished work waits.
   and they sit under the cursor so they never cover what it points at. Blur and
   pixelate never fade, so nothing they hide shows through at either end.
   Overlapping marks get rows of their own on the lane.
+- **Edits are kept with the recording.** Captions, marks, zoom shots, the trim
+  and the camera sync lived only in the editor, so opening a take again — or
+  quitting — lost all of it and started over from the automatic edit. They are
+  now saved inside the take as you work and are back when it opens. A zoom shot
+  deleted by hand stays deleted; the automatic shots are only rebuilt if the
+  zoom settings are changed. A take that has only been looked at is left
+  untouched.
+- **Transcripts no longer repeat themselves.** Speech is recognised in
+  overlapping windows so a sentence crossing a boundary is heard whole, and the
+  overlap was removed by comparing text — which missed repeats that did not
+  open a line exactly, so phrases like "open the full invoice" appeared twice.
+  Repeats are now removed by when each word was said. On a 43-second test
+  narration, words that were never spoken fell from 39 to 6 (the rest are
+  mishearings) and repeated phrases from 22 to none, with the same share of the
+  script heard as before. The last word each window hears has its end
+  stretched to the window's edge; that word is judged by its start, so the word
+  after it is not mistaken for a repeat.
 - **Annotations over MCP.** `create_walkthrough` and `update_walkthrough` take
   an `annotations` list in video pixels, so a scripted demo can point at things
   and hide things too. Anything a mark leaves out takes its kind's default, so a

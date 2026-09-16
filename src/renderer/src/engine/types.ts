@@ -338,4 +338,6 @@ export interface Recording {
   cameraOffset: number
   duration: number
   source: { width: number; height: number }
+  /** Saved edits read with the take; see engine/edits.ts. */
+  edits?: unknown
 }

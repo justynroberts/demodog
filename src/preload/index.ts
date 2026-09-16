@@ -32,6 +32,11 @@ const api = {
     locale: string
   ): Promise<{ cues: Cue[]; source: 'camera' | 'screen' }> =>
     ipcRenderer.invoke('transcribe:run', dir, locale),
+  /**
+   * Writes a take's edits beside it. Sent rather than invoked: it has to land
+   * even when it is the last thing a closing window does, and nothing waits on it.
+   */
+  saveEdits: (dir: string, edits: unknown): void => ipcRenderer.send('take:save-edits', dir, edits),
   onTranscribeProgress: (handler: (fraction: number) => void): (() => void) => {
     const listener = (_e: unknown, fraction: number): void => handler(fraction)
     ipcRenderer.on('transcribe:progress', listener)

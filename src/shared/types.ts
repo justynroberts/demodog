@@ -143,6 +143,11 @@ export interface RecordingResult {
   duration: number
   /** Present when the take includes a camera recording. */
   camera?: CameraTrack | null
+  /**
+   * `edits.json` from the take's folder, unvalidated — the renderer checks it
+   * item by item. Absent when the take has never been edited.
+   */
+  edits?: unknown
 }
 
 /** One line of transcribed narration, timed against the recording. */

@@ -28,6 +28,9 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
+  statSync,
+  writeFileSync,
   WriteStream
 } from 'node:fs'
 import { Readable } from 'node:stream'
@@ -1076,15 +1079,60 @@ async function loadTake(dir: string): Promise<RecordingResult> {
     }
   }
 
+  // Edits made to this take before — captions, zoom shots, annotations, trim.
+  // Unreadable means none: a damaged edits file must never stop a take opening.
+  let edits: unknown = undefined
+  try {
+    const path = join(dir, EDITS_FILE)
+    if (existsSync(path) && statSync(path).size < EDITS_MAX_BYTES) {
+      edits = JSON.parse(await readFile(path, 'utf8'))
+    }
+  } catch (error) {
+    console.warn('[edits] could not read saved edits:', error)
+  }
+
   return {
     dir,
     meta,
     events,
     screenPath: join(dir, 'screen.mp4'),
     duration: meta.duration,
-    camera
+    camera,
+    edits
   }
 }
+
+const EDITS_FILE = 'edits.json'
+/** Far beyond any real transcript and set of marks; a larger file is not ours. */
+const EDITS_MAX_BYTES = 20 * 1024 * 1024
+
+/**
+ * Saves a take's edits beside it.
+ *
+ * Only ever into a take the app has opened — a folder already cleared to stream
+ * media from and holding a `meta.json` — and only ever to one fixed file name,
+ * so the renderer cannot use this to write anywhere else. Written to a
+ * temporary file and renamed over the old one, so a crash or a full disk
+ * mid-write leaves the previous edits intact rather than half a file.
+ */
+ipcMain.on('take:save-edits', (_event, dir: unknown, edits: unknown) => {
+  try {
+    if (typeof dir !== 'string' || !dir) return
+    if (!isMediaPathAllowed(dir) || !existsSync(join(dir, 'meta.json'))) {
+      console.warn(`[edits] refused to save outside an opened take: ${dir}`)
+      return
+    }
+    if (typeof edits !== 'object' || edits === null || Array.isArray(edits)) return
+    const text = JSON.stringify(edits)
+    if (text.length > EDITS_MAX_BYTES) return
+    const target = join(dir, EDITS_FILE)
+    const temporary = `${target}.saving`
+    writeFileSync(temporary, text)
+    renameSync(temporary, target)
+  } catch (error) {
+    console.warn('[edits] could not save edits:', error)
+  }
+})
 
 /** Re-opens a take from disk so the editor can be reloaded on a later launch. */
 ipcMain.handle('recording:open', async (): Promise<RecordingResult | null> => {

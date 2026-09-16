@@ -1,4 +1,5 @@
 // MIT License - Copyright (c) fintonlabs.com
+import { editsFromDisk, zoomKeyOf, type TakeEdits } from '../engine/edits'
 import {
   annotationDefaults,
   outputRect,
@@ -60,6 +61,15 @@ export default function Editor({
   /** Headless benchmark: export straight to this path, then quit. */
   bench?: { out: string; seconds: number; plain?: boolean; project?: unknown } | null
 }): ReactNode {
+  /**
+   * What was done to this take last time it was open, if anything.
+   *
+   * Never for a headless export: those render exactly what they are handed,
+   * and a stray edits file must not change a scripted result.
+   */
+  const [saved] = useState<TakeEdits | null>(() =>
+    bench ? null : editsFromDisk(recording.edits, recording.duration)
+  )
   const [project, setProject] = useState<Project>(() => {
     const base = defaultProject(recording.source, Boolean(recording.cameraURL))
     // Applied here rather than in an effect, because the export closure
@@ -68,7 +78,10 @@ export default function Editor({
     // Settings handed in from outside take precedence over the defaults, and
     // over anything the app remembers — a scripted export has to be able to say
     // exactly what it wants rendered.
-    const given = bench?.project ? mergeSettings(base, bench.project) : base
+    const fromOutside = bench?.project ? mergeSettings(base, bench.project) : base
+    const given = saved
+      ? { ...fromOutside, captions: saved.captions, annotations: saved.annotations }
+      : fromOutside
     if (!bench?.plain) return given
     return {
       ...given,
@@ -83,7 +96,14 @@ export default function Editor({
       fade: { in: 0, out: 0 }
     }
   })
-  const [segments, setSegments] = useState<ZoomSegment[]>([])
+  // Generated here rather than by the effect below, so the editor never
+  // passes through a moment with no shots — which would look like every
+  // automatic zoom had been deleted, and be saved as such.
+  const [segments, setSegments] = useState<ZoomSegment[]>(
+    () =>
+      saved?.segments ??
+      generateSegments(recording.input, project.zoom, recording.source, recording.duration)
+  )
   // Read at call time, not closure time. The headless export runs from a timer
   // set when the editor mounted, which is before auto-zoom has produced
   // anything — so the shots it captured were the empty list.
@@ -139,11 +159,10 @@ export default function Editor({
   selectedNoteRef.current = selectedNote
   const pickRef = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
   const [exported, setExported] = useState<{ path: string; captions: number } | null>(null)
-  const [cameraSync, setCameraSync] = useState(0)
-  const [trim, setTrim] = useState<{ start: number; end: number }>({
-    start: 0,
-    end: recording.duration
-  })
+  const [cameraSync, setCameraSync] = useState(() => saved?.cameraSync ?? 0)
+  const [trim, setTrim] = useState<{ start: number; end: number }>(
+    () => saved?.trim ?? { start: 0, end: recording.duration }
+  )
   const [exporting, setExporting] = useState<{
     fraction: number
     stage: string
@@ -196,17 +215,85 @@ export default function Editor({
 
   // Regenerate the automatic zooms whenever their settings change, keeping any
   // segment the user added or edited by hand.
+  //
+  // Only when they actually change. A take reopened with the settings its shots
+  // were saved under keeps those shots exactly — including an automatic one
+  // deleted by hand, which regenerating would quietly bring back.
+  const zoomKeyRef = useRef<string>(saved ? saved.zoomKey : zoomKeyOf(project.zoom))
+  /** How many automatic shots the settings produce, to notice one being deleted. */
+  const autoCountRef = useRef<number>(segments.filter((s) => s.auto).length)
   useEffect(() => {
+    const key = zoomKeyOf(project.zoom)
+    if (key === zoomKeyRef.current) return
+    zoomKeyRef.current = key
     const auto = generateSegments(
       recording.input,
       project.zoom,
       recording.source,
       recording.duration
     )
+    autoCountRef.current = auto.length
     setSegments((prev) =>
       [...auto, ...prev.filter((s) => !s.auto)].sort((a, b) => a.start - b.start)
     )
   }, [recording, project.zoom])
+
+  // ---- keeping edits with the take ---------------------------------------
+  //
+  // Written beside the recording a moment after each change, and flushed when
+  // the editor closes. A take that has only been looked at gets no file: there
+  // is nothing of the user's in it to keep.
+  const lastSaved = useRef<string>(saved ? JSON.stringify(saved) : '')
+  const latest = useRef<{ text: string; edits: TakeEdits } | null>(null)
+  useEffect(() => {
+    if (bench) return
+    const edits: TakeEdits = {
+      version: 1,
+      captions: project.captions,
+      annotations: project.annotations ?? [],
+      segments,
+      zoomKey: zoomKeyRef.current,
+      trim,
+      cameraSync
+    }
+    const edited =
+      saved !== null ||
+      edits.captions.length > 0 ||
+      edits.annotations.length > 0 ||
+      cameraSync !== 0 ||
+      trim.start > 0 ||
+      trim.end < recording.duration ||
+      segments.some((s) => !s.auto) ||
+      segments.filter((s) => s.auto).length !== autoCountRef.current
+    if (!edited) {
+      latest.current = null
+      return
+    }
+    const text = JSON.stringify(edits)
+    if (text === lastSaved.current) return
+    latest.current = { text, edits }
+    const timer = setTimeout(() => {
+      lastSaved.current = text
+      api.saveEdits(recording.dir, edits)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [project.captions, project.annotations, segments, trim, cameraSync, recording, bench, saved])
+
+  // The last change is never lost to the delay: saved on the way out.
+  useEffect(() => {
+    const flush = (): void => {
+      const pending = latest.current
+      if (pending && pending.text !== lastSaved.current) {
+        lastSaved.current = pending.text
+        api.saveEdits(recording.dir, pending.edits)
+      }
+    }
+    window.addEventListener('beforeunload', flush)
+    return () => {
+      window.removeEventListener('beforeunload', flush)
+      flush()
+    }
+  }, [recording])
 
   // Open just past the fade-in. At t=0 the frame is legitimately black, which
   // reads as a broken preview rather than as a fade — and it puts the playhead

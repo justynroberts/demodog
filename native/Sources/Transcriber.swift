@@ -137,6 +137,17 @@ enum Transcriber {
         var lastEnd: Double = 0
         /// And what it said, so the next window does not repeat its ending.
         var lastText = ""
+        /// When the last word already emitted finished being said.
+        ///
+        /// The surest test for a repeat: the recogniser times every word, so a
+        /// word heard again by the next window is one that was said before this
+        /// moment. Comparing text alone missed repeats that did not open the
+        /// line exactly, or that came back two pieces later.
+        var lastWordEnd: Double = 0
+        /// When the last word emitted started, which is trustworthy even when
+        /// its end is not: the final word a window hears is stretched to the
+        /// window's edge, often well into the next word actually spoken.
+        var lastWordStart: Double = -1
         /// Held back one line, so a trimmed stub can rejoin what it came from.
         var pending: Cue?
         /// How many windows were attempted, and how many could not even start.
@@ -171,6 +182,22 @@ enum Transcriber {
                 // forward to where the last line ended.
                 for var cue in cues {
                     if cue.end <= lastEnd + 0.1 { continue }
+                    // Words already said are dropped by time first, when this
+                    // line's words line up with its text. The midpoint is what
+                    // counts, so a word that merely starts a hair early — two
+                    // windows rarely agree to the millisecond — is kept.
+                    let tokens = cue.text.split(separator: " ")
+                    if !cue.words.isEmpty && cue.words.count == tokens.count && lastWordStart >= 0 {
+                        let said = cue.words.prefix {
+                            ($0.start + $0.end) / 2 <= lastWordEnd || $0.start < lastWordStart + 0.1
+                        }.count
+                        if said == cue.words.count { continue }
+                        if said > 0 {
+                            cue.words.removeFirst(said)
+                            cue.text = tokens.dropFirst(said).joined(separator: " ")
+                            cue.start = max(cue.start, cue.words[0].start)
+                        }
+                    }
                     if cue.start < lastEnd { cue.start = lastEnd }
                     guard cue.end > cue.start else { continue }
                     // The overlap is heard by both windows, so the second one
@@ -190,6 +217,11 @@ enum Transcriber {
                         cue.words = kept.count == tokens ? kept : []
                     }
                     lastEnd = cue.end
+                    if let spoken = cue.words.last {
+                        let atEdge = spoken.end >= clipped + span - 0.1
+                        lastWordEnd = max(lastWordEnd, atEdge ? spoken.start : spoken.end)
+                        lastWordStart = max(lastWordStart, spoken.start)
+                    }
 
                     // One line is held back rather than emitted immediately.
                     // Trimming a repeat can leave a couple of words — "good."

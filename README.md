@@ -198,7 +198,10 @@ appeal.
 
 **Where are my recordings?** `~/Movies/DemoDog/take_<timestamp>.demodog`. Each
 take is a package holding the video, the input log and a little metadata —
-double-click it to reopen, or use **Open take…**.
+double-click it to reopen, or use **Open take…**. Your edits are kept inside it
+as you work: captions, marks, zoom shots, the trim and the camera sync are all
+there when you open the take again, even after quitting. The look — background,
+cursor, caption style — is not per take; it follows you to the next recording.
 
 **Why are there no zooms on my recording?** DemoDog zooms in on things you *do* —
 clicks, scrolling, switching apps. A take where you only moved the mouse has
