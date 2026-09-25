@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.8.0 — 2026-09-25
 
 - **Undo and redo, for everything.** ⌘Z and ⇧⌘Z now step back and forward
   through every edit — zoom shots added, moved or deleted, marks, captions and
