@@ -46,8 +46,20 @@ export function installMenu(window: () => BrowserWindow | null): void {
       // Without this the standard shortcuts simply do not exist.
       label: 'Edit',
       submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
+        // Not `role: 'undo'`, which only ever reaches a focused text field.
+        // The editor has its own history — shots, marks, captions, settings —
+        // and the renderer decides which of the two a press belongs to, by
+        // what has focus. Without this, ⌘Z in the editor did nothing at all.
+        {
+          label: 'Undo',
+          accelerator: 'CmdOrCtrl+Z',
+          click: () => window()?.webContents.send('menu:edit', 'undo')
+        },
+        {
+          label: 'Redo',
+          accelerator: 'Shift+CmdOrCtrl+Z',
+          click: () => window()?.webContents.send('menu:edit', 'redo')
+        },
         { type: 'separator' },
         { role: 'cut' },
         { role: 'copy' },

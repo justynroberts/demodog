@@ -6,6 +6,22 @@ is where finished work waits.
 
 ## Unreleased
 
+- **Undo and redo, for everything.** ⌘Z and ⇧⌘Z now step back and forward
+  through every edit — zoom shots added, moved or deleted, marks, captions and
+  their splits, the trim, the camera sync, and every setting in the rail. There
+  was no undo at all before: the Edit menu's was the standard text-field one, so
+  deleting the wrong shot meant putting it back by hand. A run of changes that
+  arrive together, such as a slider under the thumb, settles into one step, so
+  one press undoes the drag rather than a frame of it. A caption being typed
+  into keeps the text field's own undo.
+- **The automatic zoom moves in more slowly.** Reaching full zoom in 0.85s read
+  as a lurch however smooth the curve; it now takes 1.25s, and pulls back over
+  1.1s. The lead-in grew to match, so the camera is the same fraction of the way
+  in when the click lands — it simply settles less abruptly afterwards. A
+  remembered look is brought up to the new pacing too, unless the ease was
+  changed by hand, so this reaches people who have used DemoDog before rather
+  than new installs only.
+
 - **Subtitles in another language.** A **Subtitles** dropdown in the Captions
   tab translates the lines into Dutch, French, Portuguese, Spanish or German.
   Recognition is unchanged — the narration is still heard in the language it was

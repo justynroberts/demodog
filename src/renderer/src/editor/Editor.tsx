@@ -1,6 +1,15 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { editsFromDisk, zoomKeyOf, type TakeEdits } from '../engine/edits'
 import {
+  commit,
+  emptyHistory,
+  redo as redoStep,
+  sameState,
+  undo as undoStep,
+  type EditState,
+  type History
+} from '../engine/history'
+import {
   annotationDefaults,
   outputRect,
   sourceToOutput,
@@ -237,6 +246,95 @@ export default function Editor({
       [...auto, ...prev.filter((s) => !s.auto)].sort((a, b) => a.start - b.start)
     )
   }, [recording, project.zoom])
+
+  // ---- undo and redo -------------------------------------------------------
+  //
+  // Everything editable is snapshotted: settings, captions, marks, zoom shots,
+  // the trim and the camera sync. A run of changes that arrive together — a
+  // slider under the thumb, a shot being dragged — settles into one step after
+  // a short pause, so ⌘Z undoes the drag rather than a frame of it.
+  const live: EditState<Project, ZoomSegment> = { project, segments, trim, cameraSync }
+  const liveRef = useRef(live)
+  liveRef.current = live
+  const history = useRef<History<Project, ZoomSegment>>(emptyHistory(live))
+  /** Set while an undo is being applied, so it is not recorded as a change. */
+  const applying = useRef(false)
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const apply = useCallback((state: EditState<Project, ZoomSegment>): void => {
+    applying.current = true
+    if (settle.current) clearTimeout(settle.current)
+    settle.current = null
+    // The shots in a snapshot are the truth, including any deleted by hand.
+    // Without this, undoing a change to the zoom settings would regenerate the
+    // automatic shots from those settings and quietly overwrite them.
+    zoomKeyRef.current = zoomKeyOf(state.project.zoom)
+    autoCountRef.current = state.segments.filter((s) => s.auto).length
+    setProject(state.project)
+    setSegments(state.segments)
+    setTrim(state.trim)
+    setCameraSync(state.cameraSync)
+    // A shot or mark that no longer exists cannot stay selected.
+    setSelected((id) => (state.segments.some((s) => s.id === id) ? id : null))
+    setSelectedNote((id) => ((state.project.annotations ?? []).some((n) => n.id === id) ? id : null))
+    setSelectedCaption((id) => (state.project.captions.some((c) => c.id === id) ? id : null))
+  }, [])
+
+  useEffect(() => {
+    if (applying.current) {
+      applying.current = false
+      history.current = { ...history.current, present: liveRef.current }
+      return
+    }
+    if (sameState(history.current.present, live)) return
+    if (settle.current) clearTimeout(settle.current)
+    settle.current = setTimeout(() => {
+      settle.current = null
+      history.current = commit(history.current, liveRef.current)
+    }, 450)
+  }, [project, segments, trim, cameraSync])
+
+  const undo = useCallback((): void => {
+    if (settle.current) {
+      clearTimeout(settle.current)
+      settle.current = null
+    }
+    const step = undoStep(history.current, liveRef.current)
+    if (!step) return
+    history.current = step.history
+    apply(step.state)
+  }, [apply])
+  const redo = useCallback((): void => {
+    const step = redoStep(history.current)
+    if (!step) return
+    history.current = step.history
+    apply(step.state)
+  }, [apply])
+  // Kept current for the key handler and the menu, both registered once.
+  const undoRef = useRef(undo)
+  undoRef.current = undo
+  const redoRef = useRef(redo)
+  redoRef.current = redo
+  useEffect(
+    () =>
+      api.onMenuEdit((what) => {
+        // A caption being typed into keeps the text field's own undo; the
+        // editor's history is for everything else.
+        const focused = document.activeElement as HTMLElement | null
+        const typing =
+          focused &&
+          (focused.tagName === 'INPUT' ||
+            focused.tagName === 'TEXTAREA' ||
+            focused.isContentEditable)
+        if (typing) {
+          document.execCommand(what === 'undo' ? 'undo' : 'redo')
+          return
+        }
+        if (what === 'undo') undoRef.current()
+        else redoRef.current()
+      }),
+    []
+  )
 
   // ---- keeping edits with the take ---------------------------------------
   //
@@ -943,7 +1041,11 @@ export default function Editor({
       ) {
         return
       }
-      if (event.code === 'Space') {
+      if (event.code === 'KeyZ' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault()
+        if (event.shiftKey) redoRef.current()
+        else undoRef.current()
+      } else if (event.code === 'Space') {
         event.preventDefault()
         togglePlay()
       } else if (event.code === 'ArrowLeft') {

@@ -131,6 +131,10 @@ where one is close, never leave a word on its own, and fall in the real pause
 between two words. Change the length with **Longest line**; **Shorten … lines
 now** applies it to a transcript you already have.
 
+**Undo anything.** <kbd>⌘</kbd><kbd>Z</kbd> steps back through every edit —
+shots, marks, captions, the trim, any setting — and <kbd>⇧</kbd><kbd>⌘</kbd><kbd>Z</kbd>
+forward again. A slider drag undoes in one press, not one frame at a time.
+
 **Subtitles in another language.** The **Subtitles** dropdown translates the
 lines into Dutch, French, Portuguese, Spanish or German. The narration is still
 recognised in the language it was spoken in — only the subtitle text changes —

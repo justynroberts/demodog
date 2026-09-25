@@ -44,6 +44,12 @@ const api = {
     from = 'en'
   ): Promise<{ lines?: { id: string; text: string }[]; needsDownload?: string }> =>
     ipcRenderer.invoke('captions:translate', lines, to, from),
+  /** Undo or redo chosen from the Edit menu. */
+  onMenuEdit: (handler: (what: 'undo' | 'redo') => void): (() => void) => {
+    const listener = (_e: unknown, what: 'undo' | 'redo'): void => handler(what)
+    ipcRenderer.on('menu:edit', listener)
+    return () => ipcRenderer.removeListener('menu:edit', listener)
+  },
   /** Fires when macOS is fetching a language before it can translate. */
   onTranslateDownloading: (handler: (language: string) => void): (() => void) => {
     const listener = (_e: unknown, language: string): void => handler(language)

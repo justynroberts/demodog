@@ -100,14 +100,18 @@ export function defaultProject(
       enabled: true,
       maxScale: 2.1,
       minScale: 1.25,
-      lead: 0.35,
+      lead: 0.55,
       hold: 1.4,
       mergeGap: 1.8,
       bridgeGap: 1.4,
       openingHold: 1.5,
       maxShot: 7,
-      easeIn: 0.85,
-      easeOut: 0.95,
+      // A zoom that arrives quickly reads as a lurch, however smooth the
+      // curve. These are the speed of the move, not its size: the camera is
+      // still the same fraction of the way in when the click lands — `lead`
+      // grew with them — it simply takes longer to settle afterwards.
+      easeIn: 1.25,
+      easeOut: 1.1,
       follow: 0.42,
       // Pointer-arrives is on: without it a take driven by mouse movement
       // rather than clicking gets no zooms at all. The calming now comes from
@@ -374,8 +378,37 @@ export function rememberLook(project: Project): void {
 export function rememberedLook(): Record<string, unknown> | null {
   try {
     const stored = localStorage.getItem(LOOK_KEY)
-    return stored ? (JSON.parse(stored) as Record<string, unknown>) : null
+    if (!stored) return null
+    return retimeZoom(JSON.parse(stored) as Record<string, unknown>)
   } catch {
     return null
+  }
+}
+
+/**
+ * Brings a remembered look up to the current zoom pacing.
+ *
+ * A remembered look is a complete copy, so someone who has used DemoDog before
+ * keeps the old timing forever and a change to the defaults reaches new
+ * installs only. Only the untouched values are replaced: a look whose ease is
+ * not what the old default was is one somebody chose, and it is left alone.
+ */
+const OLD_ZOOM_PACE = { lead: 0.35, easeIn: 0.85, easeOut: 0.95 }
+
+function retimeZoom(look: Record<string, unknown>): Record<string, unknown> {
+  const zoom = look.zoom as Record<string, number> | undefined
+  if (!zoom) return look
+  const untouched = (key: keyof typeof OLD_ZOOM_PACE): boolean =>
+    typeof zoom[key] === 'number' && Math.abs(zoom[key] - OLD_ZOOM_PACE[key]) < 1e-9
+  if (!untouched('easeIn')) return look
+  const now = defaultProject({ width: 1920, height: 1080 }).zoom
+  return {
+    ...look,
+    zoom: {
+      ...zoom,
+      easeIn: now.easeIn,
+      ...(untouched('easeOut') ? { easeOut: now.easeOut } : {}),
+      ...(untouched('lead') ? { lead: now.lead } : {})
+    }
   }
 }
