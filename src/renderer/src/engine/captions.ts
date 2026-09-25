@@ -35,6 +35,13 @@ export interface Caption {
    * needed, and timing then falls back to an estimate.
    */
   words?: CaptionWord[]
+  /**
+   * What this line said before it was translated.
+   *
+   * Only set on a translated line, and it is what going back to the spoken
+   * language restores — translating a translation is not the same text.
+   */
+  original?: string
 }
 
 export interface CaptionStyle {

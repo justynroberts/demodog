@@ -48,6 +48,7 @@ npm run verify:frames        # which recorded frame each exported frame shows
 npm run verify:captions      # splitting, merging and shortening lines
 npm run verify:annotations   # where and when marks are drawn, and what they hide
 npm run verify:edits         # edits kept with a take read back exactly, and damaged files survived
+npm run verify:translate     # sentences sent to the translator, and the answer put back on the right lines
 npm run zoom-report -- <take dir>   # what the auto-zoom does to real material
 ```
 

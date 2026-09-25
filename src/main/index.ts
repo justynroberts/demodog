@@ -41,6 +41,9 @@ import {
   openPrivacySettings,
   reapStrayHelpers,
   transcribe,
+  translateLines,
+  openTranslationSettings,
+  LanguageNotDownloaded,
   focusWindow,
   probeAudio,
   speechCheck
@@ -809,6 +812,34 @@ ipcMain.handle('transcribe:run', async (event, dir: string, locale: string) => {
   // captions were landing early by the camera offset on every take.
   return { cues, source: spoken.includes('camera.') ? 'camera' : 'screen' }
 })
+
+/**
+ * Translates caption lines. Nothing about the take is read here — the lines
+ * come from the editor and go straight to the on-device translator — so this
+ * needs no media permission and touches no path.
+ */
+ipcMain.handle(
+  'captions:translate',
+  async (_event, lines: { id: string; text: string }[], to: string, from: string) => {
+    if (!Array.isArray(lines) || lines.length === 0) return { lines: [] }
+    const clean = lines
+      .filter((line) => line && typeof line.id === 'string' && typeof line.text === 'string')
+      .slice(0, 2000)
+      .map((line) => ({ id: line.id, text: line.text.slice(0, 2000) }))
+    try {
+      const translated = await translateLines(clean, to, from || 'en', (language) => {
+        if (!_event.sender.isDestroyed()) _event.sender.send('captions:downloading', language)
+      })
+      return { lines: clean.map(({ id }) => ({ id, text: translated.get(id) ?? '' })) }
+    } catch (error) {
+      if (error instanceof LanguageNotDownloaded) return { needsDownload: error.language }
+      throw error
+    }
+  }
+)
+
+/** Opens the pane where macOS keeps the downloaded translation languages. */
+ipcMain.handle('captions:open-languages', () => openTranslationSettings())
 
 // macOS reads an app's screen-recording grant when it starts, so a permission
 // granted while DemoDog is running does not take effect until it restarts.

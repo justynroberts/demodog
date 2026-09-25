@@ -37,6 +37,22 @@ const api = {
    * even when it is the last thing a closing window does, and nothing waits on it.
    */
   saveEdits: (dir: string, edits: unknown): void => ipcRenderer.send('take:save-edits', dir, edits),
+  /** Translates caption lines on this Mac. Never uploads anything. */
+  translateCaptions: (
+    lines: { id: string; text: string }[],
+    to: string,
+    from = 'en'
+  ): Promise<{ lines?: { id: string; text: string }[]; needsDownload?: string }> =>
+    ipcRenderer.invoke('captions:translate', lines, to, from),
+  /** Fires when macOS is fetching a language before it can translate. */
+  onTranslateDownloading: (handler: (language: string) => void): (() => void) => {
+    const listener = (_e: unknown, language: string): void => handler(language)
+    ipcRenderer.on('captions:downloading', listener)
+    return () => ipcRenderer.removeListener('captions:downloading', listener)
+  },
+  /** Opens System Settings where translation languages are downloaded. */
+  openTranslationLanguages: (): Promise<void> =>
+    ipcRenderer.invoke('captions:open-languages'),
   onTranscribeProgress: (handler: (fraction: number) => void): (() => void) => {
     const listener = (_e: unknown, fraction: number): void => handler(fraction)
     ipcRenderer.on('transcribe:progress', listener)

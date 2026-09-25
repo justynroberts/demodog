@@ -5,6 +5,7 @@
 //   demodog-recorder list
 //   demodog-recorder permissions [--request]
 //   demodog-recorder transcribe --audio <file> [--locale en-GB]
+//   demodog-recorder translate --to es [--from en]   < captions.json
 //   demodog-recorder record --out <dir> [--display <id> | --window <id>]
 //                             [--fps 60] [--cursor 0] [--audio 1] [--keys 0]
 //                             [--max-width 3840]
@@ -22,8 +23,14 @@ let command = args.positional.first ?? "help"
 
 // A CLI that uses AppKit still needs an initialised NSApplication for global
 // event monitors and NSCursor to work. `.prohibited` keeps it off the Dock.
+//
+// Except when translating. macOS asks before downloading a language, and it
+// will not put that question over a process that has declared it cannot come
+// to the front — the download then fails with "Unable to Translate" and
+// nothing on screen to explain it. The policy is decided here, before anything
+// else touches NSApplication, because changing it later is too late.
 let app = NSApplication.shared
-app.setActivationPolicy(.prohibited)
+app.setActivationPolicy(command == "translate" ? .regular : .prohibited)
 
 /// One-shot commands talk to `replayd`, which can wedge. A process that hangs
 /// there keeps a capture connection open and poisons every later attempt to
@@ -85,6 +92,14 @@ case "transcribe-window":
             locale: args.string("locale") ?? "en-GB",
             context: args.string("context") ?? "")
     }
+    RunLoop.main.run()
+
+case "translate":
+    // Subtitles in another language.
+    guard let to = args.string("to") else {
+        fail("--to <language> is required")
+    }
+    Translator.run(to: to, from: args.string("from") ?? "en")
     RunLoop.main.run()
 
 case "record":

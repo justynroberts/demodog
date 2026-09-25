@@ -24,6 +24,7 @@ SOURCES=(
   "$HERE/Sources/CaptureSession.swift"
   "$HERE/Sources/ModernSpeech.swift"
   "$HERE/Sources/Transcriber.swift"
+  "$HERE/Sources/Translator.swift"
   "$HERE/Sources/main.swift"
 )
 
@@ -38,6 +39,8 @@ build_one() {
     -framework CoreMedia \
     -framework CoreGraphics \
     -framework Speech \
+    -framework SwiftUI \
+    -Xlinker -weak_framework -Xlinker Translation \
     -o "$2" \
     "${SOURCES[@]}"
 }

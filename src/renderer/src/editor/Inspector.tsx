@@ -19,6 +19,12 @@ import {
 } from '../engine/captions'
 import type { Caption } from '../engine/captions'
 import {
+  SUBTITLE_LANGUAGES,
+  sentencesFrom,
+  withTranslation,
+  withoutTranslation
+} from '../engine/translate'
+import {
   ANNOTATION_COLORS,
   ANNOTATION_LABELS,
   type Annotation,
@@ -1529,6 +1535,71 @@ function CaptionsTab({
     localStorage.setItem('demodog-speech-locale', locale)
   }, [locale])
 
+  /**
+   * The language the subtitles are written in, when it is not the spoken one.
+   *
+   * Derived from the captions rather than held on its own: a translated line
+   * keeps its original wording, so what is on screen is the truth about which
+   * state this is in, even after the take is closed and opened again.
+   */
+  const translated = captions.some((caption) => caption.original !== undefined)
+  const [subtitleLang, setSubtitleLang] = useState('')
+  const [needsDownload, setNeedsDownload] = useState<string | null>(null)
+  const [fetching, setFetching] = useState<string | null>(null)
+  useEffect(() => api.onTranslateDownloading((language) => setFetching(language)), [])
+  useEffect(() => {
+    if (!translated) setSubtitleLang('')
+  }, [translated])
+
+  /**
+   * Translates every line, or puts the spoken wording back.
+   *
+   * Whole sentences go to the translator, not the short lines on screen: half a
+   * clause comes back as confident nonsense. Each sentence is then dealt out
+   * across the lines it came from, so every caption keeps its own timing.
+   */
+  const translate = async (tag: string): Promise<void> => {
+    setError(null)
+    setNeedsDownload(null)
+    setFetching(null)
+    if (!tag) {
+      setSubtitleLang('')
+      set('captions', withoutTranslation(captions))
+      return
+    }
+    const spoken = withoutTranslation(captions)
+    const sentences = sentencesFrom(spoken)
+    if (sentences.length === 0) return
+    setBusy(true)
+    try {
+      const result = await api.translateCaptions(
+        sentences.map((sentence, index) => ({ id: `s${index}`, text: sentence.text })),
+        tag,
+        locale.split('-')[0]
+      )
+      if (result.needsDownload) {
+        setNeedsDownload(result.needsDownload)
+        return
+      }
+      const byId = new Map((result.lines ?? []).map((line) => [line.id, line.text]))
+      set(
+        'captions',
+        withTranslation(
+          spoken,
+          sentences,
+          sentences.map((_, index) => byId.get(`s${index}`) ?? '')
+        )
+      )
+      setSubtitleLang(tag)
+      onSelectCaption(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'The translation failed.')
+    } finally {
+      setBusy(false)
+      setFetching(null)
+    }
+  }
+
   /** "en-GB" as "English (United Kingdom)", where the platform can say so. */
   const localeName = (tag: string): string => {
     try {
@@ -1748,6 +1819,45 @@ function CaptionsTab({
               New transcripts arrive in lines this short. Breaks go after a comma or full stop
               where one is close, and never leave a word on its own.
             </p>
+          </>
+        )}
+        {captions.length > 0 && (
+          <>
+            <div style={{ height: 6 }} />
+            <span className="label">Subtitles</span>
+            <select
+              value={subtitleLang}
+              disabled={busy}
+              onChange={(e) => void translate(e.target.value)}
+            >
+              <option value="">Spoken language — {localeName(locale)}</option>
+              {SUBTITLE_LANGUAGES.map((language) => (
+                <option key={language.tag} value={language.tag}>
+                  {language.label}
+                </option>
+              ))}
+            </select>
+            <p className="hint">
+              {fetching
+                ? `macOS is downloading ${localeName(fetching)} — answer its prompt, and the subtitles follow on their own. It is downloaded once and shared by every app.`
+                : busy
+                  ? 'Translating on this Mac…'
+                  : translated
+                    ? 'Translated on this Mac. Going back to the spoken language restores the words as they were said, not a translation of a translation.'
+                    : 'The narration is still recognised in the spoken language — only the subtitle text is translated, and it is translated on this Mac.'}
+            </p>
+            {needsDownload && (
+              <>
+                <p className="hint" style={{ color: 'var(--danger)' }}>
+                  That language was not downloaded, so there is nothing to translate with. Add it
+                  under Translation Languages and try again — a one-off download, shared by every
+                  app, after which subtitles work offline.
+                </p>
+                <button className="btn small" onClick={() => void api.openTranslationLanguages()}>
+                  Open Translation Languages
+                </button>
+              </>
+            )}
           </>
         )}
         {error && (

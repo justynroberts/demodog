@@ -4,6 +4,22 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- **Subtitles in another language.** A **Subtitles** dropdown in the Captions
+  tab translates the lines into Dutch, French, Portuguese, Spanish or German.
+  Recognition is unchanged — the narration is still heard in the language it was
+  spoken in — and Apple's translation runs on-device, so a recording's words
+  still never leave the Mac. The short lines on screen are put back into whole
+  sentences before translating, because a translator handed half a clause
+  returns confident nonsense, and the sentence is then dealt back out across the
+  same lines in the same proportions, so every caption keeps its timing. The
+  spoken wording is kept on each line, so switching back is the original text
+  rather than a translation of a translation. The first use of a language asks
+  macOS to download it — once, shared with every app — and the subtitles follow
+  as soon as it lands; declining leaves a plain message and a button that opens
+  Translation Languages in System Settings.
+
 ## 1.7.0 — 2026-09-16
 
 - **Smoother exports.** Recordings came back jerky, and the cause was not the

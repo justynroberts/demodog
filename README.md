@@ -131,6 +131,18 @@ where one is close, never leave a word on its own, and fall in the real pause
 between two words. Change the length with **Longest line**; **Shorten … lines
 now** applies it to a transcript you already have.
 
+**Subtitles in another language.** The **Subtitles** dropdown translates the
+lines into Dutch, French, Portuguese, Spanish or German. The narration is still
+recognised in the language it was spoken in — only the subtitle text changes —
+and the translation runs on this Mac, so the recording still goes nowhere.
+Whole sentences are translated rather than the short lines on screen, then
+shared back across them, so each caption keeps its own timing. Switching back to
+the spoken language restores the words exactly as they were said. The first time you
+pick a language, macOS asks whether to download it — answer yes and the
+subtitles follow on their own. It is downloaded once and shared by every app on
+the Mac, and you can manage them under System Settings → General → Language &
+Region → Translation Languages.
+
 **Split and merge by hand.** Select a line, put the cursor where it should
 break, and press <kbd>⌘</kbd><kbd>↩</kbd> (or **Split at cursor**). The rest of
 the line is selected next, so a long line breaks up one keystroke at a time.

@@ -184,6 +184,16 @@ export function openPrivacySettings(
   spawn('open', [`x-apple.systempreferences:com.apple.preference.security?${panes[kind]}`])
 }
 
+/**
+ * Opens the pane where macOS keeps downloaded translation languages.
+ *
+ * Spawned, not handed to `shell.openExternal`, which is deliberately web-only:
+ * the URL is a constant here, not anything the renderer supplies.
+ */
+export function openTranslationSettings(): void {
+  spawn('open', ['x-apple.systempreferences:com.apple.Localization-Settings.extension'])
+}
+
 export class RecorderProcess {
   private child: ChildProcessWithoutNullStreams | null = null
   private dir: string
@@ -440,4 +450,79 @@ function describeTranscribeError(code: string, message: string): string {
     default:
       return message
   }
+}
+
+/** Raised when the language is supported but has not been downloaded yet. */
+export class LanguageNotDownloaded extends Error {
+  constructor(readonly language: string) {
+    super(`${language} has not been downloaded on this Mac yet.`)
+    this.name = 'LanguageNotDownloaded'
+  }
+}
+
+/**
+ * Translates finished caption lines on this Mac.
+ *
+ * Apple's translation runs on-device, like recognition, so a recording's words
+ * still never leave the machine. A language is downloaded once, by the user, in
+ * System Settings — macOS will only offer that download from an app's own
+ * window, which a helper without an interface cannot put up, so a language that
+ * is missing is reported rather than half-attempted.
+ */
+export function translateLines(
+  lines: { id: string; text: string }[],
+  to: string,
+  from = 'en',
+  onDownloading?: (language: string) => void
+): Promise<Map<string, string>> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(helperPath(), ['translate', '--to', to, '--from', from])
+    const out = new Map<string, string>()
+    let buffered = ''
+    let failure: Error | null = null
+    let downloading = false
+    let diagnostics = ''
+    child.stderr.on('data', (chunk: Buffer) => {
+      diagnostics = (diagnostics + chunk.toString()).slice(-2000)
+    })
+    child.stdout.on('data', (chunk: Buffer) => {
+      buffered += chunk.toString()
+      const parts = buffered.split('\n')
+      buffered = parts.pop() ?? ''
+      for (const part of parts) {
+        if (!part.trim()) continue
+        let message: Record<string, unknown>
+        try {
+          message = JSON.parse(part)
+        } catch {
+          continue
+        }
+        if (message.event === 'line' && typeof message.id === 'string') {
+          out.set(message.id, String(message.text ?? ''))
+        } else if (message.event === 'downloading') {
+          // macOS is asking the user whether to fetch the language. It can sit
+          // here for minutes, so the editor is told rather than left saying
+          // "translating" at a dialog the user has not answered yet.
+          downloading = true
+          onDownloading?.(String(message.language ?? to))
+        } else if (message.event === 'error') {
+          failure =
+            message.code === 'not-downloaded' || downloading
+              ? // Failing while the language was being fetched means the
+                // download was declined or did not finish — which is the same
+                // situation to the user, and System Settings is the way out.
+                new LanguageNotDownloaded(String(message.language ?? to))
+              : new Error(String(message.message ?? 'The translation failed.'))
+        }
+      }
+    })
+    child.on('error', reject)
+    child.on('close', () => {
+      if (failure) reject(failure)
+      else if (out.size === 0) reject(new Error(diagnostics.trim() || 'Nothing was translated.'))
+      else resolve(out)
+    })
+    child.stdin.write(JSON.stringify(lines))
+    child.stdin.end()
+  })
 }

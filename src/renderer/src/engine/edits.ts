@@ -75,6 +75,7 @@ export function editsFromDisk(raw: unknown, duration: number): TakeEdits | null 
         end: c.end,
         text: c.text,
         ...(isNumber(c.confidence) ? { confidence: c.confidence } : {}),
+        ...(typeof c.original === 'string' ? { original: c.original } : {}),
         ...(words && words.length ? { words } : {})
       },
       duration
