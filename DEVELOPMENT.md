@@ -50,6 +50,7 @@ npm run verify:annotations   # where and when marks are drawn, and what they hid
 npm run verify:edits         # edits kept with a take read back exactly, and damaged files survived
 npm run verify:translate     # sentences sent to the translator, and the answer put back on the right lines
 npm run verify:history       # undo and redo stepping through every kind of edit
+npm run verify:undo          # and the same in the running editor, driven over a DevTools pipe
 npm run zoom-report -- <take dir>   # what the auto-zoom does to real material
 ```
 

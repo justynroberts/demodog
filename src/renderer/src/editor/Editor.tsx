@@ -318,18 +318,14 @@ export default function Editor({
   useEffect(
     () =>
       api.onMenuEdit((what) => {
-        // A caption being typed into keeps the text field's own undo; the
-        // editor's history is for everything else.
-        const focused = document.activeElement as HTMLElement | null
-        const typing =
-          focused &&
-          (focused.tagName === 'INPUT' ||
-            focused.tagName === 'TEXTAREA' ||
-            focused.isContentEditable)
-        if (typing) {
-          document.execCommand(what === 'undo' ? 'undo' : 'redo')
-          return
-        }
+        // Including while a caption is being typed into.
+        //
+        // The obvious thing — leave a focused text field to the browser's own
+        // undo — does not work here: every field in the editor is a controlled
+        // React input, whose value comes from the project on the next render,
+        // so the browser's undo is immediately overwritten and ⌘Z appears to do
+        // nothing. The editor's history holds the caption text anyway, and a
+        // burst of typing settles into one step.
         if (what === 'undo') undoRef.current()
         else redoRef.current()
       }),
@@ -342,6 +338,14 @@ export default function Editor({
   // the editor closes. A take that has only been looked at gets no file: there
   // is nothing of the user's in it to keep.
   const lastSaved = useRef<string>(saved ? JSON.stringify(saved) : '')
+  /**
+   * Whether this take has an edits file at all.
+   *
+   * Once it has one it is always kept up to date, even when the edits are
+   * undone back to nothing. Skipping the write in that case left the file
+   * saying what had just been undone, and reopening the take brought it back.
+   */
+  const written = useRef(saved !== null)
   const latest = useRef<{ text: string; edits: TakeEdits } | null>(null)
   useEffect(() => {
     if (bench) return
@@ -355,7 +359,7 @@ export default function Editor({
       cameraSync
     }
     const edited =
-      saved !== null ||
+      written.current ||
       edits.captions.length > 0 ||
       edits.annotations.length > 0 ||
       cameraSync !== 0 ||
@@ -372,6 +376,7 @@ export default function Editor({
     latest.current = { text, edits }
     const timer = setTimeout(() => {
       lastSaved.current = text
+      written.current = true
       api.saveEdits(recording.dir, edits)
     }, 400)
     return () => clearTimeout(timer)
@@ -383,6 +388,7 @@ export default function Editor({
       const pending = latest.current
       if (pending && pending.text !== lastSaved.current) {
         lastSaved.current = pending.text
+        written.current = true
         api.saveEdits(recording.dir, pending.edits)
       }
     }
@@ -1033,6 +1039,15 @@ export default function Editor({
       // space, Backspace deleted the selected zoom shot, and the arrow keys
       // scrubbed the playhead. Every shortcut below is a plain key, which is
       // exactly the set a text field needs back.
+      // Undo is the exception to the rule below: it means the same thing
+      // wherever the cursor is, because the fields are controlled by the
+      // project it restores.
+      if (event.code === 'KeyZ' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault()
+        if (event.shiftKey) redoRef.current()
+        else undoRef.current()
+        return
+      }
       if (
         target.tagName === 'INPUT' ||
         target.tagName === 'SELECT' ||
@@ -1041,11 +1056,7 @@ export default function Editor({
       ) {
         return
       }
-      if (event.code === 'KeyZ' && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault()
-        if (event.shiftKey) redoRef.current()
-        else undoRef.current()
-      } else if (event.code === 'Space') {
+      if (event.code === 'Space') {
         event.preventDefault()
         togglePlay()
       } else if (event.code === 'ArrowLeft') {

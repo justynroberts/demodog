@@ -4,6 +4,19 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- **Undo left the saved edits behind.** Undoing back to an untouched take wrote
+  nothing, so the file beside the recording still held what had just been
+  undone — reopen it and the undone caption or mark was back. The file is now
+  kept up to date once it exists, including when the edits are undone to
+  nothing.
+- **⌘Z in a caption did nothing.** Undo deferred to the text field's own
+  history, which cannot work: every field in the editor is a controlled React
+  input whose value is written back from the project on the next render. Undo
+  in a caption now undoes the typing, through the editor's own history, and
+  leaves the caption itself alone.
+
 ## 1.8.0 — 2026-09-25
 
 - **Undo and redo, for everything.** ⌘Z and ⇧⌘Z now step back and forward
