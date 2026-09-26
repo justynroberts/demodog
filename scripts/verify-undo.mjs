@@ -96,6 +96,21 @@ const undo = () => press('KeyZ', { meta: true })
 const redo = () => press('KeyZ', { meta: true, shift: true })
 /** Longer than the editor waits before a run of changes becomes one step. */
 const settle = () => sleep(800)
+/**
+ * Waits for the interface to catch up rather than assuming it has.
+ *
+ * Selecting a caption renders its text box on the next frame, and on a loaded
+ * machine that is not the next millisecond — typing into a box that is not
+ * there yet failed here while passing on a quiet one.
+ */
+const waitFor = async (expression, tries = 40) => {
+  for (let i = 0; i < tries; i++) {
+    const value = await ev(expression)
+    if (value) return value
+    await sleep(150)
+  }
+  return null
+}
 const zooms = () => ev(`document.querySelectorAll('.zoom-block').length`)
 const marks = () => ev(`document.querySelectorAll('.note-block').length`)
 const captions = () => ev(`document.querySelectorAll('.caption-block').length`)
@@ -181,9 +196,19 @@ console.log('\nUndo in the running editor')
   await settle()
   check(added === 1 && removed === 0, 'a caption added by hand is undone', `${added} → ${removed}`)
 
+  await waitFor(`document.querySelectorAll('.caption-block').length`)
   await ev(`document.querySelector('.caption-block')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })); window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))`)
-  await sleep(600)
-  const before = await ev(`(() => { const t = document.querySelector('textarea.caption-text'); if (!t) return null; t.focus(); t.setSelectionRange(t.value.length, t.value.length); return t.value })()`)
+  const ready = await waitFor(`Boolean(document.querySelector('textarea.caption-text'))`)
+  check(Boolean(ready), 'selecting a caption opens its text box')
+  // Focused, and confirmed focused. Selecting the caption re-renders the
+  // panel, and a focus() that lands on the node about to be replaced leaves
+  // the keystrokes going nowhere — which is exactly how this failed once on a
+  // busy machine and passed everywhere else.
+  const focused = await waitFor(
+    `(() => { const t = document.querySelector('textarea.caption-text'); if (!t) return false; if (document.activeElement !== t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } return document.activeElement === t })()`
+  )
+  check(Boolean(focused), 'the caption text box takes focus')
+  const before = await ev(`document.querySelector('textarea.caption-text')?.value`)
   for (const character of 'XY') {
     for (const type of ['keyDown', 'char', 'keyUp']) {
       await call('Input.dispatchKeyEvent', {
@@ -192,9 +217,11 @@ console.log('\nUndo in the running editor')
       }, session)
     }
   }
+  await waitFor(`document.querySelector('textarea.caption-text')?.value?.endsWith('XY')`)
   await settle()
   const typed = await ev(`document.querySelector('textarea.caption-text')?.value`)
   await undo()
+  await waitFor(`document.querySelector('textarea.caption-text')?.value === ${JSON.stringify('')} ? false : true`)
   const afterUndo = await ev(`document.querySelector('textarea.caption-text')?.value`)
   const stillThere = await captions()
   check(before !== null && typed === `${before}XY`, 'typing reaches the caption text field', JSON.stringify(typed))
