@@ -4,7 +4,7 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
-## Unreleased
+## 1.9.0 — 2026-09-26
 
 - **The timeline zooms.** It showed the whole composition at a fixed scale, so
   on a two-minute take a second was a few pixels and editing to a word was
