@@ -122,6 +122,18 @@ export default function Editor({
   const [playing, setPlaying] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [selectedCaption, setSelectedCaption] = useState<string | null>(null)
+  /**
+   * Whether the timeline has the window.
+   *
+   * Remembered: someone editing to the word wants it that way for the whole
+   * session, and someone framing shots never wants it.
+   */
+  const [timelineOpen, setTimelineOpen] = useState(
+    () => localStorage.getItem('demodog-timeline-open') === '1'
+  )
+  useEffect(() => {
+    localStorage.setItem('demodog-timeline-open', timelineOpen ? '1' : '0')
+  }, [timelineOpen])
   /** Armed by the inspector: the next drag on the preview chooses a zoom area. */
   /**
    * How wide the settings rail is, and whether it is there at all.
@@ -1241,7 +1253,7 @@ export default function Editor({
 
   return (
     <div
-      className={railOpen ? 'editor' : 'editor rail-hidden'}
+      className={`editor${railOpen ? '' : ' rail-hidden'}${timelineOpen ? ' timeline-open' : ''}`}
       style={{ ['--rail' as string]: `${railOpen ? RAIL_WIDTH : 0}px` }}
     >
       <div className="stage">
@@ -1388,6 +1400,14 @@ export default function Editor({
           selectedNote={selectedNote}
           onSelectNote={setSelectedNote}
           onAnnotationsChange={(annotations) => setProject((p) => ({ ...p, annotations }))}
+          expanded={timelineOpen}
+          onExpanded={(open) => {
+            setTimelineOpen(open)
+            // The settings rail lies over the picture; with the timeline
+            // taking the window there is little picture left for it to cover.
+            if (open) setRailOpen(false)
+          }}
+          playing={playing}
         />
       </div>
 

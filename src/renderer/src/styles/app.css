@@ -2677,3 +2677,187 @@ dialog.info a {
 .insp-tabs {
   flex-wrap: nowrap;
 }
+
+/* --------------------------------------------------------------------------
+   Timeline: the ruler, the strip underneath, and the expanded state
+   -------------------------------------------------------------------------- */
+
+/* A ruler with real times on it. Without one the timeline showed the whole
+   take at a fixed scale and nothing said where a second was, so editing to a
+   word meant counting pixels. */
+.ruler {
+  position: relative;
+  height: 20px;
+  border-bottom: var(--border);
+  cursor: text;
+}
+
+.rule {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 5px;
+  background: var(--line);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.rule.major {
+  height: 9px;
+  opacity: 0.9;
+}
+
+.rule.major i {
+  position: absolute;
+  bottom: 10px;
+  left: 3px;
+  font-style: normal;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ruler-tools {
+  position: absolute;
+  top: -2px;
+  right: 0;
+  display: flex;
+  gap: 3px;
+  background: linear-gradient(90deg, transparent, var(--surface) 22%);
+  padding-left: 18px;
+}
+
+.tl-btn {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  min-width: 20px;
+  padding: 3px 5px;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: var(--border);
+  cursor: pointer;
+}
+
+.tl-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.tl-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Named, because an unexplained line appearing under a dragged edge reads as a
+   rendering fault rather than as the edge catching on something. */
+.snap-guide {
+  position: absolute;
+  top: 18px;
+  bottom: 0;
+  width: 1px;
+  background: var(--lime);
+  z-index: 6;
+  pointer-events: none;
+}
+
+.snap-guide span {
+  position: absolute;
+  top: -14px;
+  left: 3px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lime-ink);
+  background: var(--lime);
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
+/* The whole take, with the visible window drawn on it. Only there while zoomed
+   in, because fitted it would say nothing. */
+.overview {
+  position: relative;
+  height: 14px;
+  margin-top: 2px;
+  border: var(--border);
+  background: var(--surface-3);
+  cursor: grab;
+  overflow: hidden;
+}
+
+.overview:active {
+  cursor: grabbing;
+}
+
+.ov-block {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  background: var(--violet);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.ov-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--danger);
+  pointer-events: none;
+}
+
+.ov-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  min-width: 6px;
+  pointer-events: none;
+}
+
+/* Expanded: the timeline takes the window, for work that is about timing
+   rather than framing. The preview stays, small, because an edit you cannot
+   see the frame of is guesswork of a different kind. */
+/* Expanded is the lanes growing, with the preview keeping whatever is left.
+   Stretching the panel itself instead leaves empty floor under the lanes when
+   a take has only two of them, which reads as a rendering fault. */
+.editor.timeline-open .stage {
+  padding: 10px;
+}
+
+/* Deep enough to work in, and it still scrolls rather than pushing the picture
+   off the top when a take has every lane. */
+.editor.timeline-open .timeline {
+  max-height: 74vh;
+  overflow-y: auto;
+}
+
+/* A taller lane is not decoration: it is a bigger target for the edge being
+   dragged, which is the whole point of opening it. */
+.track-stack.expanded .track {
+  height: 64px;
+}
+
+.track-stack.expanded .track.zooms {
+  height: 58px;
+}
+
+.track-stack.expanded .ruler {
+  height: 24px;
+}
+
+.track-stack.expanded .overview {
+  height: 18px;
+}
+
+/* Centred in a taller lane rather than pinned to the top of it. Only the
+   fixed-height blocks: the rest are anchored top and bottom and stretch on
+   their own. */
+.track-stack.expanded .caption-block,
+.track-stack.expanded .card-block {
+  top: 50%;
+  transform: translateY(-50%);
+}

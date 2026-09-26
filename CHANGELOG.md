@@ -6,6 +6,22 @@ is where finished work waits.
 
 ## Unreleased
 
+- **The timeline zooms.** It showed the whole composition at a fixed scale, so
+  on a two-minute take a second was a few pixels and editing to a word was
+  guesswork. ⌥-scroll or pinch zooms about the pointer, two fingers scroll
+  along, <kbd>+</kbd>, <kbd>−</kbd> and <kbd>0</kbd> do the same from the
+  keyboard, and a ruler shows real times, with its marks getting finer as you
+  go in. A strip under the lanes shows the whole take with the visible part
+  drawn on it, and drags to move. While playing, the view follows the playhead
+  a page at a time rather than sliding under it.
+- **Edges snap.** Dragging a zoom shot or a mark catches on the playhead, the
+  start and end of the take, the trim, other blocks, caption boundaries and the
+  clicks in the recording — with a label saying what it caught on. Hold ⌥ to
+  place one freely.
+- **The timeline can take the window.** <kbd>T</kbd>, the chevron, or a
+  double-click on the ruler gives it taller lanes and collapses the settings
+  rail; it is remembered between sessions.
+
 - **Undo left the saved edits behind.** Undoing back to an untouched take wrote
   nothing, so the file beside the recording still held what had just been
   undone — reopen it and the undone caption or mark was back. The file is now

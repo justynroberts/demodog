@@ -131,6 +131,15 @@ where one is close, never leave a word on its own, and fall in the real pause
 between two words. Change the length with **Longest line**; **Shorten … lines
 now** applies it to a transcript you already have.
 
+**Work up close.** The timeline shows the whole take until you zoom in:
+⌥-scroll or pinch to zoom where the pointer is, two fingers to scroll along it,
+<kbd>+</kbd> and <kbd>−</kbd> from the keyboard and <kbd>0</kbd> for the whole
+take again. A strip under the lanes shows where you are; drag it to move. Press
+<kbd>T</kbd>, or double-click the ruler, to give the timeline the window and get
+taller lanes. Edges snap to the playhead, to the trim, to other blocks and to
+the clicks in the recording — hold <kbd>⌥</kbd> while dragging to place one
+freely.
+
 **Undo anything.** <kbd>⌘</kbd><kbd>Z</kbd> steps back through every edit —
 shots, marks, captions, the trim, any setting — and <kbd>⇧</kbd><kbd>⌘</kbd><kbd>Z</kbd>
 forward again. A slider drag undoes in one press, not one frame at a time.

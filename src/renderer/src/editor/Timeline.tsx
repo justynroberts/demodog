@@ -5,6 +5,21 @@ import type { Caption } from '../engine/captions'
 import type { TitleCard } from '../engine/titles'
 import type { MusicTrack } from '../engine/types'
 import { ANNOTATION_LABELS, isObscuring, type Annotation } from '../engine/annotations'
+import {
+  centreOn,
+  clamp,
+  fit,
+  follow,
+  isFitted,
+  panBy,
+  snap,
+  span as spanOf,
+  ticks,
+  timeLabel,
+  zoomAt,
+  type SnapTarget,
+  type View
+} from './timelineView'
 
 interface Props {
   recording: Recording
@@ -26,6 +41,10 @@ interface Props {
   selectedNote?: string | null
   onSelectNote?: (id: string | null) => void
   onAnnotationsChange?: (annotations: Annotation[]) => void
+  /** Whether the timeline has the window to itself, and how to change that. */
+  expanded?: boolean
+  onExpanded?: (expanded: boolean) => void
+  playing?: boolean
 }
 
 type DragMode = 'move' | 'start' | 'end'
@@ -42,6 +61,7 @@ export default function Timeline(props: Props): ReactNode {
   const { recording, segments, selected, time, trim, onSeek, onSelect, onChange } = props
   const { captions, selectedCaption, onSelectCaption, intro, outro, music } = props
   const { annotations = [], selectedNote = null, onSelectNote, onAnnotationsChange } = props
+  const { expanded = false, onExpanded, playing = false } = props
   const ref = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(1000)
   const duration = Math.max(recording.duration, 0.001)
@@ -68,16 +88,70 @@ export default function Timeline(props: Props): ReactNode {
     return () => observer.disconnect()
   }, [])
 
-  const toX = useCallback((t: number) => ((t + leadIn) / span) * width, [leadIn, span, width])
+  // ---- what part of it is on screen --------------------------------------
+  const bounds = useMemo(() => ({ start: -leadIn, end: duration + leadOut }), [leadIn, duration, leadOut])
+  const [view, setView] = useState<View>(() => fit(bounds))
+  // A different take, or a card added or removed, changes what there is to
+  // show. The window is kept where it is if it still fits inside it.
+  useEffect(() => setView((current) => clamp(current, bounds)), [bounds])
+  const visible = spanOf(view)
+  const perPixel = visible / Math.max(width, 1)
+
+  const toX = useCallback(
+    (t: number) => ((t - view.start) / (view.end - view.start)) * width,
+    [view, width]
+  )
   const toTime = useCallback(
     (clientX: number) => {
       const rect = ref.current?.getBoundingClientRect()
       if (!rect) return 0
-      const t = ((clientX - rect.left) / rect.width) * span - leadIn
+      const t = view.start + ((clientX - rect.left) / rect.width) * (view.end - view.start)
       return Math.min(Math.max(t, -leadIn), duration + leadOut)
     },
-    [span, leadIn, leadOut, duration]
+    [view, leadIn, duration, leadOut]
   )
+
+  /** Zoom and pan: the trackpad, the keyboard, and the strip underneath. */
+  const zoomBy = useCallback(
+    (factor: number, atFraction = 0.5) => setView((v) => zoomAt(v, bounds, factor, atFraction)),
+    [bounds]
+  )
+  const wheel = useCallback(
+    (event: React.WheelEvent) => {
+      const rect = ref.current?.getBoundingClientRect()
+      if (!rect) return
+      // Pinch arrives as a wheel event with ctrlKey set; ⌥ is the mouse
+      // equivalent. Everything else scrolls the view sideways.
+      if (event.ctrlKey || event.altKey || event.metaKey) {
+        const at = (event.clientX - rect.left) / rect.width
+        setView((v) => zoomAt(v, bounds, Math.exp(-event.deltaY / 180), at))
+        return
+      }
+      const sideways = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+      if (!sideways) return
+      setView((v) => panBy(v, bounds, (sideways / rect.width) * spanOf(v)))
+    },
+    [bounds]
+  )
+  // Not through React's onWheel: it attaches passively, so the page scrolls
+  // and zooms the whole window as well as the timeline.
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+    const onWheel = (event: WheelEvent): void => {
+      event.preventDefault()
+      wheel(event as unknown as React.WheelEvent)
+    }
+    element.addEventListener('wheel', onWheel, { passive: false })
+    return () => element.removeEventListener('wheel', onWheel)
+  }, [wheel])
+
+  // The playhead stays on screen while it plays, without the view sliding
+  // continuously under it.
+  useEffect(() => {
+    if (!playing) return
+    setView((v) => follow(v, bounds, time))
+  }, [playing, time, bounds])
   /** Clamped into the recording itself, for anything that edits the take. */
   const inTake = useCallback(
     (t: number) => Math.min(Math.max(t, 0), duration),
@@ -98,6 +172,53 @@ export default function Timeline(props: Props): ReactNode {
     window.addEventListener('pointerup', up)
   }
 
+  // ---- snapping ------------------------------------------------------------
+  //
+  // What an edge would rather land on: the playhead, the ends of the take and
+  // its trim, the cards, and every other block's edges. Clicks are in there
+  // too — ending a zoom exactly on the click that caused it is the commonest
+  // thing anyone wants and the hardest to hit by eye.
+  const [guide, setGuide] = useState<{ t: number; what: string } | null>(null)
+  const snapTargets = useCallback(
+    (exclude: string): SnapTarget[] => {
+      const out: SnapTarget[] = [
+        { t: time, what: 'playhead' },
+        { t: 0, what: 'start' },
+        { t: duration, what: 'end' }
+      ]
+      if (trim.start > 0) out.push({ t: trim.start, what: 'trim in' })
+      if (trim.end < duration) out.push({ t: trim.end, what: 'trim out' })
+      for (const segment of segments) {
+        if (segment.id === exclude) continue
+        out.push({ t: segment.start, what: 'zoom' }, { t: segment.end, what: 'zoom' })
+      }
+      for (const note of annotations) {
+        if (note.id === exclude) continue
+        out.push({ t: note.start, what: 'mark' }, { t: note.end, what: 'mark' })
+      }
+      for (const caption of captions) {
+        out.push({ t: caption.start, what: 'line' }, { t: caption.end, what: 'line' })
+      }
+      // Only the clicks worth catching: every sample would snap to everything.
+      for (const click of recording.input.clicks) out.push({ t: click.t, what: 'click' })
+      return out
+    },
+    [time, duration, trim, segments, annotations, captions, recording]
+  )
+  /** ⌘ or ⌥ while dragging turns snapping off, as everywhere else that snaps. */
+  const snapped = useCallback(
+    (t: number, exclude: string, event: PointerEvent): number => {
+      if (event.metaKey || event.altKey) {
+        setGuide(null)
+        return t
+      }
+      const result = snap(t, snapTargets(exclude), perPixel)
+      setGuide(result.target ? { t: result.t, what: result.target.what } : null)
+      return result.t
+    },
+    [snapTargets, perPixel]
+  )
+
   // ---- segment dragging --------------------------------------------------
 
   const beginDrag = (event: React.PointerEvent, segment: ZoomSegment, mode: DragMode): void => {
@@ -113,26 +234,33 @@ export default function Timeline(props: Props): ReactNode {
       const next = segments.map((s) => {
         if (s.id !== segment.id) return s
         if (mode === 'move') {
-          const span = original.end - original.start
-          const start = Math.min(Math.max(original.start + delta, 0), duration - span)
-          return { ...s, start, end: start + span, auto: false }
+          const length = original.end - original.start
+          // Both ends are offered to the snap, and the closer one wins, so a
+          // block can be dropped against the thing on either side of it.
+          const wanted = original.start + delta
+          const atStart = snapped(wanted, segment.id, e)
+          const atEnd = snapped(wanted + length, segment.id, e) - length
+          const start = Math.abs(atStart - wanted) <= Math.abs(atEnd - wanted) ? atStart : atEnd
+          const held = Math.min(Math.max(start, 0), duration - length)
+          return { ...s, start: held, end: held + length, auto: false }
         }
         if (mode === 'start') {
           return {
             ...s,
-            start: Math.min(Math.max(original.start + delta, 0), s.end - 0.3),
+            start: Math.min(Math.max(snapped(original.start + delta, segment.id, e), 0), s.end - 0.3),
             auto: false
           }
         }
         return {
           ...s,
-          end: Math.max(Math.min(original.end + delta, duration), s.start + 0.3),
+          end: Math.max(Math.min(snapped(original.end + delta, segment.id, e), duration), s.start + 0.3),
           auto: false
         }
       })
       onChange(next)
     }
     const up = (): void => {
+      setGuide(null)
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
@@ -182,17 +310,22 @@ export default function Timeline(props: Props): ReactNode {
         if (n.id !== note.id) return n
         if (mode === 'move') {
           const length = original.end - original.start
-          const start = Math.min(Math.max(original.start + delta, 0), duration - length)
-          return { ...n, start, end: start + length }
+          const wanted = original.start + delta
+          const atStart = snapped(wanted, note.id, e)
+          const atEnd = snapped(wanted + length, note.id, e) - length
+          const start = Math.abs(atStart - wanted) <= Math.abs(atEnd - wanted) ? atStart : atEnd
+          const held = Math.min(Math.max(start, 0), duration - length)
+          return { ...n, start: held, end: held + length }
         }
         if (mode === 'start') {
-          return { ...n, start: Math.min(Math.max(original.start + delta, 0), n.end - 0.2) }
+          return { ...n, start: Math.min(Math.max(snapped(original.start + delta, note.id, e), 0), n.end - 0.2) }
         }
-        return { ...n, end: Math.max(Math.min(original.end + delta, duration), n.start + 0.2) }
+        return { ...n, end: Math.max(Math.min(snapped(original.end + delta, note.id, e), duration), n.start + 0.2) }
       })
       onAnnotationsChange?.(next)
     }
     const up = (): void => {
+      setGuide(null)
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
@@ -246,21 +379,133 @@ export default function Timeline(props: Props): ReactNode {
     return [...scrolls, ...clicks]
   }, [recording, toX])
 
-  const seconds = useMemo(() => {
-    const step = duration > 120 ? 30 : duration > 40 ? 10 : duration > 12 ? 5 : 1
-    const out: ReactNode[] = []
-    for (let t = step; t < duration; t += step) {
-      out.push(<span key={t} className="tick" style={{ left: toX(t) }} />)
+  /** Lines down the lanes at the ruler's marks, so an edge can be read across. */
+  const marks = useMemo(() => ticks(view, width), [view, width])
+  const gridlines = useMemo(
+    () =>
+      marks
+        .filter((mark) => mark.major && mark.t > bounds.start && mark.t < bounds.end)
+        .map((mark) => <span key={mark.t} className="tick" style={{ left: toX(mark.t) }} />),
+    [marks, toX, bounds]
+  )
+
+  // ---- the keyboard --------------------------------------------------------
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable ||
+        event.metaKey ||
+        event.ctrlKey
+      ) {
+        return
+      }
+      // Zoom about the playhead rather than the middle of the view: it is
+      // where the work is, and it is where the eye already is.
+      const at = (time - view.start) / Math.max(spanOf(view), 1e-6)
+      if (event.key === '=' || event.key === '+') {
+        event.preventDefault()
+        zoomBy(1.6, Math.min(Math.max(at, 0), 1))
+      } else if (event.key === '-' || event.key === '_') {
+        event.preventDefault()
+        zoomBy(1 / 1.6, Math.min(Math.max(at, 0), 1))
+      } else if (event.key === '0') {
+        event.preventDefault()
+        setView(fit(bounds))
+      } else if (event.key === 't' || event.key === 'T') {
+        event.preventDefault()
+        onExpanded?.(!expanded)
+      }
     }
-    return out
-  }, [duration, toX])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [zoomBy, bounds, view, time, expanded, onExpanded])
+
+  // ---- the strip underneath -------------------------------------------------
+  //
+  // The whole take at a glance with the visible window drawn on it: somewhere
+  // to see where you are when zoomed in, and to drag or redraw the window
+  // without learning a modifier.
+  const overview = (event: React.PointerEvent): void => {
+    if (event.button !== 0) return
+    event.stopPropagation()
+    const rail = event.currentTarget as HTMLElement
+    const rect = rail.getBoundingClientRect()
+    const whole = bounds.end - bounds.start
+    const timeAt = (clientX: number): number =>
+      bounds.start + ((clientX - rect.left) / rect.width) * whole
+    const grabbed = timeAt(event.clientX)
+    const inside = grabbed >= view.start && grabbed <= view.end
+    const offset = grabbed - view.start
+    const move = (e: PointerEvent): void => {
+      const t = timeAt(e.clientX)
+      setView((v) =>
+        inside
+          ? clamp({ start: t - offset, end: t - offset + spanOf(v) }, bounds)
+          : centreOn(v, bounds, t)
+      )
+    }
+    if (!inside) setView((v) => centreOn(v, bounds, grabbed))
+    const up = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
 
   return (
     // Scrubbing belongs to the whole stack, not to each lane. The lanes have
     // gaps between them and the stack has margins, and a click landing in one of
     // those did nothing at all — which reads as the timeline ignoring you rather
     // than as having missed a five pixel target.
-    <div className="track-stack" ref={ref} onPointerDown={scrub}>
+    <div
+      className={`track-stack${expanded ? ' expanded' : ''}`}
+      ref={ref}
+      onPointerDown={scrub}
+    >
+      <div
+        className="ruler"
+        onPointerDown={scrub}
+        onDoubleClick={() => onExpanded?.(!expanded)}
+        title="Scrub · double-click to give the timeline the window · ⌥-scroll to zoom"
+      >
+        {marks.map((mark) => (
+          <span
+            key={mark.t}
+            className={`rule${mark.major ? ' major' : ''}`}
+            style={{ left: toX(mark.t) }}
+          >
+            {mark.major && <i className="mono">{mark.label}</i>}
+          </span>
+        ))}
+        <div className="ruler-tools" onPointerDown={(e) => e.stopPropagation()}>
+          <button className="tl-btn" title="Zoom out (−)" onClick={() => zoomBy(1 / 1.6)}>
+            −
+          </button>
+          <button className="tl-btn" title="Zoom in (+)" onClick={() => zoomBy(1.6)}>
+            +
+          </button>
+          <button
+            className="tl-btn"
+            title="Whole take (0)"
+            disabled={isFitted(view, bounds)}
+            onClick={() => setView(fit(bounds))}
+          >
+            Fit
+          </button>
+          <button
+            className="tl-btn"
+            title={expanded ? 'Back to the preview (T)' : 'Give the timeline the window (T)'}
+            onClick={() => onExpanded?.(!expanded)}
+          >
+            {expanded ? '▾' : '▴'}
+          </button>
+        </div>
+      </div>
       <div
         className="track zooms"
         onPointerDown={scrub}
@@ -268,7 +513,7 @@ export default function Timeline(props: Props): ReactNode {
         title="Double-click to add a zoom"
       >
         <span className="track-label">Zoom</span>
-        {seconds}
+        {gridlines}
         {segments.map((segment) => (
           <div
             key={segment.id}
@@ -475,10 +720,43 @@ export default function Timeline(props: Props): ReactNode {
         )}
       </div>
 
+      {/* What a dragged edge has caught on, named so it is not a mystery line. */}
+      {guide && (
+        <div className="snap-guide" style={{ left: toX(guide.t) }}>
+          <span className="mono">{guide.what}</span>
+        </div>
+      )}
+
       {/* Nudged off the very edge so it is still visible at t=0. */}
       <div className="playhead" style={{ left: Math.max(1, toX(time)) }}>
-        <span className="playhead-time mono">{time.toFixed(2)}s</span>
+        <span className="playhead-time mono">{timeLabel(time, 0.1)}</span>
       </div>
+
+      {!isFitted(view, bounds) && (
+        <div className="overview" onPointerDown={overview} title="Drag to move the view">
+          {segments.map((segment) => (
+            <span
+              key={segment.id}
+              className="ov-block"
+              style={{
+                left: `${((segment.start - bounds.start) / (bounds.end - bounds.start)) * 100}%`,
+                width: `${Math.max(0.4, ((segment.end - segment.start) / (bounds.end - bounds.start)) * 100)}%`
+              }}
+            />
+          ))}
+          <span
+            className="ov-playhead"
+            style={{ left: `${((time - bounds.start) / (bounds.end - bounds.start)) * 100}%` }}
+          />
+          <span
+            className="ov-window"
+            style={{
+              left: `${((view.start - bounds.start) / (bounds.end - bounds.start)) * 100}%`,
+              width: `${(spanOf(view) / (bounds.end - bounds.start)) * 100}%`
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }
