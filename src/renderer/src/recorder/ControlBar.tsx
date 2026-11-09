@@ -1,6 +1,7 @@
 // MIT License - Copyright (c) fintonlabs.com
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api } from '../api'
+import { pickMimeType, startCameraRecording } from './cameraRecorder'
 
 /**
  * The floating transport shown while recording, in its own always-on-top
@@ -19,6 +20,8 @@ export default function ControlBar(): ReactNode {
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
+  /** Stops the camera *and* waits for its last chunks to reach the file. */
+  const stopCameraRef = useRef<(() => Promise<void>) | null>(null)
   const startRef = useRef(0)
   const [hasCamera, setHasCamera] = useState(false)
   /**
@@ -114,39 +117,20 @@ export default function ControlBar(): ReactNode {
         return
       }
 
-      // MP4 first: a fragmented MP4 can be demuxed and decoded sequentially at
-      // export time, where a MediaRecorder WebM can only be seeked — and
-      // seeking the camera once per output frame was the single largest cost
-      // in the exporter. WebM stays as the fallback.
-      const mimeType = [
-        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-        'video/mp4',
-        'video/webm;codecs=vp9,opus',
-        'video/webm;codecs=vp8,opus',
-        'video/webm'
-      ].find((type) => MediaRecorder.isTypeSupported(type))
+      const mimeType = pickMimeType()
       if (!mimeType) return
 
-      // A provisional sync point: the file has to exist before any chunk can be
-      // written, and opening it costs an IPC round trip and a file creation.
-      await api.openCameraFile({ startWallClock: Date.now() / 1000, mimeType })
-
-      const recorder = new MediaRecorder(stream, {
+      // Where the camera lands against the screen for the whole take — see
+      // cameraRecorder for why the stamp is taken there rather than from the
+      // recorder's `start` event, and what it cost when it was not.
+      const { recorder, startedAt, stop } = await startCameraRecording(stream, {
         mimeType,
-        videoBitsPerSecond: 4_000_000,
-        audioBitsPerSecond: 128_000
+        openFile: (info) => api.openCameraFile(info),
+        onChunk: (chunk) => api.writeCameraChunk(chunk)
       })
-      // The real one. Everything between the provisional stamp and here — the
-      // round trip, the file, constructing the recorder — made the camera look
-      // earlier than it was, and that error is a fixed lip-sync offset across
-      // the whole take. `start` fires once capture is genuinely under way.
-      recorder.onstart = () => void api.cameraStarted(Date.now() / 1000)
-      recorder.ondataavailable = async (event) => {
-        if (event.data.size > 0) api.writeCameraChunk(await event.data.arrayBuffer())
-      }
-      // Chunked writes keep a long take off the heap.
-      recorder.start(1000)
+      void api.cameraStarted(startedAt)
       recorderRef.current = recorder
+      stopCameraRef.current = stop
     })
   }, [])
 
@@ -170,17 +154,14 @@ export default function ControlBar(): ReactNode {
     if (stopping) return
     setStopping(true)
 
-    const recorder = recorderRef.current
-    if (recorder && recorder.state !== 'inactive') {
-      // Flush the tail chunk before the main process closes the file.
-      await new Promise<void>((resolve) => {
-        recorder.addEventListener('stop', () => resolve(), { once: true })
-        recorder.stop()
-      })
-    }
+    // Every chunk has to be written before the main process closes the file,
+    // and the last of them is still in flight when the recorder says it has
+    // stopped — see cameraRecorder.
+    await stopCameraRef.current?.()
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
     recorderRef.current = null
+    stopCameraRef.current = null
 
     await api.stopRecording().catch((error) => console.error(error))
     setRunning(false)

@@ -77,7 +77,11 @@ export async function exportMP4(options: ExportOptions): Promise<ExportResult> {
     ? await openFrameSource(
         options.cameraURL,
         options.cameraURL.toLowerCase().includes('.mp4') ? 'decode' : 'seek',
-        1 / 31
+        1 / 31,
+        // A camera's timestamps are real capture times, not a beat it was
+        // asked to keep: left exactly as recorded, so its picture cannot move
+        // against the sound in the same file.
+        false
       ).catch(() => null)
     : null
 

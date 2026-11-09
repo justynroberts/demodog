@@ -52,6 +52,7 @@ npm run verify:translate     # sentences sent to the translator, and the answer 
 npm run verify:history       # undo and redo stepping through every kind of edit
 npm run verify:undo          # and the same in the running editor, driven over a DevTools pipe
 npm run verify:editing       # timeline zoom, panning, snapping and the expanded lanes, in the running app
+npm run verify:camera-sync   # what the camera file's zero really is, measured through the recording code
 npm run zoom-report -- <take dir>   # what the auto-zoom does to real material
 ```
 

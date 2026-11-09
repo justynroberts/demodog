@@ -81,12 +81,12 @@ const ev = async (expression) => {
   if (r?.exceptionDetails) console.log('    ', r.exceptionDetails.exception?.description?.split('\n')[0])
   return r?.result?.value
 }
-const press = async (code, { meta = false, shift = false } = {}) => {
+const press = async (code, { meta = false, shift = false, key } = {}) => {
   const modifiers = (meta ? 4 : 0) | (shift ? 8 : 0)
   for (const type of ['keyDown', 'keyUp']) {
     await call('Input.dispatchKeyEvent', {
       type, modifiers, code,
-      key: code === 'KeyZ' ? 'z' : 'Delete',
+      key: key ?? (code === 'KeyZ' ? 'z' : 'Delete'),
       windowsVirtualKeyCode: code === 'KeyZ' ? 90 : 46
     }, session)
   }
@@ -119,11 +119,25 @@ const openTab = async (name) => {
   await ev(`document.querySelectorAll('.insp-tabs button')[${tabs.split(',').indexOf(name)}].click()`)
   await sleep(400)
 }
-/** The menu route a real ⌘Z takes; needs Accessibility, so it may be skipped. */
+/**
+ * The menu route a real ⌘Z takes; needs Accessibility, so it may be skipped.
+ *
+ * Addressed by process id, never by name. Every Electron app in development is
+ * called "Electron", so targeting the name reaches whichever one macOS answers
+ * with — on this machine that was a different project entirely, and the clicks
+ * went into its Edit menu while this test reported that undo was broken.
+ *
+ * The window is brought to the front first: otherwise the first click goes to
+ * activating the application rather than to the menu item.
+ */
+const target = `(first application process whose unix id is ${child.pid})`
 const viaMenu = (item) => {
   try {
     execFileSync('osascript', ['-e',
-      `tell application "System Events" to tell process "Electron" to click menu item "${item}" of menu 1 of menu bar item "Edit" of menu bar 1`],
+      `tell application "System Events" to set frontmost of ${target} to true`],
+      { stdio: 'ignore' })
+    execFileSync('osascript', ['-e',
+      `tell application "System Events" to tell ${target} to click menu item "${item}" of menu 1 of menu bar item "Edit" of menu bar 1`],
       { stdio: 'ignore' })
     return true
   } catch {
@@ -136,6 +150,22 @@ for (let i = 0; i < 60; i++) {
   await sleep(500)
 }
 await sleep(1200)
+
+// The editor remembers whether the settings rail is open and whether the
+// timeline has the window. A collapsed rail is `display: none`, so the caption
+// text box cannot be focused or typed into, and the failure reads as "undo is
+// broken" rather than "the panel is shut".
+if (await ev(`document.querySelector('.editor')?.className.includes('timeline-open')`)) {
+  await press('KeyT', { key: 't' })
+}
+if (await ev(`document.querySelector('.editor')?.className.includes('rail-hidden')`)) {
+  await press('KeyM', { key: 'm' })
+}
+await sleep(500)
+check(
+  !(await ev(`document.querySelector('.editor')?.className.includes('rail-hidden')`)),
+  'the settings rail is open, so its fields can be used'
+)
 
 console.log('\nUndo in the running editor')
 

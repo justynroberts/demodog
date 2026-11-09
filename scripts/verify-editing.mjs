@@ -33,6 +33,7 @@ if (!(await app.ready())) {
   process.exit(1)
 }
 await sleep(1200)
+await app.settle()
 
 console.log('\nTimeline editing')
 

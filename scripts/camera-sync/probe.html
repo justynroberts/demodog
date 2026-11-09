@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+  <body style="margin: 0; background: #111">
+    <!-- Frames carrying known times, recorded through the app's own camera
+         recording code, so the stamp it reports can be checked against where
+         those times actually land in the file. -->
+    <canvas id="c" width="320" height="240"></canvas>
+    <script type="module">
+      const { ipcRenderer } = require('electron')
+      const { startCameraRecording, pickMimeType } = require('./cameraRecorder.cjs')
+
+      const canvas = document.getElementById('c')
+      const ctx = canvas.getContext('2d')
+      const FLASHES = [1, 2, 3, 4]
+      const LIT = 0.1
+      let startedAt = 0
+      let stamp = 0
+      const flashed = []
+
+      function draw() {
+        const since = (performance.now() - startedAt) / 1000
+        let white = false
+        for (const at of FLASHES) {
+          if (since >= at && since < at + LIT) {
+            white = true
+            if (!flashed.some((f) => f.at === at)) flashed.push({ at, when: performance.now() })
+          }
+        }
+        ctx.fillStyle = white ? '#fff' : '#000'
+        ctx.fillRect(0, 0, 320, 240)
+        if (since < 5.5) requestAnimationFrame(draw)
+      }
+
+      ;(async () => {
+        try {
+          ctx.fillStyle = '#000'
+          ctx.fillRect(0, 0, 320, 240)
+          await new Promise((r) => requestAnimationFrame(r))
+          const stream = canvas.captureStream(30)
+          const mimeType = pickMimeType()
+          if (!mimeType) throw new Error('no recordable container')
+
+          // The condition this test exists for: in a real take the thread is
+          // busy starting a screen capture from the instant capture begins
+          // until well after a `start` event could be dispatched. Blocking
+          // here, from inside `start()` itself, is the only place that gap can
+          // be reproduced exactly — and it is what separates a stamp taken
+          // before `start()` from one taken off the event, which arrives
+          // however late the thread happens to be.
+          const realStart = MediaRecorder.prototype.start
+          MediaRecorder.prototype.start = function (...args) {
+            const result = realStart.apply(this, args)
+            const until = performance.now() + 600
+            while (performance.now() < until) Math.sqrt(Math.random())
+            return result
+          }
+
+          const chunks = []
+          // performance.timeOrigin is the same base the module stamps against.
+          const before = (performance.timeOrigin + performance.now()) / 1000
+          startedAt = performance.now()
+          const { startedAt: reported, stop } = await startCameraRecording(stream, {
+            mimeType,
+            openFile: async () => {
+              // What opening the real file costs: an IPC round trip. It happens
+              // before the stamp, which is the point.
+              await new Promise((r) => setTimeout(r, 30))
+            },
+            onChunk: (chunk) => chunks.push(new Uint8Array(chunk))
+          })
+          stamp = reported
+          requestAnimationFrame(draw)
+          await new Promise((r) => setTimeout(r, 5600))
+          // The app's own stop, which is what guarantees the tail is written.
+          await stop()
+          const blob = new Blob(chunks, { type: mimeType })
+          ipcRenderer.send('probe:done', {
+            mimeType,
+            // Where the stamp sits relative to the call that began capture.
+            stampAfterCall: (stamp - before) * 1000,
+            flashes: flashed.map((f) => ({ at: f.at, since: (f.when - startedAt) / 1000 })),
+            data: new Uint8Array(await blob.arrayBuffer())
+          })
+        } catch (error) {
+          ipcRenderer.send('probe:failed', String(error))
+        }
+      })()
+    </script>
+  </body>
+</html>

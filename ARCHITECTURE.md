@@ -103,6 +103,18 @@ those settings differ — so an automatic shot deleted by hand stays deleted.
 a headless export (`DEMODOG_BENCH`) ignores it, so a scripted render is exactly
 what it was handed.
 
+**The camera's zero.** The camera is recorded separately, by `MediaRecorder` in
+the control bar's renderer, and the only thing tying it to the screen track is
+one wall-clock stamp in `camera.json`. Every millisecond of error in it slides
+the narration and the bubble against what is on screen for the whole take. It is
+stamped immediately before `recorder.start()` and nothing may be placed between
+the two — not an await, not an IPC call. It was previously taken from the
+recorder's `start` event, which fires as a task and so arrives however late the
+main thread happens to be: 614ms late with the thread blocked for 600ms, which
+is what starting a screen capture does. `npm run verify:camera-sync` measures it
+by recording known times through `startCameraRecording` and finding them in the
+resulting file; it fails at anything over a frame.
+
 **Timebase.** Every event carries `h`, a reading of the monotonic host clock
 (`CMClockGetHostTimeClock`). `meta.firstFrameHost` is the same clock at the
 first video frame. The renderer converts with `t = h - firstFrameHost`. Never

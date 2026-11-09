@@ -98,6 +98,28 @@ export async function openEditor(takeDir, { width = 1500, height = 950 } = {}) {
       await sleep(250)
     },
     /**
+     * Puts the window into the state a test expects to find it in.
+     *
+     * The editor remembers whether the settings rail is open and whether the
+     * timeline has the window, so a run inherits however the last one — or the
+     * person using this Mac — left it. A collapsed rail is `display: none`,
+     * which makes everything inside it unfocusable and untypable, and the
+     * failure reads as "undo is broken" rather than "the panel is shut".
+     */
+    async settle() {
+      if (await app.eval(`document.querySelector('.editor')?.className.includes('timeline-open')`)) {
+        await app.key('KeyT', { key: 't' })
+        await sleep(400)
+      }
+      if (await app.eval(`document.querySelector('.editor')?.className.includes('rail-hidden')`)) {
+        await app.key('KeyM', { key: 'm' })
+        await sleep(400)
+      }
+      return app.eval(
+        `!document.querySelector('.editor')?.className.includes('rail-hidden')`
+      )
+    },
+    /**
      * Where a moment sits on screen, read off the ruler itself.
      *
      * Derived from the rendered marks rather than from the component's own

@@ -100,7 +100,8 @@ class DecodingFrameSource implements FrameSource {
     samples: Sample[],
     config: VideoDecoderConfig,
     width: number,
-    height: number
+    height: number,
+    regularise: boolean
   ) {
     this.samples = samples
     this.width = width
@@ -113,10 +114,20 @@ class DecodingFrameSource implements FrameSource {
     // order frames actually arrive in.
     const presentation = samples.map((s) => s.cts / s.timescale).sort((a, b) => a - b)
     this.baseTime = presentation[0] ?? 0
+    const relative = presentation.map((cts) => cts - this.baseTime)
     // On the beat they were captured to, rather than wherever the display
     // refresh let them land — see `regulariseTimes`. This only decides *which*
     // frame is shown when; frames are still handed out strictly in order.
-    this.times = regulariseTimes(presentation.map((cts) => cts - this.baseTime))
+    //
+    // Only for a screen capture. ScreenCaptureKit is *asked* for a frame every
+    // 1/fps and can only deliver on a refresh, so its timestamps are a steady
+    // beat with a refresh of noise on top, and putting them back on the beat is
+    // a repair. A camera has no such beat: a webcam genuinely runs at whatever
+    // rate the light allows — 29.06fps with freezes of up to 0.7s on the takes
+    // this was measured on — and its timestamps are when frames were really
+    // captured. Snapping those to a grid invents motion that was not recorded
+    // and moves the picture against the sound in its own file.
+    this.times = regularise ? regulariseTimes(relative) : relative
 
     this.decoder = new VideoDecoder({
       output: (frame) => {
@@ -149,7 +160,7 @@ class DecodingFrameSource implements FrameSource {
     }, 3000)
   }
 
-  static async create(url: string): Promise<DecodingFrameSource> {
+  static async create(url: string, regularise = true): Promise<DecodingFrameSource> {
     const response = await fetch(url)
     const buffer = await response.arrayBuffer()
     if (buffer.byteLength > MAX_IN_MEMORY_BYTES) {
@@ -224,7 +235,7 @@ class DecodingFrameSource implements FrameSource {
     const support = await VideoDecoder.isConfigSupported(config)
     if (!support.supported) throw new Error(`unsupported codec ${track.codec}`)
 
-    return new DecodingFrameSource(samples, config, track.video.width, track.video.height)
+    return new DecodingFrameSource(samples, config, track.video.width, track.video.height, regularise)
   }
 
   /**
@@ -477,11 +488,13 @@ class SeekingFrameSource implements FrameSource {
 export async function openFrameSource(
   url: string,
   prefer: 'decode' | 'seek' = 'decode',
-  frameTolerance = 0
+  frameTolerance = 0,
+  /** Only a screen capture is on a beat worth restoring — see the constructor. */
+  regularise = true
 ): Promise<FrameSource> {
   if (prefer === 'decode' && typeof VideoDecoder !== 'undefined') {
     try {
-      return await DecodingFrameSource.create(url)
+      return await DecodingFrameSource.create(url, regularise)
     } catch (error) {
       console.warn('[export] sequential decode unavailable, seeking instead:', error)
     }

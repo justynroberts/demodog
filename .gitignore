@@ -22,3 +22,4 @@ tsconfig.*.tsbuildinfo
 # Stray extraction of the packaged main bundle; the real one is out/main.
 # Anchored: a bare pattern would match index.js at any depth.
 /index.js
+scripts/camera-sync/cameraRecorder.cjs

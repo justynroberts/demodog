@@ -69,6 +69,14 @@ enum Translator {
 
             Task { @MainActor in
                 let status = await LanguageAvailability().status(from: from, to: to)
+                // macOS 26 hands out a session directly. Older systems vend one
+                // only through a SwiftUI view, which is why the rest of this
+                // file exists at all; where the direct route is available it is
+                // simpler, faster, and needs no window.
+                if #available(macOS 26.0, *), status == .installed {
+                    await translate(with: TranslationSession(installedSource: from, target: to))
+                    return
+                }
                 switch status {
                 case .unsupported:
                     emit([
@@ -121,11 +129,21 @@ enum Translator {
 
         /// The only way macOS 15 hands out a translation session is through a
         /// SwiftUI view, so there is a SwiftUI view. It draws nothing.
+        /**
+         * A view whose only job is to be given a translation session.
+         *
+         * Deliberately free of `@State`. In Swift 6.4 SwiftUI's property
+         * wrappers are macros, and a machine whose `xcode-select` points at the
+         * Command Line Tools has no macro plugin to expand them — the helper
+         * then fails to build with "external macro implementation type
+         * 'SwiftUIMacros.StateMacro' could not be found", which stops any
+         * release on a machine that has no Xcode selected. Nothing here needs
+         * to change after the first render, so a constant does the job.
+         */
         struct Host: View {
             let from: Locale.Language
             let to: Locale.Language
             let asking: Bool
-            @State private var config: TranslationSession.Configuration?
 
             var body: some View {
                 Group {
@@ -146,10 +164,10 @@ enum Translator {
                         Color.clear
                     }
                 }
-                .translationTask(config) { session in
+                .translationTask(TranslationSession.Configuration(source: from, target: to)) {
+                    session in
                     await translate(with: session)
                 }
-                .onAppear { config = .init(source: from, target: to) }
             }
         }
 

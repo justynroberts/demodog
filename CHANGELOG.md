@@ -4,6 +4,47 @@ Work lands on `main` continuously. Nothing reaches anyone until a release is
 cut — the updater reads the latest GitHub release, not the branch — so this file
 is where finished work waits.
 
+## Unreleased
+
+- **The camera was placed late against the screen, by between a twentieth of a
+  second and three seconds.** The camera is a separate recording tied to the
+  screen by one wall-clock stamp, and that stamp was taken from
+  `MediaRecorder`'s `start` event. The event is a task, and capture begins
+  inside `start()` — the two are only the same thing when nothing else wants the
+  main thread, and recording begins at the exact moment the app is starting a
+  screen capture. Measured: with the thread free the event is ~30ms late; with
+  it blocked for 600ms, as a real take blocks it, the event is 614ms late while
+  the recording's own first frame lands within 1ms of `start()`. Across 66 real
+  takes on this machine the camera was out by a median of 89ms, with several
+  over 300ms and three over 1.7 seconds. The stamp is now taken immediately
+  before capture starts, with nothing between the two, and is checked by
+  `npm run verify:camera-sync`, which records known times through the app's own
+  recording code and finds them in the file.
+- **The end of the camera recording could be missing.** Chunks reach the file
+  through a promise, and the last of them was still in flight when the recorder
+  reported that it had stopped — so the file was closed before they arrived.
+  Measured on a six second recording: the last 2.6 seconds of camera were not in
+  the file. The take ended with a frozen bubble and no voice.
+- **The camera's picture is no longer re-timed.** Frames from a screen capture
+  are put back on the beat they were asked for, because ScreenCaptureKit can
+  only deliver on a display refresh. A camera has no such beat — a webcam
+  genuinely runs at whatever rate the light allows, measured here at 29.06fps
+  with freezes of up to 0.7s — so its timestamps are left exactly as recorded,
+  where they cannot move the picture against the sound in its own file.
+- **The preview stopped correcting the camera so eagerly.** It nudged playback
+  rate whenever the camera drifted 40ms from the screen, which a variable-rate
+  camera crosses constantly: the rate was being bent most of the time, and that
+  unsteadiness is what "sluggish" looks and sounds like. It now leaves anything
+  under 120ms alone, and corrects gently above it.
+- **The Swift helper builds without Xcode selected.** In Swift 6.4 SwiftUI's
+  `@State` is a macro, and a machine whose `xcode-select` points at the Command
+  Line Tools has no plugin to expand it — the helper failed to build at all,
+  which stops any release. It no longer uses `@State`, and on macOS 26 and later
+  it skips SwiftUI altogether, since a translation session can be made directly.
+- **A headless export no longer changes your settings.** It rendered whatever it
+  was handed, including a deliberately plain project, and then saved that as the
+  remembered look.
+
 ## 1.9.0 — 2026-09-26
 
 - **The timeline zooms.** It showed the whole composition at a fixed scale, so

@@ -229,9 +229,16 @@ export default function Editor({
   // Remembered on every change, so a look tuned and then abandoned is still
   // there for the next take. The transcript and the shots are deliberately not
   // included: those belong to one recording and nothing else.
+  //
+  // Never from a headless export. One of those renders whatever it was handed —
+  // including a deliberately plain project, with no zoom and no background —
+  // and writing that over the remembered look changes the app for the person
+  // who next opens it. It also made exports depend on each other: a plain
+  // render left zoom switched off, and the next export came out flat.
   useEffect(() => {
+    if (bench) return
     rememberLook(project)
-  }, [project])
+  }, [project, bench])
 
 
   // Regenerate the automatic zooms whenever their settings change, keeping any
@@ -872,14 +879,19 @@ export default function Editor({
               // will tolerate looking at it.
               camera.currentTime = want
               camera.playbackRate = 1
-            } else if (size > 0.15) {
-              // A 3% nudge takes ten seconds to absorb 300ms, which is not a
-              // correction so much as a slow reveal of the error. 6% clears
-              // that in under three, and only runs while visibly out.
-              camera.playbackRate = drift > 0 ? 0.94 : 1.06
-            } else if (size > 0.04) {
+            } else if (size > 0.12) {
+              // Rate changes are not free: this element is carrying the
+              // narration, so every correction bends the speaker's pitch and
+              // the bubble's motion with it. Only a drift that is visible on
+              // its own is worth hearing a correction for.
               camera.playbackRate = drift > 0 ? 0.97 : 1.03
             } else {
+              // A dead band wide enough to cover the jitter of a webcam and a
+              // media element scheduling itself — far enough in sync to leave
+              // alone. It used to correct from 40ms out, which a variable-rate
+              // camera crosses constantly: the rate was being nudged most of
+              // the time, and that unsteadiness is what "sluggish" sounds and
+              // looks like.
               camera.playbackRate = 1
             }
           }
